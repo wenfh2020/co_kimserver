@@ -65,6 +65,14 @@ void* Network::co_handler_accept_nodes_conn(void*) {
     return 0;
 }
 
+void* Network::co_handler_accept_gate_conn(void* d) {
+    co_enable_hook_sys();
+    Connection* c = (Connection*)d;
+    Network* net = (Network*)c->privdata();
+    return net->handler_accept_gate_conn(d);
+}
+
+/* 创建新的子协程，创建新的 connection. */
 void* Network::handler_accept_gate_conn(void* d) {
     channel_t ch;
     chanel_resend_data_t* ch_data;
@@ -77,17 +85,41 @@ void* Network::handler_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            return 0;
+            struct pollfd pf = {0};
+            pf.fd = -1;
+            poll(&pf, 1, 1000);
+            continue;
         }
+
+        LOG_INFO("accepted client: %s:%d, fd: %d", ip, port, fd);
+
+        chanel_fd = m_worker_data_mgr->get_next_worker_data_fd();
+        if (chanel_fd <= 0) {
+            LOG_ERROR("find next worker chanel failed!");
+            close_fd(fd);
+            continue;
+        }
+
+        LOG_TRACE("send client fd: %d to worker through chanel fd %d", fd, chanel_fd);
+
+        ch = {fd, family, static_cast<int>(m_gate_codec), 0};
+        err = write_channel(chanel_fd, &ch, sizeof(channel_t), m_logger);
+        if (err != 0) {
+            if (err == EAGAIN) {
+                /* re send again in timer. */
+                ch_data = (chanel_resend_data_t*)malloc(sizeof(chanel_resend_data_t));
+                memset(ch_data, 0, sizeof(chanel_resend_data_t));
+                ch_data->ch = ch;
+                m_wait_send_fds.push_back(ch_data);
+                LOG_TRACE("wait to write channel, errno: %d", err);
+                continue;
+            }
+            LOG_ERROR("write channel failed! errno: %d", err);
+        }
+
+        close_fd(fd);
+        continue;
     }
-
-    return 0;
-}
-
-void* Network::co_handler_accept_gate_conn(void* d) {
-    co_enable_hook_sys();
-
-    /* 创建新的子协程，创建新的 connection. */
 
     return 0;
 }
@@ -124,14 +156,41 @@ Connection* Network::create_conn(int fd) {
     return c;
 }
 
-// Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
-//     if (anet_no_block(m_errstr, fd) != ANET_OK) {
-//         LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
-//         return nullptr;
-//     }
+Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
+    if (anet_no_block(m_errstr, fd) != ANET_OK) {
+        LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
+        return nullptr;
+    }
 
-//     return nullptr;
-// }
+    if (!is_chanel) {
+        if (anet_keep_alive(m_errstr, fd, 100) != ANET_OK) {
+            LOG_ERROR("set socket keep alive failed! fd: %d, errstr: %s", fd, m_errstr);
+            return nullptr;
+        }
+        if (anet_set_tcp_no_delay(m_errstr, fd, 1) != ANET_OK) {
+            LOG_ERROR("set socket no delay failed! fd: %d, errstr: %s", fd, m_errstr);
+            return nullptr;
+        }
+    }
+
+    Connection* c = create_conn(fd);
+    if (c == nullptr) {
+        close_fd(fd);
+        LOG_ERROR("add chanel event failed! fd: %d", fd);
+        return nullptr;
+    }
+    c->init(codec);
+    c->set_privdata(this);
+    c->set_active_time(now());
+    c->set_state(Connection::STATE::CONNECTED);
+
+    if (is_chanel) {
+        c->set_system(true);
+    }
+
+    LOG_TRACE("create connection done! fd: %d", fd);
+    return c;
+}
 
 /* parent. */
 bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
@@ -140,33 +199,7 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     }
 
     int fd = -1;
-
-    if (!ai->node_host().empty()) {
-        fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
-        if (fd == -1) {
-            LOG_ERROR("listen to port failed! %s:%d",
-                      ai->node_host().c_str(), ai->node_port());
-            return false;
-        }
-
-        m_node_host_fd = fd;
-        m_node_host = ai->node_host();
-        m_node_port = ai->node_port();
-        LOG_INFO("node fd: %d", m_node_host_fd);
-
-        // if (!add_read_event(m_node_host_fd, Codec::TYPE::PROTOBUF)) {
-        //     close_fd(m_node_host_fd);
-        //     LOG_ERROR("add read event failed, fd: %d", m_node_host_fd);
-        //     return false;
-        // }
-
-        /* 创建 accept 协程。 
-         * 在 accpet 处理函数里创建新的协程，但是需要限制它们的大小。*/
-
-        // stCoRoutine_t *co_accecpt_node_conns, co_accecpt_gate_conns;
-        // co_create(&co_accecpt_node_conns, NULL, co_handler_accept_nodes_conn, 0);
-        // co_resume(co_accecpt_node_conns);
-    }
+    Connection* c;
 
     if (!ai->gate_host().empty()) {
         fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
@@ -181,14 +214,16 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
         m_gate_port = ai->gate_port();
         LOG_INFO("gate fd: %d", m_gate_host_fd);
 
-        // if (!add_read_event(m_gate_host_fd, m_gate_codec)) {
-        //     close_fd(m_gate_host_fd);
-        //     LOG_ERROR("add read event failed, fd: %d", m_gate_host_fd);
-        //     return false;
-        // }
+        c = create_conn(m_gate_host_fd, m_gate_codec);
+        if (c == nullptr) {
+            close_fd(m_gate_host_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_gate_host_fd);
+            return false;
+        }
 
+        /* co_accecpt_node_conns */
         stCoRoutine_t* co_accecpt_gate_conns;
-        co_create(&co_accecpt_gate_conns, NULL, co_handler_accept_gate_conn, 0);
+        co_create(&co_accecpt_gate_conns, NULL, co_handler_accept_gate_conn, (void*)c);
         co_resume(co_accecpt_gate_conns);
     }
 

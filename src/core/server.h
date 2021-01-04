@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iosfwd>
 #include <iostream>
+#include <list>
 #include <set>
 #include <sstream>
 #include <unordered_map>

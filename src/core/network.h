@@ -13,6 +13,7 @@
 #include "util/json/CJsonObject.hpp"
 #include "util/log.h"
 #include "util/util.h"
+#include "worker_data_mgr.h"
 
 namespace kim {
 
@@ -39,10 +40,11 @@ class Network {
 
     /* for manager. */
     bool create_m(const addr_info* ainfo, const CJsonObject& config);
-    /* for worker. */
+    /* for worker.  */
     bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
     void destory();
 
+    double now() { return time_now(); }
     uint64_t new_seq() { return ++m_seq; }
 
     /* events. */
@@ -59,7 +61,7 @@ class Network {
     void close_fd(int fd);
 
     Connection* create_conn(int fd);
-    // Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel);
+    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
 
     /* coroutines. */
     static void* co_handler_accept_nodes_conn(void*);
@@ -75,8 +77,10 @@ class Network {
     uint64_t m_seq = 0;          /* cur increasing sequence. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */
 
-    TYPE m_type = TYPE::UNKNOWN;          /* owner type. */
-    double m_keep_alive = IO_TIMEOUT_VAL; /* io timeout time. */
+    TYPE m_type = TYPE::UNKNOWN;                      /* owner type. */
+    double m_keep_alive = IO_TIMEOUT_VAL;             /* io timeout time. */
+    WorkerDataMgr* m_worker_data_mgr = nullptr;       /* manager handle worker data. */
+    std::list<chanel_resend_data_t*> m_wait_send_fds; /* sendmsg maybe return -1 and errno == EAGAIN. */
 
     std::string m_node_type;
     std::string m_node_host;
