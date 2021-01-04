@@ -255,6 +255,49 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     return c;
 }
 
+bool Network::load_public(const CJsonObject& config) {
+    if (!load_config(config)) {
+        LOG_ERROR("load config failed!");
+        return false;
+    }
+
+    m_nodes = new Nodes(m_logger);
+    if (m_nodes == nullptr) {
+        LOG_ERROR("alloc nodes failed!");
+        return false;
+    }
+
+    LOG_INFO("load public done!");
+    return true;
+}
+
+bool Network::load_config(const CJsonObject& config) {
+    double secs;
+    m_conf = config;
+    std::string codec;
+
+    codec = m_conf("gate_codec");
+    if (!codec.empty()) {
+        if (!set_gate_codec(codec)) {
+            LOG_ERROR("invalid codec: %s", codec.c_str());
+            return false;
+        }
+        LOG_DEBUG("gate codec: %s", codec.c_str());
+    }
+
+    if (m_conf.Get("keep_alive", secs)) {
+        set_keep_alive(secs);
+    }
+
+    m_node_type = m_conf("node_type");
+    if (m_node_type.empty()) {
+        LOG_ERROR("invalid inner node info!");
+        return false;
+    }
+
+    return true;
+}
+
 bool Network::load_worker_data_mgr() {
     m_worker_data_mgr = new WorkerDataMgr(m_logger);
     return (m_worker_data_mgr != nullptr);
@@ -269,11 +312,41 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     int fd = -1;
     Connection* c;
 
+    if (!load_public(config)) {
+        LOG_ERROR("load public failed!");
+        return false;
+    }
+
     if (!load_worker_data_mgr()) {
         LOG_ERROR("new worker data mgr failed!");
         return false;
     }
 
+    /* inner listen. */
+    if (!ai->node_host().empty()) {
+        fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
+        if (fd == -1) {
+            LOG_ERROR("listen to port failed! %s:%d",
+                      ai->node_host().c_str(), ai->node_port());
+            return false;
+        }
+
+        m_node_host_fd = fd;
+        m_node_host = ai->node_host();
+        m_node_port = ai->node_port();
+        LOG_INFO("node fd: %d", m_node_host_fd);
+
+        c = create_conn(m_node_host_fd, Codec::TYPE::PROTOBUF);
+        if (c == nullptr) {
+            close_fd(m_node_host_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_node_host_fd);
+            return false;
+        }
+
+        /* 启动集群内部 accept 协程。 */
+    }
+
+    /* gate listen. */
     if (!ai->gate_host().empty()) {
         fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
         if (fd == -1) {
@@ -304,8 +377,102 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     return true;
 }
 
+void Network::co_sleep(int fd, int ms) {
+    struct pollfd pf = {0};
+    pf.fd = fd;
+    poll(&pf, 1, ms);
+}
+
+void* Network::handler_read_transfer_fd(void* d) {
+    int err;
+    int data_fd;
+    channel_t ch;
+    Codec::TYPE codec;
+    Connection *c = nullptr, *conn_data = nullptr;
+
+    conn_data = (Connection*)d;
+    data_fd = conn_data->fd();
+
+    for (;;) {
+        printf("111dsfjdshfjahdskfjdasf\n");
+        // read fd from manager.
+        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
+        if (err != 0) {
+            if (err == EAGAIN) {
+                printf("xxxxxxxxxxx\n");
+                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                printf("xxxxxxxxxxx----\n");
+                co_sleep(data_fd, 1000);
+                continue;
+            } else {
+                printf("--s-df-sdfxxxxxxxxxxx\n");
+                destory();
+                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
+                exit(EXIT_FD_TRANSFER);
+            }
+        }
+
+        printf("dsfjdshfjahdskfjdasf\n");
+
+        codec = static_cast<Codec::TYPE>(ch.codec);
+        c = create_conn(ch.fd, codec);
+        if (c == nullptr) {
+            LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
+            close_conn(ch.fd);
+            continue;
+        }
+
+        if (ch.is_system) {
+            c->set_system(true);
+        }
+
+        LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
+                  ch.fd, ch.family, ch.codec, ch.is_system);
+        co_sleep(data_fd, 1000);
+    }
+
+    return 0;
+}
+
+void* Network::co_handler_read_transfer_fd(void* d) {
+    co_enable_hook_sys();
+    Connection* c = (Connection*)d;
+    Network* net = (Network*)c->privdata();
+    return net->handler_read_transfer_fd(d);
+}
+
 /* worker. */
 bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
+    if (!load_public(config)) {
+        LOG_ERROR("load public failed!");
+        return false;
+    }
+
+    Connection *conn_ctrl, *conn_data;
+
+    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_ctrl == nullptr) {
+        close_fd(ctrl_fd);
+        LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
+        return false;
+    }
+
+    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_data == nullptr) {
+        close_fd(data_fd);
+        LOG_ERROR("add read event failed, fd: %d", data_fd);
+        return false;
+    }
+
+    m_conf = config;
+    m_manager_ctrl_fd = ctrl_fd;
+    m_manager_data_fd = data_fd;
+    m_worker_index = index;
+    LOG_INFO("create network done!");
+
+    stCoRoutine_t* co;
+    co_create(&co, NULL, co_handler_read_transfer_fd, (void*)conn_data);
+    co_resume(co);
     return true;
 }
 

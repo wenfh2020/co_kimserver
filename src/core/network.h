@@ -8,6 +8,7 @@
 #include "libco/co_routine.h"
 #include "net/anet.h"
 #include "net/chanel.h"
+#include "nodes.h"
 #include "protobuf/sys/nodes.pb.h"
 #include "server.h"
 #include "util/json/CJsonObject.hpp"
@@ -55,6 +56,8 @@ class Network {
     double keep_alive() { return m_keep_alive; }
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
+    bool load_config(const CJsonObject& config);
+    bool load_public(const CJsonObject& config);
     bool load_worker_data_mgr();
     WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
 
@@ -77,9 +80,12 @@ class Network {
     Connection* create_conn(int fd);
 
     /* coroutines. */
+    void co_sleep(int fd, int ms);
     static void* co_handler_accept_nodes_conn(void*);
     static void* co_handler_accept_gate_conn(void*);
     void* handler_accept_gate_conn(void*);
+    static void* co_handler_read_transfer_fd(void*);
+    void* handler_read_transfer_fd(void*);
     static void* co_handler_requests(void*);
 
    private:
@@ -107,6 +113,9 @@ class Network {
     int m_gate_host_fd = -1;    /* gate host fd for client. */
     int m_manager_ctrl_fd = -1; /* chanel fd use for worker. */
     int m_manager_data_fd = -1; /* chanel fd use for worker. */
+
+    Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
+    CJsonObject m_conf;
 };
 
 }  // namespace kim
