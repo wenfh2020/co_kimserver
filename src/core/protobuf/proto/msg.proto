@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+/**
+ *       +-------------+-------------+
+ *       |   MsgHead   |    MsgBody  |
+ *       +-------------+-------------+
+ *       +-  15 bytes -+
+ */
+
+message MsgHead {
+    fixed32 cmd  = 1;
+    fixed32 seq  = 2;
+    sfixed32 len = 3;
+}
+
+message MsgBody {
+    oneof msg_type {
+        Request req_target  = 1;
+        Response rsp_result = 2;
+    }
+
+    bytes data      = 3; // message body.
+    bytes add_on    = 4; // for gate server.
+    string trace_id = 5; // for log trace
+
+    message Request {
+        uint32 route_id = 1;
+        string route    = 2;
+    }
+
+    message Response {
+        int32 code = 1; // error code.
+        bytes msg  = 2; // error message.
+    }
+}
+

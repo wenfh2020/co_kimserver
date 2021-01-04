@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+message HttpMsg {
+    int32 type                      = 1;        // http_parser_type
+    int32 http_major                = 2;        // http major version.
+    int32 http_minor                = 3;        // http minor version.
+    int32 content_length            = 4;        // content len.
+    int32 method                    = 5;        // request method.
+    int32 status_code               = 6;        // status code.
+    int32 encoding                  = 7;        // encoding.
+    string url                      = 8;        // url address.
+    map<string, string> headers     = 9;        // http headers.
+    bytes body                      = 10;       // message body.
+    map<string, string> params      = 11;       // get / post params.
+    float keep_alive                = 13;       // keep alive time
+    string path                     = 14;       // url path.
+    bool is_decoding                = 15;       // is encoding.
+}

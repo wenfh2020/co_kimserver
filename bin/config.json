@@ -1,0 +1,46 @@
+{
+    "server_name": "kim-gate",
+    "worker_cnt": 1,
+    "node_type": "gate",
+    "node_host": "www.xxhelloredis.com",
+    "node_port": 3344,
+    "gate_host": "www.xxhelloredis.com",
+    "gate_port": 3355,
+    "gate_codec": "protobuf",
+    "keep_alive": 30,
+    "log_path": "kimserver.log",
+    "log_level": "info",
+    "modules": [
+        "module_test.so"
+    ],
+    "redis": {
+        "test": {
+            "host": "127.0.0.1",
+            "port": 6379
+        }
+    },
+    "database": {
+        "test": {
+            "host": "127.0.0.1",
+            "port": 3306,
+            "user": "root",
+            "password": "root123!@#",
+            "charset": "utf8mb4",
+            "max_conn_cnt": 3
+        }
+    },
+    "zookeeper": {
+        "servers": "127.0.0.1:2181",
+        "log_path": "zk.log",
+        "nodes": {
+            "root": "/kimserver/nodes",
+            "subscribe_node_type": [
+                "gate",
+                "logic"
+            ]
+        },
+        "payload": {
+            "root": "/kimserver/payload"
+        }
+    }
+}

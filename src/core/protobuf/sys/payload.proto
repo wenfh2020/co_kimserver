@@ -1,0 +1,29 @@
+syntax = "proto3";
+package kim;
+
+message NodeData {
+    string zk_path = 1;    /* zookeeper node path. */
+    string node_type = 2;  /* node type, gate/logic/... */
+    string node_host = 3;  /* for inner server. */
+    uint32 node_port = 4;  /* for inner server. */
+    string gate_host = 5;  /* for client. */
+    uint32 gate_port = 6;  /* for client. */
+    uint32 worker_cnt = 7; /* worker count. */
+};
+
+message Payload {
+    uint32 worker_index = 1; /* 0 is manager else is worker. */
+    uint32 conn_cnt = 2;     /* cmd cnt. */
+    uint32 cmd_cnt = 3;         
+    uint32 read_cnt = 4; 
+    uint32 read_bytes = 5;
+    uint32 write_cnt = 6;
+    uint32 write_bytes = 7;
+    double create_time = 8;
+};
+
+message PayloadStats {
+    NodeData node = 1;
+    Payload manager = 2;
+    repeated Payload workers = 3;
+};
