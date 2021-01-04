@@ -5,18 +5,81 @@
 
 namespace kim {
 
-Network::Network(Log* logger, TYPE type) : m_type(type) {
+Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
 }
 
 Network::~Network() {
     destory();
 }
 
+void Network::close_conns() {
+    LOG_TRACE("close_conns(), cnt: %d", m_conns.size());
+    for (const auto& it : m_conns) {
+        close_conn(it.second);
+    }
+}
+
 void Network::destory() {
+    // end_ev_loop();
+    close_conns();
+
+    for (const auto& it : m_wait_send_fds) {
+        free(it);
+    }
+    m_wait_send_fds.clear();
 }
 
 void Network::run() {
+    LOG_INFO("network run: %d", (int)m_type);
     co_eventloop(co_get_epoll_ct(), 0, 0);
+}
+
+void Network::close_fds() {
+    for (const auto& it : m_conns) {
+        Connection* c = it.second;
+        if (!c->is_invalid()) {
+            close_conn(c);
+        }
+    }
+}
+
+void Network::close_chanel(int* fds) {
+    LOG_DEBUG("close chanel, fd0: %d, fd1: %d", fds[0], fds[1]);
+    close_fd(fds[0]);
+    close_fd(fds[1]);
+}
+
+bool Network::close_conn(Connection* c) {
+    if (c == nullptr) {
+        return false;
+    }
+    return close_conn(c->fd());
+}
+
+bool Network::close_conn(int fd) {
+    LOG_TRACE("close conn, fd: %d", fd);
+
+    if (fd == -1) {
+        LOG_ERROR("invalid fd: %d", fd);
+        return false;
+    }
+
+    auto it = m_conns.find(fd);
+    if (it == m_conns.end()) {
+        return false;
+    }
+
+    Connection* c = it->second;
+    c->set_state(Connection::STATE::CLOSED);
+
+    if (!c->get_node_id().empty()) {
+        m_node_conns.erase(c->get_node_id());
+    }
+
+    close_fd(fd);
+    SAFE_DELETE(c);
+    m_conns.erase(it);
+    return true;
 }
 
 bool Network::set_gate_codec(const std::string& codec_type) {
@@ -137,7 +200,7 @@ Connection* Network::create_conn(int fd) {
     auto it = m_conns.find(fd);
     if (it != m_conns.end()) {
         LOG_WARN("find old connection, fd: %d", fd);
-        // close_conn(fd);
+        close_conn(fd);
     }
 
     uint64_t seq;
@@ -192,6 +255,11 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     return c;
 }
 
+bool Network::load_worker_data_mgr() {
+    m_worker_data_mgr = new WorkerDataMgr(m_logger);
+    return (m_worker_data_mgr != nullptr);
+}
+
 /* parent. */
 bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     if (ai == nullptr) {
@@ -200,6 +268,11 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
 
     int fd = -1;
     Connection* c;
+
+    if (!load_worker_data_mgr()) {
+        LOG_ERROR("new worker data mgr failed!");
+        return false;
+    }
 
     if (!ai->gate_host().empty()) {
         fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
@@ -212,7 +285,8 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
         m_gate_host_fd = fd;
         m_gate_host = ai->gate_host();
         m_gate_port = ai->gate_port();
-        LOG_INFO("gate fd: %d", m_gate_host_fd);
+        LOG_INFO("gate fd: %d, host: %s, port: %d",
+                 m_gate_host_fd, m_gate_host.c_str(), m_gate_port);
 
         c = create_conn(m_gate_host_fd, m_gate_codec);
         if (c == nullptr) {

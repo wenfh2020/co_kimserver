@@ -55,13 +55,26 @@ class Network {
     double keep_alive() { return m_keep_alive; }
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
+    bool load_worker_data_mgr();
+    WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
+
+    /* use in fork. */
+    void close_fds();
+    /* close connection by fd. */
+    bool close_conn(int fd);
+    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
+    /* manager and worker contack by socketpair. */
+    void close_chanel(int* fds);
+
+    void close_conns();
+
    private:
     /* socket. */
     int listen_to_port(const char* host, int port);
     void close_fd(int fd);
 
+    bool close_conn(Connection* c);
     Connection* create_conn(int fd);
-    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
 
     /* coroutines. */
     static void* co_handler_accept_nodes_conn(void*);
@@ -70,9 +83,10 @@ class Network {
     static void* co_handler_requests(void*);
 
    private:
-    Log* m_logger;                                   /* logger. */
-    Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN; /* gate codec type. */
-    std::unordered_map<int, Connection*> m_conns;    /* key: fd, value: connection. */
+    Log* m_logger;                                             /* logger. */
+    Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
+    std::unordered_map<int, Connection*> m_conns;              /* key: fd, value: connection. */
+    std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id */
 
     uint64_t m_seq = 0;          /* cur increasing sequence. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */

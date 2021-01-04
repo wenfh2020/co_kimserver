@@ -16,7 +16,13 @@ class Manager {
 
    private:
     bool load_logger();
+    bool load_network();
     bool load_config(const char* path);
+
+    void create_workers();                /* fork children. */
+    bool create_worker(int worker_index); /* creates the specified index process. */
+    bool restart_worker(pid_t pid);       /* restart the specified pid process. */
+    void restart_workers();               /* delay restart of a process that has been shut down. */
 
     std::string worker_name(int index);
 
