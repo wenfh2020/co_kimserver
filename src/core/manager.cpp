@@ -142,7 +142,6 @@ bool Manager::create_worker(int worker_index) {
 
     if ((pid = fork()) == 0) {
         /* child. */
-        // m_net->end_ev_loop();
         m_net->close_fds();
         m_net->clear_routines();
 

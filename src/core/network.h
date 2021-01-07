@@ -69,7 +69,6 @@ class Network {
     /* manager and worker contack by socketpair. */
     void close_chanel(int* fds);
 
-    void close_conns();
     void clear_routines();
 
    private:

@@ -20,16 +20,9 @@ void Network::clear_routines() {
     FreeLibcoEnv();
 }
 
-void Network::close_conns() {
-    LOG_TRACE("close_conns(), cnt: %d", m_conns.size());
-    for (const auto& it : m_conns) {
-        close_conn(it.second);
-    }
-}
-
 void Network::destory() {
     // end_ev_loop();
-    close_conns();
+    close_fds();
     clear_routines();
 
     for (const auto& it : m_wait_send_fds) {
@@ -46,10 +39,12 @@ void Network::run() {
 void Network::close_fds() {
     for (const auto& it : m_conns) {
         Connection* c = it.second;
-        if (!c->is_invalid()) {
-            close_conn(c);
+        if (c && !c->is_invalid()) {
+            close_fd(c->fd());
+            SAFE_DELETE(c);
         }
     }
+    m_conns.clear();
 }
 
 void Network::close_chanel(int* fds) {
