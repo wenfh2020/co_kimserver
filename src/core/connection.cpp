@@ -295,7 +295,7 @@ struct sockaddr* Connection::sockaddr() {
 }
 
 double Connection::now() {
-    time_now();
+    return time_now();
 }
 
 }  // namespace kim
