@@ -394,25 +394,19 @@ void* Network::handler_read_transfer_fd(void* d) {
     data_fd = conn_data->fd();
 
     for (;;) {
-        printf("111dsfjdshfjahdskfjdasf\n");
         // read fd from manager.
         err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
             if (err == EAGAIN) {
-                printf("xxxxxxxxxxx\n");
                 LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                printf("xxxxxxxxxxx----\n");
                 co_sleep(data_fd, 1000);
                 continue;
             } else {
-                printf("--s-df-sdfxxxxxxxxxxx\n");
                 destory();
                 LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
                 exit(EXIT_FD_TRANSFER);
             }
         }
-
-        printf("dsfjdshfjahdskfjdasf\n");
 
         codec = static_cast<Codec::TYPE>(ch.codec);
         c = create_conn(ch.fd, codec);

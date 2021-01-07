@@ -9,7 +9,7 @@
     "gate_codec": "protobuf",
     "keep_alive": 30,
     "log_path": "kimserver.log",
-    "log_level": "info",
+    "log_level": "trace",
     "modules": [
         "module_test.so"
     ],

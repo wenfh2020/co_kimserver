@@ -150,14 +150,12 @@ bool Manager::create_worker(int worker_index) {
         close(data_fds[0]);
 
         worker_info_t info{0, worker_index, ctrl_fds[1], data_fds[1], m_node_info.work_path()};
-        LOG_INFO("worker chanels, fd1: %d, fd2: %d", info.ctrl_fd, info.data_fd);
-
         Worker worker(worker_name(worker_index));
         if (!worker.init(&info, m_conf)) {
             exit(EXIT_CHILD_INIT_FAIL);
         }
+        printf("---===log ptr: %p\n", m_logger);
         worker.run();
-        LOG_INFO("child exit! index: %d", worker_index);
         exit(EXIT_CHILD);
     } else if (pid > 0) {
         /* parent. */
