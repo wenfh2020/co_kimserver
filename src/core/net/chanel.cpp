@@ -80,7 +80,7 @@ int write_channel(int fd, channel_t* ch, size_t size, Log* logger) {
 }
 
 int read_channel(int fd, channel_t* ch, size_t size, Log* logger) {
-    LOG_TRACE("read from channel, channel fd: %d", fd);
+    // LOG_TRACE("read from channel, channel fd: %d", fd);
     ssize_t n;
     int err = 0;
     struct iovec iov[1];

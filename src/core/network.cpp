@@ -12,6 +12,14 @@ Network::~Network() {
     destory();
 }
 
+void Network::clear_routines() {
+    for (const auto& co : m_coroutines) {
+        co_release(co);
+    }
+    m_coroutines.clear();
+    FreeLibcoEnv();
+}
+
 void Network::close_conns() {
     LOG_TRACE("close_conns(), cnt: %d", m_conns.size());
     for (const auto& it : m_conns) {
@@ -22,6 +30,7 @@ void Network::close_conns() {
 void Network::destory() {
     // end_ev_loop();
     close_conns();
+    clear_routines();
 
     for (const auto& it : m_wait_send_fds) {
         free(it);
@@ -121,10 +130,6 @@ void Network::close_fd(int fd) {
 
 void* Network::co_handler_accept_nodes_conn(void*) {
     co_enable_hook_sys();
-
-    for (;;) {
-    }
-
     return 0;
 }
 
@@ -148,9 +153,7 @@ void* Network::handler_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            struct pollfd pf = {0};
-            pf.fd = -1;
-            poll(&pf, 1, 1000);
+            co_sleep(fd, 1000);
             continue;
         }
 
@@ -184,6 +187,7 @@ void* Network::handler_accept_gate_conn(void* d) {
         continue;
     }
 
+    LOG_WARN("exit gate accept coroutine!");
     return 0;
 }
 
@@ -369,9 +373,10 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
         }
 
         /* co_accecpt_node_conns */
-        stCoRoutine_t* co_accecpt_gate_conns;
-        co_create(&co_accecpt_gate_conns, NULL, co_handler_accept_gate_conn, (void*)c);
-        co_resume(co_accecpt_gate_conns);
+        stCoRoutine_t* co;
+        co_create(&co, NULL, co_handler_accept_gate_conn, (void*)c);
+        co_resume(co);
+        m_coroutines.insert(co);
     }
 
     return true;
@@ -398,7 +403,7 @@ void* Network::handler_read_transfer_fd(void* d) {
         err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
             if (err == EAGAIN) {
-                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
                 co_sleep(data_fd, 1000);
                 continue;
             } else {
@@ -467,6 +472,7 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     stCoRoutine_t* co;
     co_create(&co, NULL, co_handler_read_transfer_fd, (void*)conn_data);
     co_resume(co);
+    m_coroutines.insert(co);
     return true;
 }
 

@@ -762,6 +762,27 @@ void FreeEpoll(stCoEpoll_t *ctx) {
     free(ctx);
 }
 
+void FreeLibcoEnv() {
+    if (gCoEnvPerThread == NULL) {
+        return;
+    }
+
+    /* free main co */
+    stCoRoutine_t *co = gCoEnvPerThread->pCallStack[0];
+    if (co != NULL) {
+        co_release(co);
+    }
+
+    /* free epoll data. */
+    if (gCoEnvPerThread->pEpoll != NULL) {
+        FreeEpoll(gCoEnvPerThread->pEpoll);
+    }
+
+    /* free env. */
+    free(gCoEnvPerThread);
+    gCoEnvPerThread = NULL;
+}
+
 stCoRoutine_t *GetCurrCo(stCoRoutineEnv_t *env) {
     return env->pCallStack[env->iCallStackSize - 1];
 }

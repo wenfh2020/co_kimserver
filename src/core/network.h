@@ -70,6 +70,7 @@ class Network {
     void close_chanel(int* fds);
 
     void close_conns();
+    void clear_routines();
 
    private:
     /* socket. */
@@ -116,6 +117,7 @@ class Network {
 
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
     CJsonObject m_conf;
+    std::set<stCoRoutine_t*> m_coroutines;
 };
 
 }  // namespace kim

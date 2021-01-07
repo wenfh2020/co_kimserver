@@ -144,7 +144,7 @@ bool Manager::create_worker(int worker_index) {
         /* child. */
         // m_net->end_ev_loop();
         m_net->close_fds();
-        destory();
+        m_net->clear_routines();
 
         close(ctrl_fds[0]);
         close(data_fds[0]);
@@ -154,7 +154,6 @@ bool Manager::create_worker(int worker_index) {
         if (!worker.init(&info, m_conf)) {
             exit(EXIT_CHILD_INIT_FAIL);
         }
-        printf("---===log ptr: %p\n", m_logger);
         worker.run();
         exit(EXIT_CHILD);
     } else if (pid > 0) {
