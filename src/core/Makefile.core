@@ -1,0 +1,44 @@
+CC = gcc
+CXX = g++
+CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
+CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
+
+
+VPATH = .
+SUB_DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
+DIRS := $(SUB_DIRS)
+
+INC := $(INC) \
+        -I . \
+        -I ./libco
+
+LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
+        -L ./libco/lib \
+        -L /usr/local/lib \
+        -lcolib -lmysqlclient -lpthread -ldl -lcryptopp -lprotobuf
+
+CPP_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cpp))
+CC_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cc))
+C_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.c))
+OBJS = $(patsubst %.cpp,%.o,$(CPP_SRCS)) $(patsubst %.c,%.o,$(C_SRCS)) $(patsubst %.cc,%.o,$(CC_SRCS))
+
+
+SERVER_NAME = co_kimserver
+
+.PHONY: clean
+
+$(SERVER_NAME): $(OBJS)
+	$(CXX) $(CXXFLAG) -o $@ $(OBJS) $(INC) $(LDFLAGS)
+	cp -f $@ ../../bin/
+
+%.o:%.cpp
+	$(CXX) $(CXXFLAG) $(INC) -c -o $@ $<
+%.o:%.cc
+	$(CXX) $(CXXFLAG) $(INC) -c -o $@ $<
+%.o:%.c
+	$(CC) $(CFLAGS) $(INC)  -c -o $@ $<
+
+clean:
+	rm -f $(OBJS)
+	rm -f $(SERVER_NAME)
+	rm -f ../bin/$(SERVER_NAME)
