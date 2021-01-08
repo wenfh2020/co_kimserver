@@ -1,26 +1,23 @@
 #ifndef __KIM_NETWORK_H__
 #define __KIM_NETWORK_H__
 
-#include <unordered_map>
-
 #include "codec/codec.h"
 #include "connection.h"
 #include "libco/co_routine.h"
 #include "module_mgr.h"
+#include "net.h"
 #include "net/anet.h"
 #include "net/chanel.h"
 #include "nodes.h"
 #include "protobuf/sys/nodes.pb.h"
 #include "protobuf/sys/payload.pb.h"
-#include "server.h"
-#include "util/json/CJsonObject.hpp"
 #include "util/log.h"
 #include "util/util.h"
 #include "worker_data_mgr.h"
 
 namespace kim {
 
-class Network {
+class Network : public INet {
    public:
     enum class TYPE {
         UNKNOWN = 0,
@@ -47,8 +44,8 @@ class Network {
     bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
     void destory();
 
-    double now() { return time_now(); }
-    uint64_t new_seq() { return ++m_seq; }
+    virtual double now() override { return time_now(); }
+    virtual uint64_t new_seq() override { return ++m_seq; }
 
     /* events. */
     void run();
@@ -123,7 +120,6 @@ class Network {
     int m_manager_data_fd = -1; /* chanel fd use for worker. */
 
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
-    CJsonObject m_conf;
     std::set<stCoRoutine_t*> m_coroutines;
     std::set<stCoRoutine_t*> m_co_free;
 

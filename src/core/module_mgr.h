@@ -9,12 +9,11 @@ namespace kim {
 
 class ModuleMgr : Base {
    public:
-    ModuleMgr(Log* logger);
+    ModuleMgr(Log* logger, INet* net);
     virtual ~ModuleMgr();
 
     bool init(CJsonObject& config);
     Module* get_module(uint64_t id);
-    uint64_t get_new_seq() { return ++m_seq; }
     bool reload_so(const std::string& name);
 
     int handle_request(const fd_t& fdata, const MsgHead& head, const MsgBody& body);
@@ -25,8 +24,6 @@ class ModuleMgr : Base {
     bool unload_so(const std::string& name);
 
    private:
-    Log* m_logger = nullptr;
-    uint64_t m_seq = 0;
     std::unordered_map<uint64_t, Module*> m_modules;  // modules.
 };
 

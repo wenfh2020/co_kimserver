@@ -3,7 +3,6 @@ CXX = g++
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
 CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
 
-
 VPATH = .
 SUB_DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
 DIRS := $(SUB_DIRS)

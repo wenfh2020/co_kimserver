@@ -2,8 +2,6 @@
 #define __KIM_CONNECTION_H__
 
 #include "codec/codec.h"
-#include "protobuf/proto/http.pb.h"
-#include "protobuf/proto/msg.pb.h"
 #include "server.h"
 #include "util/log.h"
 #include "util/socket_buffer.h"

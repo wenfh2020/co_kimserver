@@ -392,8 +392,8 @@ bool Network::load_public(const CJsonObject& config) {
 }
 
 bool Network::load_modules() {
-    m_module_mgr = new ModuleMgr(m_logger);
-    if (m_module_mgr == nullptr || !m_module_mgr->init(m_conf)) {
+    m_module_mgr = new ModuleMgr(m_logger, this);
+    if (m_module_mgr == nullptr || !m_module_mgr->init(m_config)) {
         return false;
     }
     LOG_INFO("load modules mgr sucess!");
@@ -402,10 +402,10 @@ bool Network::load_modules() {
 
 bool Network::load_config(const CJsonObject& config) {
     double secs;
-    m_conf = config;
+    m_config = config;
     std::string codec;
 
-    codec = m_conf("gate_codec");
+    codec = m_config("gate_codec");
     if (!codec.empty()) {
         if (!set_gate_codec(codec)) {
             LOG_ERROR("invalid codec: %s", codec.c_str());
@@ -414,11 +414,11 @@ bool Network::load_config(const CJsonObject& config) {
         LOG_DEBUG("gate codec: %s", codec.c_str());
     }
 
-    if (m_conf.Get("keep_alive", secs)) {
+    if (m_config.Get("keep_alive", secs)) {
         set_keep_alive(secs);
     }
 
-    m_node_type = m_conf("node_type");
+    m_node_type = m_config("node_type");
     if (m_node_type.empty()) {
         LOG_ERROR("invalid inner node info!");
         return false;
@@ -598,7 +598,7 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
         return false;
     }
 
-    m_conf = config;
+    m_config = config;
     m_manager_ctrl_fd = ctrl_fd;
     m_manager_data_fd = data_fd;
     m_worker_index = index;

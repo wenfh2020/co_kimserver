@@ -5,16 +5,17 @@
 
 namespace kim {
 
-Module::Module(Log* logger, uint64_t id, const std::string& name)
-    : Base(id, logger, name) {
+Module::Module(Log* logger, INet* net, uint64_t id, const std::string& name)
+    : Base(logger, net, id, name) {
     register_handle_func();
 }
 
 Module::~Module() {
 }
 
-bool Module::init(Log* logger, uint64_t id, const std::string& name) {
+bool Module::init(Log* logger, INet* net, uint64_t id, const std::string& name) {
     set_id(id);
+    set_net(net);
     set_name(name);
     set_logger(logger);
     register_handle_func();

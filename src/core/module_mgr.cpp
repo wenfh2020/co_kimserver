@@ -11,7 +11,7 @@ namespace kim {
 
 typedef Module* CreateModule();
 
-ModuleMgr::ModuleMgr(Log* logger) : m_logger(logger) {
+ModuleMgr::ModuleMgr(Log* logger, INet* net) : Base(logger, net) {
 }
 
 ModuleMgr::~ModuleMgr() {
@@ -79,8 +79,8 @@ bool ModuleMgr::load_so(const std::string& name, const std::string& path, uint64
     }
 
     module = (Module*)create_module();
-    id = (id != 0) ? id : get_new_seq();
-    if (!module->init(m_logger, id, name)) {
+    id = (id != 0) ? id : net()->new_seq();
+    if (!module->init(logger(), net(), id, name)) {
         LOG_ERROR("init module failed! module: %s", name.c_str());
         if (dlclose(handle) == -1) {
             LOG_ERROR("close so failed! so: %s, errstr: %s",
