@@ -6,10 +6,12 @@
 #include "codec/codec.h"
 #include "connection.h"
 #include "libco/co_routine.h"
+#include "module_mgr.h"
 #include "net/anet.h"
 #include "net/chanel.h"
 #include "nodes.h"
 #include "protobuf/sys/nodes.pb.h"
+#include "protobuf/sys/payload.pb.h"
 #include "server.h"
 #include "util/json/CJsonObject.hpp"
 #include "util/log.h"
@@ -59,6 +61,7 @@ class Network {
     bool load_config(const CJsonObject& config);
     bool load_public(const CJsonObject& config);
     bool load_worker_data_mgr();
+    bool load_modules();
     WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
 
     /* use in fork. */
@@ -79,14 +82,19 @@ class Network {
     bool close_conn(Connection* c);
     Connection* create_conn(int fd);
 
+    bool process_msg(Connection* c);
+    bool process_tcp_msg(Connection* c);
+    bool process_http_msg(Connection* c);
+
     /* coroutines. */
-    void co_sleep(int fd, int ms);
+    void co_sleep(int ms, int fd = -1);
     static void* co_handler_accept_nodes_conn(void*);
     static void* co_handler_accept_gate_conn(void*);
     void* handler_accept_gate_conn(void*);
     static void* co_handler_read_transfer_fd(void*);
     void* handler_read_transfer_fd(void*);
     static void* co_handler_requests(void*);
+    void* handler_requests(void*);
 
    private:
     Log* m_logger;                                             /* logger. */
@@ -117,6 +125,10 @@ class Network {
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
     CJsonObject m_conf;
     std::set<stCoRoutine_t*> m_coroutines;
+    std::set<stCoRoutine_t*> m_co_free;
+
+    ModuleMgr* m_module_mgr = nullptr; /* modules so. */
+    Payload m_payload;                 /* payload data. */
 };
 
 }  // namespace kim

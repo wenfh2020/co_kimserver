@@ -30,6 +30,11 @@ enum class E_RDS_STATUS {
     ERROR = 3,
 };
 
+typedef struct fd_s {
+    int fd;
+    uint64_t id;
+} fd_t;
+
 // time out info.
 #define CMD_MAX_TIMEOUT_CNT 3      // default max cmd time out count.
 #define SESSION_MAX_TIMEOUT_CNT 3  // default max session time out count.

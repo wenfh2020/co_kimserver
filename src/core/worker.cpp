@@ -43,15 +43,12 @@ bool Worker::init(const worker_info_t* info, const CJsonObject& conf) {
 }
 
 bool Worker::load_logger() {
-    LOG_TRACE("load logger.");
-
     char path[MAX_PATH] = {0};
     snprintf(path, sizeof(path), "%s/%s", m_worker_info.work_path.c_str(),
              m_conf("log_path").c_str());
 
     m_logger = new Log;
     if (m_logger == nullptr) {
-        LOG_ERROR("new log failed!");
         return false;
     }
 

@@ -1,8 +1,5 @@
 #include "network.h"
 
-#include "connection.h"
-#include "server.h"
-
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
@@ -148,7 +145,7 @@ void* Network::handler_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            co_sleep(fd, 1000);
+            co_sleep(1000, fd);
             continue;
         }
 
@@ -186,13 +183,137 @@ void* Network::handler_accept_gate_conn(void* d) {
     return 0;
 }
 
-void* Network::co_handler_requests(void*) {
+void* Network::co_handler_requests(void* d) {
     co_enable_hook_sys();
+    Connection* c = (Connection*)d;
+    Network* net = (Network*)c->privdata();
+    return net->handler_requests(d);
+}
+
+void* Network::handler_requests(void* d) {
+    int fd;
+    Connection *c, *conn;
+
+    c = (Connection*)d;
+    fd = c->fd();
 
     for (;;) {
+        auto it = m_conns.find(fd);
+        if (it == m_conns.end() || it->second == nullptr) {
+            LOG_WARN("find connection failed, fd: %d", fd);
+            close_conn(fd);
+            return 0;
+        }
+
+        conn = it->second;
+        if (conn != c) {
+            LOG_ERROR("ensure connection, fd: %d", fd);
+            close_conn(fd);
+            return 0;
+        }
+
+        if (conn->is_invalid()) {
+            LOG_ERROR("invalid socket, fd: %d", fd);
+            close_conn(fd);
+            return 0;
+        }
+
+        // return process_msg(conn);
     }
 
     return 0;
+}
+
+bool Network::process_msg(Connection* c) {
+    return (c->is_http()) ? process_http_msg(c) : process_tcp_msg(c);
+}
+
+bool Network::process_tcp_msg(Connection* c) {
+    int fd, res;
+    MsgHead head;
+    MsgBody body;
+    Codec::STATUS codec_res;
+    uint32_t old_cnt, old_bytes;
+
+    fd = c->fd();
+    res = ERR_UNKOWN_CMD;
+    old_cnt = c->read_cnt();
+    old_bytes = c->read_bytes();
+
+    codec_res = c->conn_read(head, body);
+    if (codec_res != Codec::STATUS::ERR) {
+        m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
+        m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
+    }
+
+    LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+
+    while (codec_res == Codec::STATUS::OK) {
+        if (res == ERR_UNKOWN_CMD) {
+            res = m_module_mgr->handle_request(c->fd_data(), head, body);
+            if (res == ERR_UNKOWN_CMD) {
+                LOG_WARN("find cmd handler failed! fd: %d, cmd: %d", fd, head.cmd());
+            } else {
+                if (res != ERR_OK) {
+                    LOG_TRACE("process tcp msg failed! fd: %d", fd);
+                }
+            }
+        }
+
+        head.Clear();
+        body.Clear();
+
+        codec_res = c->fetch_data(head, body);
+        if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+            LOG_TRACE("conn read failed. fd: %d", fd);
+            goto error;
+        }
+    }
+
+    if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+        LOG_TRACE("conn read failed. fd: %d", fd);
+        goto error;
+    }
+
+    return true;
+
+error:
+    close_conn(c);
+    return false;
+}
+
+bool Network::process_http_msg(Connection* c) {
+    // HttpMsg msg;
+    // int old_cnt, old_bytes;
+    // Cmd::STATUS cmd_ret;
+    // Codec::STATUS codec_res;
+    // Request req(c->fd_data(), true);
+
+    // old_cnt = c->read_cnt();
+    // old_bytes = c->read_bytes();
+
+    // codec_res = c->conn_read(*req.http_msg());
+    // if (codec_res != Codec::STATUS::ERR) {
+    //     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
+    //     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
+    // }
+
+    // LOG_TRACE("connection is http, read ret: %d", (int)codec_res);
+
+    // while (codec_res == Codec::STATUS::OK) {
+    //     cmd_ret = m_module_mgr->process_req(req);
+    //     msg.Clear();
+    //     codec_res = c->fetch_data(*req.http_msg());
+    //     LOG_TRACE("cmd status: %d", cmd_ret);
+    // }
+
+    // if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+    //     LOG_TRACE("conn read failed. fd: %d", c->fd());
+    //     close_conn(c);
+    //     return false;
+    // }
+
+    return true;
 }
 
 Connection* Network::create_conn(int fd) {
@@ -267,6 +388,15 @@ bool Network::load_public(const CJsonObject& config) {
     }
 
     LOG_INFO("load public done!");
+    return true;
+}
+
+bool Network::load_modules() {
+    m_module_mgr = new ModuleMgr(m_logger);
+    if (m_module_mgr == nullptr || !m_module_mgr->init(m_conf)) {
+        return false;
+    }
+    LOG_INFO("load modules mgr sucess!");
     return true;
 }
 
@@ -377,7 +507,7 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     return true;
 }
 
-void Network::co_sleep(int fd, int ms) {
+void Network::co_sleep(int ms, int fd) {
     struct pollfd pf = {0};
     pf.fd = fd;
     poll(&pf, 1, ms);
@@ -399,7 +529,7 @@ void* Network::handler_read_transfer_fd(void* d) {
         if (err != 0) {
             if (err == EAGAIN) {
                 // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                co_sleep(data_fd, 1000);
+                co_sleep(1000, data_fd);
                 continue;
             } else {
                 destory();
@@ -422,7 +552,12 @@ void* Network::handler_read_transfer_fd(void* d) {
 
         LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
                   ch.fd, ch.family, ch.codec, ch.is_system);
-        co_sleep(data_fd, 1000);
+        // co_sleep(data_fd, 1000);
+        /* catch new fd, and create new routines. */
+        stCoRoutine_t* co;
+        co_create(&co, NULL, co_handler_requests, (void*)c);
+        co_resume(co);
+        m_coroutines.insert(co);
     }
 
     return 0;
@@ -439,6 +574,11 @@ void* Network::co_handler_read_transfer_fd(void* d) {
 bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
     if (!load_public(config)) {
         LOG_ERROR("load public failed!");
+        return false;
+    }
+
+    if (!load_modules()) {
+        LOG_ERROR("load module failed!");
         return false;
     }
 

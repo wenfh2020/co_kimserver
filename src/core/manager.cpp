@@ -2,7 +2,6 @@
 
 #include <signal.h>
 
-#include "connection.h"
 #include "net/anet.h"
 #include "server.h"
 #include "util/set_proc_title.h"

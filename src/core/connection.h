@@ -10,11 +10,6 @@
 
 namespace kim {
 
-typedef struct fd_s {
-    int fd;
-    uint64_t id;
-} fd_t;
-
 class Connection : Logger {
    public:
     enum class STATE {
