@@ -4,6 +4,7 @@
 #include "base.h"
 #include "error.h"
 #include "protobuf/proto/msg.pb.h"
+#include "request.h"
 #include "server.h"
 #include "util/so.h"
 
@@ -19,27 +20,27 @@ class Module : public Base, public So {
     bool init(Log* logger, INet* net, uint64_t id, const std::string& name = "");
 
     virtual void register_handle_func() {}
-    virtual int handle_request(const fd_t& fdata, const MsgHead& head, const MsgBody& body) {
+    virtual int handle_request(const Request* req) {
         return ERR_UNKOWN_CMD;
     }
 };
 
-#define REGISTER_HANDLER(class_name)                                                                  \
-   public:                                                                                            \
-    class_name() {}                                                                                   \
-    class_name(Log* logger, uint64_t id, const std::string& name = "")                                \
-        : Module(logger, id, name) {                                                                  \
-    }                                                                                                 \
-    typedef int (class_name::*cmd_func)(const fd_t& fdata, const MsgHead& head, const MsgBody& body); \
-    virtual int handle_request(const fd_t& fdata, const MsgHead& head, const MsgBody& body) {         \
-        auto it = m_cmd_funcs.find(head.cmd());                                                       \
-        if (it == m_cmd_funcs.end()) {                                                                \
-            return ERR_UNKOWN_CMD;                                                                    \
-        }                                                                                             \
-        return (this->*(it->second))(fdata, head, body);                                              \
-    }                                                                                                 \
-                                                                                                      \
-   protected:                                                                                         \
+#define REGISTER_HANDLER(class_name)                                                  \
+   public:                                                                            \
+    class_name() {}                                                                   \
+    class_name(Log* logger, INet* net, uint64_t id = 0, const std::string& name = "") \
+        : Module(logger, net, id, name) {                                             \
+    }                                                                                 \
+    typedef int (class_name::*cmd_func)(const Request* req);                          \
+    virtual int handle_request(const Request* req) {                                  \
+        auto it = m_cmd_funcs.find(req->msg_head()->cmd());                           \
+        if (it == m_cmd_funcs.end()) {                                                \
+            return ERR_UNKOWN_CMD;                                                    \
+        }                                                                             \
+        return (this->*(it->second))(req);                                            \
+    }                                                                                 \
+                                                                                      \
+   protected:                                                                         \
     std::unordered_map<int, cmd_func> m_cmd_funcs;
 
 #define HANDLE_PROTO_FUNC(id, func) \

@@ -75,7 +75,7 @@ Codec::STATUS Connection::conn_read() {
     } else if (read_len < 0) {
         if (errno == EAGAIN) {
             m_active_time = now();
-            return Codec::STATUS::OK;
+            return Codec::STATUS::PAUSE;
         } else {
             LOG_DEBUG("connection read error! fd: %d, err: %d, error: %s",
                       fd(), errno, strerror(errno));
@@ -269,7 +269,7 @@ bool Connection::is_need_alive_check() {
     return true;
 }
 
-double Connection::keep_alive() {
+uint64_t Connection::keep_alive() {
     if (is_http()) {
         /* http codec has it's own keep alive. */
         CodecHttp* codec = dynamic_cast<CodecHttp*>(m_codec);
@@ -294,8 +294,8 @@ struct sockaddr* Connection::sockaddr() {
     return m_saddr;
 }
 
-double Connection::now() {
-    return time_now();
+uint64_t Connection::now() {
+    return mstime();
 }
 
 }  // namespace kim

@@ -3,6 +3,7 @@
 
 #include "protobuf/proto/http.pb.h"
 #include "protobuf/proto/msg.pb.h"
+#include "request.h"
 #include "server.h"
 #include "util/json/CJsonObject.hpp"
 #include "util/util.h"
@@ -14,13 +15,13 @@ class INet {
     INet() {}
     virtual ~INet() {}
 
-    virtual double now() { return time_now(); }
+    virtual uint64_t now() { return mstime(); }
     virtual uint64_t new_seq() { return 0; }
     virtual CJsonObject& config() { return m_config; }
 
-    virtual bool send_ack(
-        const fd_t& fdata, const MsgHead& head, const MsgBody& body,
-        int err, const std::string& errstr = "", const std::string& data = "") { return false; }
+    virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return false; }
+    virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) { return false; }
+    virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") { return false; }
 
    protected:
     CJsonObject m_config;

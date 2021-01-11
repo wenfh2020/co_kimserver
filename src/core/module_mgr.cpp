@@ -157,14 +157,14 @@ Module* ModuleMgr::get_module(const std::string& name) {
     return module;
 }
 
-int ModuleMgr::handle_request(const fd_t& fdata, const MsgHead& head, const MsgBody& body) {
+int ModuleMgr::handle_request(const Request* req) {
     Module* module;
     int res = ERR_UNKOWN_CMD;
 
     for (const auto& it : m_modules) {
         module = it.second;
         LOG_TRACE("module name: %s", module->name());
-        res = module->handle_request(fdata, head, body);
+        res = module->handle_request(req);
         if (res != ERR_UNKOWN_CMD) {
             return res;
         }

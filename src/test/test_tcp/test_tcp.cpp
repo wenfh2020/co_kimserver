@@ -10,8 +10,8 @@
 #define PROTO_MSG_HEAD_LEN 15
 
 enum {
-    KP_REQ_TEST_PROTO = 1001,
-    KP_RSP_TEST_PROTO = 1002,
+    KP_REQ_TEST_HELLO = 1001,
+    KP_RSP_TEST_HELLO = 1002,
     KP_REQ_TEST_AUTO_SEND = 1003,
     KP_RSP_TEST_AUTO_SEND = 1004,
 };
@@ -54,8 +54,8 @@ int test_server(int argc, char** argv) {
         /* send. */
         body.set_data("hello world!");
         head.set_seq(123);
-        head.set_cmd(KP_REQ_TEST_AUTO_SEND);
-        // head.set_cmd(KP_REQ_TEST_PROTO);
+        // head.set_cmd(KP_REQ_TEST_AUTO_SEND);
+        head.set_cmd(KP_REQ_TEST_HELLO);
         head.set_len(body.ByteSizeLong());
 
         memcpy(buf, head.SerializeAsString().c_str(), head.ByteSizeLong());
@@ -67,6 +67,10 @@ int test_server(int argc, char** argv) {
             break;
         }
 
+        printf("send req: %d, cmd: %d, seq: %d, len: %d, body len: %zu, %s\n",
+               packets, head.cmd(), head.seq(), head.len(),
+               body.data().length(), body.data().c_str());
+
         /* recv. */
         ret = recv(fd, buf, sizeof(buf), 0);
         if (ret <= 0) {
@@ -76,7 +80,7 @@ int test_server(int argc, char** argv) {
 
         head.ParseFromArray(buf, PROTO_MSG_HEAD_LEN);
         body.ParseFromArray(buf + PROTO_MSG_HEAD_LEN, head.len());
-        printf("%d, cmd: %d, seq: %d, len: %d, body len: %zu, %s\n",
+        printf("recv ack: %d, cmd: %d, seq: %d, len: %d, body len: %zu, %s\n",
                packets, head.cmd(), head.seq(), head.len(),
                body.data().length(), body.data().c_str());
         // break;

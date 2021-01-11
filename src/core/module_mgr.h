@@ -16,7 +16,7 @@ class ModuleMgr : Base {
     Module* get_module(uint64_t id);
     bool reload_so(const std::string& name);
 
-    int handle_request(const fd_t& fdata, const MsgHead& head, const MsgBody& body);
+    int handle_request(const Request* req);
 
    private:
     Module* get_module(const std::string& name);

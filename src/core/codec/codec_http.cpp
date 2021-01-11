@@ -71,7 +71,7 @@ namespace kim {
         goto error;                \
     }
 
-CodecHttp::CodecHttp(Log* logger, Codec::TYPE type, double keep_alive)
+CodecHttp::CodecHttp(Log* logger, Codec::TYPE type, uint64_t keep_alive)
     : Codec(logger, type), m_keep_alive(keep_alive) {
 }
 
@@ -382,9 +382,9 @@ int CodecHttp::on_header_value(http_parser* parser, const char* at, size_t len) 
         msg->set_keep_alive(atof(value.c_str()));
     } else if (header == "Connection") {
         if (value == "keep-alive") {
-            msg->set_keep_alive(-1.0);  // timer logic will close it.
+            msg->set_keep_alive(0);  // timer logic will close it.
         } else if (value == "close") {
-            msg->set_keep_alive(0.0);
+            msg->set_keep_alive(0);
         }
     }
 

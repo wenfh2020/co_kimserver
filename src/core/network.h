@@ -17,6 +17,11 @@
 
 namespace kim {
 
+typedef struct co_task_s {
+    Connection* c;
+    stCoRoutine_t* co;
+} co_task_t;
+
 class Network : public INet {
    public:
     enum class TYPE {
@@ -44,15 +49,15 @@ class Network : public INet {
     bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
     void destory();
 
-    virtual double now() override { return time_now(); }
+    virtual uint64_t now() override { return mstime(); }
     virtual uint64_t new_seq() override { return ++m_seq; }
 
     /* events. */
     void run();
 
     bool set_gate_codec(const std::string& codec);
-    void set_keep_alive(double secs) { m_keep_alive = secs; }
-    double keep_alive() { return m_keep_alive; }
+    void set_keep_alive(uint64_t ms) { m_keep_alive = ms; }
+    uint64_t keep_alive() { return m_keep_alive; }
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
     bool load_config(const CJsonObject& config);
@@ -69,7 +74,12 @@ class Network : public INet {
     /* manager and worker contack by socketpair. */
     void close_chanel(int* fds);
 
+    Connection* get_conn(const fd_t& f);
     void clear_routines();
+
+    virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
+    virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
+    virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
 
    private:
     /* socket. */
@@ -84,7 +94,7 @@ class Network : public INet {
     bool process_http_msg(Connection* c);
 
     /* coroutines. */
-    void co_sleep(int ms, int fd = -1);
+    void co_sleep(int ms, int fd = -1, int events = 0);
     static void* co_handler_accept_nodes_conn(void*);
     static void* co_handler_accept_gate_conn(void*);
     void* handler_accept_gate_conn(void*);
@@ -103,7 +113,7 @@ class Network : public INet {
     char m_errstr[ANET_ERR_LEN]; /* error string. */
 
     TYPE m_type = TYPE::UNKNOWN;                      /* owner type. */
-    double m_keep_alive = IO_TIMEOUT_VAL;             /* io timeout time. */
+    uint64_t m_keep_alive = IO_TIMEOUT_VAL;           /* io timeout time. */
     WorkerDataMgr* m_worker_data_mgr = nullptr;       /* manager handle worker data. */
     std::list<chanel_resend_data_t*> m_wait_send_fds; /* sendmsg maybe return -1 and errno == EAGAIN. */
 
@@ -120,8 +130,9 @@ class Network : public INet {
     int m_manager_data_fd = -1; /* chanel fd use for worker. */
 
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
-    std::set<stCoRoutine_t*> m_coroutines;
-    std::set<stCoRoutine_t*> m_co_free;
+    std::set<co_task_t*> m_coroutines;
+    std::set<co_task_t*> m_co_free;
+    int m_max_co_cnt = 0;
 
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
     Payload m_payload;                 /* payload data. */

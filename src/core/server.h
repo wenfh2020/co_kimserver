@@ -38,9 +38,9 @@ typedef struct fd_s {
 // time out info.
 #define CMD_MAX_TIMEOUT_CNT 3      // default max cmd time out count.
 #define SESSION_MAX_TIMEOUT_CNT 3  // default max session time out count.
-#define IO_TIMEOUT_VAL 15.0        // connection time out value.
-#define CMD_TIMEOUT_VAL 3.0        // cmd time out value.
-#define REPEAT_TIMEOUT_VAL 1.0     // repeat time out value.
+#define IO_TIMEOUT_VAL 15000       // connection time out value.
+#define CMD_TIMEOUT_VAL 3000       // cmd time out value.
+#define REPEAT_TIMEOUT_VAL 1000    // repeat time out value.
 
 #define MAX_PATH 256
 #define TCP_BACK_LOG 511

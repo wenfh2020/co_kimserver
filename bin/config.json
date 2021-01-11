@@ -7,9 +7,9 @@
     "gate_host": "127.0.0.1",
     "gate_port": 3355,
     "gate_codec": "protobuf",
-    "keep_alive": 30,
+    "keep_alive": 30000,
     "log_path": "kimserver.log",
-    "log_level": "trace",
+    "log_level": "debug",
     "modules": [
         "module_test.so"
     ],

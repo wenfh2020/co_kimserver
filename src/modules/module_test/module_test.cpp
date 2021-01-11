@@ -4,16 +4,13 @@ MUDULE_CREATE(MoudleTest)
 
 namespace kim {
 
-int MoudleTest::test_hello(const fd_t& fdata, const MsgHead& head, const MsgBody& body) {
+int MoudleTest::test_hello(const Request* req) {
     LOG_DEBUG("cmd: %d, seq: %u, len: %d",
-              head.cmd(), head.seq(), head.len());
+              req->msg_head()->cmd(), req->msg_head()->seq(),
+              req->msg_head()->len());
+    LOG_DEBUG("body data: <%s>", req->msg_body()->data().c_str());
 
-    LOG_DEBUG("body data: <%s>", body.SerializeAsString().c_str());
-
-    // return net()->send_ack(req, ERR_OK, "ok", "good job!")
-    //            ? Cmd::STATUS::OK
-    //            : Cmd::STATUS::ERROR;
-    return 0;
+    return net()->send_ack(req, ERR_OK, "ok", "good job!");
 }
 
 }  // namespace kim

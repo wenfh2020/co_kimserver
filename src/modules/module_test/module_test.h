@@ -11,13 +11,12 @@ class MoudleTest : public Module {
 
    public:
     void register_handle_func() {
-        // protobuf
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_PROTO, MoudleTest::test_hello);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::test_hello);
     }
 
    private:
     // protobuf.
-    int test_hello(const fd_t& fdata, const MsgHead& head, const MsgBody& body);
+    int test_hello(const Request* req);
 };
 
 }  // namespace kim

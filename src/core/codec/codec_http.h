@@ -11,7 +11,7 @@ namespace kim {
 
 class CodecHttp : public Codec {
    public:
-    CodecHttp(Log *logger, Codec::TYPE type, double keep_alive = -1.0);
+    CodecHttp(Log *logger, Codec::TYPE type, uint64_t keep_alive = 0);
     virtual ~CodecHttp();
 
     Codec::STATUS encode(const HttpMsg &msg, SocketBuffer *sbuf);
@@ -43,7 +43,7 @@ class CodecHttp : public Codec {
     int m_encode_cnt = 0;
     int m_decode_cnt = 0;
     bool m_is_client = false;
-    double m_keep_alive = -1.0;
+    uint64_t m_keep_alive = 0;
 
     http_parser m_parser;
     http_parser_settings m_parser_setting;

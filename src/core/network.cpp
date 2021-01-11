@@ -1,8 +1,12 @@
 #include "network.h"
 
+#include "request.h"
+#define MAX_CO_CNT 100
+
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
+    m_max_co_cnt = MAX_CO_CNT;
 }
 
 Network::~Network() {
@@ -10,8 +14,8 @@ Network::~Network() {
 }
 
 void Network::clear_routines() {
-    for (const auto& co : m_coroutines) {
-        co_release(co);
+    for (const auto& task : m_coroutines) {
+        co_release(task->co);
     }
     m_coroutines.clear();
     FreeLibcoEnv();
@@ -127,13 +131,16 @@ void* Network::co_handler_accept_nodes_conn(void*) {
 
 void* Network::co_handler_accept_gate_conn(void* d) {
     co_enable_hook_sys();
-    Connection* c = (Connection*)d;
+
+    co_task_t* task = (co_task_t*)d;
+    Connection* c = task->c;
     Network* net = (Network*)c->privdata();
     return net->handler_accept_gate_conn(d);
 }
 
-/* 创建新的子协程，创建新的 connection. */
 void* Network::handler_accept_gate_conn(void* d) {
+    LOG_TRACE("handler_accept_gate_conn...");
+
     channel_t ch;
     chanel_resend_data_t* ch_data;
     char ip[NET_IP_STR_LEN] = {0};
@@ -145,7 +152,7 @@ void* Network::handler_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            co_sleep(1000, fd);
+            co_sleep(1000, m_gate_host_fd, POLLIN);
             continue;
         }
 
@@ -160,6 +167,7 @@ void* Network::handler_accept_gate_conn(void* d) {
 
         LOG_TRACE("send client fd: %d to worker through chanel fd %d", fd, chanel_fd);
 
+        /* parent send to child. */
         ch = {fd, family, static_cast<int>(m_gate_codec), 0};
         err = write_channel(chanel_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
@@ -185,40 +193,68 @@ void* Network::handler_accept_gate_conn(void* d) {
 
 void* Network::co_handler_requests(void* d) {
     co_enable_hook_sys();
-    Connection* c = (Connection*)d;
-    Network* net = (Network*)c->privdata();
+    co_task_t* task = (co_task_t*)d;
+    Network* net = (Network*)task->c->privdata();
     return net->handler_requests(d);
 }
 
+/* 如果 fd 被关闭了，那么重新将当前 co 添加到空闲。并将协程切出去。
+ * 等待重新唤醒。 */
 void* Network::handler_requests(void* d) {
     int fd;
-    Connection *c, *conn;
+    Connection* c;
+    co_task_t* task;
 
-    c = (Connection*)d;
+    task = (co_task_t*)d;
+    c = (Connection*)task->c;
     fd = c->fd();
 
     for (;;) {
+        if (task->c == nullptr) {
+            m_co_free.insert(task);
+            co_yield_ct();
+            continue;
+        }
+
         auto it = m_conns.find(fd);
         if (it == m_conns.end() || it->second == nullptr) {
             LOG_WARN("find connection failed, fd: %d", fd);
             close_conn(fd);
-            return 0;
+            task->c = nullptr;
+            continue;
         }
 
-        conn = it->second;
-        if (conn != c) {
+        if (it->second != c) {
             LOG_ERROR("ensure connection, fd: %d", fd);
             close_conn(fd);
-            return 0;
+            task->c = nullptr;
+            continue;
         }
 
-        if (conn->is_invalid()) {
+        if (c->is_invalid()) {
             LOG_ERROR("invalid socket, fd: %d", fd);
             close_conn(fd);
-            return 0;
+            task->c = nullptr;
+            continue;
         }
 
-        // return process_msg(conn);
+        for (;;) {
+            /* check connection alive. */
+            if (now() - c->active_time() > m_keep_alive) {
+                close_conn(fd);
+                task->c = nullptr;
+                LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
+                          fd, now(), c->active_time(), m_keep_alive);
+                break;
+            }
+
+            if (!process_msg(c)) {
+                close_conn(fd);
+                task->c = nullptr;
+                break;
+            }
+            co_sleep(1000, fd, POLLIN);
+        }
     }
 
     return 0;
@@ -229,9 +265,12 @@ bool Network::process_msg(Connection* c) {
 }
 
 bool Network::process_tcp_msg(Connection* c) {
+    LOG_TRACE("handle tcp msg, fd: %d", c->fd());
+
     int fd, res;
-    MsgHead head;
-    MsgBody body;
+    Request* req;
+    MsgHead* head;
+    MsgBody* body;
     Codec::STATUS codec_res;
     uint32_t old_cnt, old_bytes;
 
@@ -240,7 +279,11 @@ bool Network::process_tcp_msg(Connection* c) {
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
-    codec_res = c->conn_read(head, body);
+    req = new Request(c->fd_data(), false);
+    head = req->msg_head();
+    body = req->msg_body();
+
+    codec_res = c->conn_read(*head, *body);
     if (codec_res != Codec::STATUS::ERR) {
         m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
         m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
@@ -250,9 +293,10 @@ bool Network::process_tcp_msg(Connection* c) {
 
     while (codec_res == Codec::STATUS::OK) {
         if (res == ERR_UNKOWN_CMD) {
-            res = m_module_mgr->handle_request(c->fd_data(), head, body);
+            res = m_module_mgr->handle_request(req);
             if (res == ERR_UNKOWN_CMD) {
-                LOG_WARN("find cmd handler failed! fd: %d, cmd: %d", fd, head.cmd());
+                LOG_WARN("find cmd handler failed! fd: %d, cmd: %d",
+                         fd, head->cmd());
             } else {
                 if (res != ERR_OK) {
                     LOG_TRACE("process tcp msg failed! fd: %d", fd);
@@ -260,26 +304,31 @@ bool Network::process_tcp_msg(Connection* c) {
             }
         }
 
-        head.Clear();
-        body.Clear();
+        head->Clear();
+        body->Clear();
 
-        codec_res = c->fetch_data(head, body);
-        if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
-            LOG_TRACE("conn read failed. fd: %d", fd);
-            goto error;
-        }
+        /* continue to decode recv buffer. */
+        codec_res = c->fetch_data(*head, *body);
+        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
     }
 
     if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
         LOG_TRACE("conn read failed. fd: %d", fd);
-        goto error;
+        SAFE_DELETE(req);
+        return false;
     }
 
-    return true;
+    codec_res = c->conn_write();
+    if (codec_res == Codec::STATUS::ERR) {
+        LOG_TRACE("conn read failed. fd: %d", fd);
+        SAFE_DELETE(req);
+        return false;
+    } else if (codec_res == Codec::STATUS::PAUSE) {
+        co_sleep(1000, fd, POLLOUT);
+    }
 
-error:
-    close_conn(c);
-    return false;
+    SAFE_DELETE(req);
+    return true;
 }
 
 bool Network::process_http_msg(Connection* c) {
@@ -401,7 +450,7 @@ bool Network::load_modules() {
 }
 
 bool Network::load_config(const CJsonObject& config) {
-    double secs;
+    uint64_t secs;
     m_config = config;
     std::string codec;
 
@@ -497,45 +546,68 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
             return false;
         }
 
-        /* co_accecpt_node_conns */
-        stCoRoutine_t* co;
-        co_create(&co, NULL, co_handler_accept_gate_conn, (void*)c);
-        co_resume(co);
-        m_coroutines.insert(co);
+        co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
+        task->c = c;
+        m_coroutines.insert(task);
+        co_create(&task->co, NULL, co_handler_accept_gate_conn, (void*)task);
+        co_resume(task->co);
     }
 
     return true;
 }
 
-void Network::co_sleep(int ms, int fd) {
+void Network::co_sleep(int ms, int fd, int events) {
     struct pollfd pf = {0};
     pf.fd = fd;
+    pf.events = events | POLLERR | POLLHUP;
     poll(&pf, 1, ms);
 }
 
+void* Network::co_handler_read_transfer_fd(void* d) {
+    printf("co_handler_read_transfer_fd\n");
+    co_enable_hook_sys();
+    co_task_t* task = (co_task_t*)d;
+    Network* net = (Network*)task->c->privdata();
+    return net->handler_read_transfer_fd(d);
+}
+
 void* Network::handler_read_transfer_fd(void* d) {
+    LOG_TRACE("handler_read_transfer_fd....");
+    printf("handler_read_transfer_fd\n");
+
     int err;
     int data_fd;
     channel_t ch;
     Codec::TYPE codec;
+    co_task_t* task;
+    stCoRoutine_t* co;
     Connection *c = nullptr, *conn_data = nullptr;
 
-    conn_data = (Connection*)d;
+    task = (co_task_t*)d;
+    conn_data = (Connection*)task->c;
     data_fd = conn_data->fd();
+    co = task->co;
 
     for (;;) {
-        // read fd from manager.
+        /* read fd from parent. */
         err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
             if (err == EAGAIN) {
-                // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                co_sleep(1000, data_fd);
+                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                co_sleep(1000, data_fd, POLLIN);
                 continue;
             } else {
                 destory();
                 LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
                 exit(EXIT_FD_TRANSFER);
             }
+        }
+
+        /* limit coroutines. */
+        if (m_coroutines.size() > m_max_co_cnt) {
+            LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
+            close_conn(ch.fd);
+            continue;
         }
 
         codec = static_cast<Codec::TYPE>(ch.codec);
@@ -552,22 +624,22 @@ void* Network::handler_read_transfer_fd(void* d) {
 
         LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
                   ch.fd, ch.family, ch.codec, ch.is_system);
-        // co_sleep(data_fd, 1000);
-        /* catch new fd, and create new routines. */
-        stCoRoutine_t* co;
-        co_create(&co, NULL, co_handler_requests, (void*)c);
-        co_resume(co);
-        m_coroutines.insert(co);
+
+        if (m_co_free.size() > 0) {
+            auto it = m_co_free.begin();
+            m_coroutines.insert(*it);
+            m_co_free.erase(it);
+            co_resume((*it)->co);
+        } else {
+            co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
+            task->c = c;
+            m_coroutines.insert(task);
+            co_create(&task->co, NULL, co_handler_requests, (void*)task);
+            co_resume(task->co);
+        }
     }
 
     return 0;
-}
-
-void* Network::co_handler_read_transfer_fd(void* d) {
-    co_enable_hook_sys();
-    Connection* c = (Connection*)d;
-    Network* net = (Network*)c->privdata();
-    return net->handler_read_transfer_fd(d);
 }
 
 /* worker. */
@@ -604,11 +676,55 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     m_worker_index = index;
     LOG_INFO("create network done!");
 
-    stCoRoutine_t* co;
-    co_create(&co, NULL, co_handler_read_transfer_fd, (void*)conn_data);
-    co_resume(co);
-    m_coroutines.insert(co);
+    co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
+    task->c = conn_data;
+    m_coroutines.insert(task);
+    co_create(&task->co, NULL, co_handler_read_transfer_fd, (void*)task);
+    co_resume(task->co);
     return true;
+}
+
+int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
+    if (c == nullptr) {
+        return false;
+    }
+
+    Codec::STATUS ret;
+    int old_cnt, old_bytes;
+
+    old_cnt = c->write_cnt();
+    old_bytes = c->write_bytes();
+    ret = c->conn_write(head, body);
+    if (ret != Codec::STATUS::ERR) {
+        m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
+        m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
+    }
+
+    return true;
+}
+
+Connection* Network::get_conn(const fd_t& f) {
+    auto it = m_conns.find(f.fd);
+    return (it == m_conns.end() || it->second->id() != f.id) ? nullptr : it->second;
+}
+
+int Network::send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) {
+    return send_to(get_conn(f), head, body);
+}
+
+int Network::send_ack(const Request* req, int err, const std::string& errstr, const std::string& data) {
+    MsgHead head;
+    MsgBody body;
+
+    body.set_data(data);
+    body.mutable_rsp_result()->set_code(err);
+    body.mutable_rsp_result()->set_msg(errstr);
+
+    head.set_seq(req->msg_head()->seq());
+    head.set_cmd(req->msg_head()->cmd() + 1);
+    head.set_len(body.ByteSizeLong());
+
+    return send_to(req->fd_data(), head, body);
 }
 
 }  // namespace kim

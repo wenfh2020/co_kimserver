@@ -64,6 +64,7 @@ bool Worker::load_logger() {
 
     m_logger->set_process_type(false);
     m_logger->set_worker_index(m_worker_info.index);
+    LOG_INFO("init logger done!");
     return true;
 }
 

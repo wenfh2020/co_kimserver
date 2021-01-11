@@ -30,7 +30,7 @@ class Connection : Logger {
     const fd_t& fd_data() const { return m_fd_data; }
     void set_fd_data(int fd, uint64_t id) { m_fd_data = {fd, id}; }
 
-    double now();
+    uint64_t now();
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
@@ -75,10 +75,10 @@ class Connection : Logger {
     int read_cnt() { return m_read_cnt; }
     uint64_t read_bytes() { return m_read_bytes; }
 
-    void set_active_time(double t) { m_active_time = t; }
-    double active_time() const { return m_active_time; }
-    void set_keep_alive(double secs) { m_keep_alive = secs; }
-    double keep_alive();
+    void set_active_time(uint64_t t) { m_active_time = t; }
+    uint64_t active_time() const { return m_active_time; }
+    void set_keep_alive(uint64_t secs) { m_keep_alive = secs; }
+    uint64_t keep_alive();
 
    private:
     Codec::STATUS conn_read();
@@ -110,8 +110,8 @@ class Connection : Logger {
     int m_write_cnt = 0;
     uint64_t m_write_bytes = 0;
 
-    double m_active_time = 0;  // connection last active (read/write) time.
-    double m_keep_alive = 0;
+    uint64_t m_active_time = 0;  // connection last active (read/write) time.
+    uint64_t m_keep_alive = 0;
 };
 
 }  // namespace kim
