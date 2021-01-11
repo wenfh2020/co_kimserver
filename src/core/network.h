@@ -3,7 +3,7 @@
 
 #include "codec/codec.h"
 #include "connection.h"
-#include "libco/co_routine.h"
+#include "coroutines.h"
 #include "module_mgr.h"
 #include "net.h"
 #include "net/anet.h"
@@ -16,11 +16,6 @@
 #include "worker_data_mgr.h"
 
 namespace kim {
-
-typedef struct co_task_s {
-    Connection* c;
-    stCoRoutine_t* co;
-} co_task_t;
 
 class Network : public INet {
    public:
@@ -64,6 +59,7 @@ class Network : public INet {
     bool load_public(const CJsonObject& config);
     bool load_worker_data_mgr();
     bool load_modules();
+    bool load_corotines();
     WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
 
     /* use in fork. */
@@ -130,10 +126,8 @@ class Network : public INet {
     int m_manager_data_fd = -1; /* chanel fd use for worker. */
 
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
-    std::set<co_task_t*> m_coroutines;
-    std::set<co_task_t*> m_co_free;
-    int m_max_co_cnt = 0;
 
+    Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
     Payload m_payload;                 /* payload data. */
 };

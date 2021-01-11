@@ -74,7 +74,6 @@ Codec::STATUS Connection::conn_read() {
         return Codec::STATUS::CLOSED;
     } else if (read_len < 0) {
         if (errno == EAGAIN) {
-            m_active_time = now();
             return Codec::STATUS::PAUSE;
         } else {
             LOG_DEBUG("connection read error! fd: %d, err: %d, error: %s",
@@ -84,6 +83,7 @@ Codec::STATUS Connection::conn_read() {
     } else {
         m_read_cnt++;
         m_read_bytes += read_len;
+
         /* recovery socket buffer. */
         if (m_recv_buf->capacity() > SocketBuffer::BUFFER_MAX_READ &&
             m_recv_buf->readable_len() < m_recv_buf->capacity() / 2) {
@@ -120,7 +120,6 @@ Codec::STATUS Connection::conn_write() {
     write_len = sbuf->write_fd(fd(), m_errno);
     if (write_len < 0) {
         if (m_errno == EAGAIN) {
-            m_active_time = now();
             return Codec::STATUS::PAUSE;
         } else {
             LOG_ERROR("send data failed! fd: %d, seq: %llu, readable len: %d",

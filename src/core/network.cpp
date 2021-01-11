@@ -1,12 +1,10 @@
 #include "network.h"
 
 #include "request.h"
-#define MAX_CO_CNT 100
 
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
-    m_max_co_cnt = MAX_CO_CNT;
 }
 
 Network::~Network() {
@@ -14,10 +12,7 @@ Network::~Network() {
 }
 
 void Network::clear_routines() {
-    for (const auto& task : m_coroutines) {
-        co_release(task->co);
-    }
-    m_coroutines.clear();
+    SAFE_DELETE(m_coroutines);
     FreeLibcoEnv();
 }
 
@@ -197,8 +192,6 @@ void* Network::co_handler_requests(void* d) {
     return net->handler_requests(d);
 }
 
-/* 如果 fd 被关闭了，那么重新将当前 co 添加到空闲。并将协程切出去。
- * 等待重新唤醒。 */
 void* Network::handler_requests(void* d) {
     int fd;
     Connection* c;
@@ -207,7 +200,7 @@ void* Network::handler_requests(void* d) {
 
     for (;;) {
         if (task->c == nullptr) {
-            m_co_free.insert(task);
+            m_coroutines->add_free_co_task(task);
             co_yield_ct();
             continue;
         }
@@ -422,6 +415,11 @@ bool Network::load_public(const CJsonObject& config) {
         return false;
     }
 
+    if (!load_corotines()) {
+        LOG_ERROR("load coroutines failed!");
+        return false;
+    }
+
     m_nodes = new Nodes(m_logger);
     if (m_nodes == nullptr) {
         LOG_ERROR("alloc nodes failed!");
@@ -439,6 +437,11 @@ bool Network::load_modules() {
     }
     LOG_INFO("load modules mgr sucess!");
     return true;
+}
+
+bool Network::load_corotines() {
+    m_coroutines = new Coroutines(m_logger);
+    return (m_coroutines != nullptr);
 }
 
 bool Network::load_config(const CJsonObject& config) {
@@ -481,6 +484,7 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
 
     int fd = -1;
     Connection* c;
+    co_task_t* task;
 
     if (!load_public(config)) {
         LOG_ERROR("load public failed!");
@@ -538,10 +542,12 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
             return false;
         }
 
-        co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
-        task->c = c;
-        m_coroutines.insert(task);
-        co_create(&task->co, NULL, co_handler_accept_gate_conn, (void*)task);
+        task = m_coroutines->create_co_task(c, co_handler_accept_gate_conn);
+        if (task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            return false;
+        }
         co_resume(task->co);
     }
 
@@ -560,6 +566,7 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
         return false;
     }
 
+    co_task_t* task;
     Connection *conn_ctrl, *conn_data;
 
     conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
@@ -582,10 +589,12 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     m_worker_index = index;
     LOG_INFO("create network done!");
 
-    co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
-    task->c = conn_data;
-    m_coroutines.insert(task);
-    co_create(&task->co, NULL, co_handler_read_transfer_fd, (void*)task);
+    task = m_coroutines->create_co_task(conn_data, co_handler_read_transfer_fd);
+    if (task == nullptr) {
+        LOG_ERROR("create new corotines failed!");
+        close_conn(conn_data);
+        return false;
+    }
     co_resume(task->co);
     return true;
 }
@@ -625,13 +634,6 @@ void* Network::handler_read_transfer_fd(void* d) {
             }
         }
 
-        /* limit coroutines. */
-        if (m_coroutines.size() > m_max_co_cnt) {
-            LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
-            close_conn(ch.fd);
-            continue;
-        }
-
         codec = static_cast<Codec::TYPE>(ch.codec);
         c = create_conn(ch.fd, codec);
         if (c == nullptr) {
@@ -647,21 +649,13 @@ void* Network::handler_read_transfer_fd(void* d) {
         LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
                   ch.fd, ch.family, ch.codec, ch.is_system);
 
-        co_task_t* t;
-        if (m_co_free.size() > 0) {
-            auto it = m_co_free.begin();
-            t = *it;
-            m_coroutines.insert(t);
-            m_co_free.erase(it);
-            t->c = c;
-            co_resume(t->co);
-        } else {
-            t = (co_task_t*)calloc(1, sizeof(co_task_t));
-            t->c = c;
-            m_coroutines.insert(t);
-            co_create(&t->co, NULL, co_handler_requests, (void*)t);
-            co_resume(t->co);
+        co_task_t* co_task = m_coroutines->create_co_task(c, co_handler_requests);
+        if (co_task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            continue;
         }
+        co_resume(co_task->co);
     }
 
     return 0;
