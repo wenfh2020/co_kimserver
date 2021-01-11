@@ -131,7 +131,6 @@ void* Network::co_handler_accept_nodes_conn(void*) {
 
 void* Network::co_handler_accept_gate_conn(void* d) {
     co_enable_hook_sys();
-
     co_task_t* task = (co_task_t*)d;
     Connection* c = task->c;
     Network* net = (Network*)c->privdata();
@@ -204,10 +203,7 @@ void* Network::handler_requests(void* d) {
     int fd;
     Connection* c;
     co_task_t* task;
-
     task = (co_task_t*)d;
-    c = (Connection*)task->c;
-    fd = c->fd();
 
     for (;;) {
         if (task->c == nullptr) {
@@ -216,16 +212,12 @@ void* Network::handler_requests(void* d) {
             continue;
         }
 
+        c = (Connection*)task->c;
+        fd = c->fd();
+
         auto it = m_conns.find(fd);
         if (it == m_conns.end() || it->second == nullptr) {
             LOG_WARN("find connection failed, fd: %d", fd);
-            close_conn(fd);
-            task->c = nullptr;
-            continue;
-        }
-
-        if (it->second != c) {
-            LOG_ERROR("ensure connection, fd: %d", fd);
             close_conn(fd);
             task->c = nullptr;
             continue;
@@ -556,92 +548,6 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     return true;
 }
 
-void Network::co_sleep(int ms, int fd, int events) {
-    struct pollfd pf = {0};
-    pf.fd = fd;
-    pf.events = events | POLLERR | POLLHUP;
-    poll(&pf, 1, ms);
-}
-
-void* Network::co_handler_read_transfer_fd(void* d) {
-    printf("co_handler_read_transfer_fd\n");
-    co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Network* net = (Network*)task->c->privdata();
-    return net->handler_read_transfer_fd(d);
-}
-
-void* Network::handler_read_transfer_fd(void* d) {
-    LOG_TRACE("handler_read_transfer_fd....");
-    printf("handler_read_transfer_fd\n");
-
-    int err;
-    int data_fd;
-    channel_t ch;
-    Codec::TYPE codec;
-    co_task_t* task;
-    stCoRoutine_t* co;
-    Connection *c = nullptr, *conn_data = nullptr;
-
-    task = (co_task_t*)d;
-    conn_data = (Connection*)task->c;
-    data_fd = conn_data->fd();
-    co = task->co;
-
-    for (;;) {
-        /* read fd from parent. */
-        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
-        if (err != 0) {
-            if (err == EAGAIN) {
-                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                co_sleep(1000, data_fd, POLLIN);
-                continue;
-            } else {
-                destory();
-                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
-                exit(EXIT_FD_TRANSFER);
-            }
-        }
-
-        /* limit coroutines. */
-        if (m_coroutines.size() > m_max_co_cnt) {
-            LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
-            close_conn(ch.fd);
-            continue;
-        }
-
-        codec = static_cast<Codec::TYPE>(ch.codec);
-        c = create_conn(ch.fd, codec);
-        if (c == nullptr) {
-            LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
-            close_conn(ch.fd);
-            continue;
-        }
-
-        if (ch.is_system) {
-            c->set_system(true);
-        }
-
-        LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
-                  ch.fd, ch.family, ch.codec, ch.is_system);
-
-        if (m_co_free.size() > 0) {
-            auto it = m_co_free.begin();
-            m_coroutines.insert(*it);
-            m_co_free.erase(it);
-            co_resume((*it)->co);
-        } else {
-            co_task_t* task = (co_task_t*)calloc(1, sizeof(co_task_t));
-            task->c = c;
-            m_coroutines.insert(task);
-            co_create(&task->co, NULL, co_handler_requests, (void*)task);
-            co_resume(task->co);
-        }
-    }
-
-    return 0;
-}
-
 /* worker. */
 bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
     if (!load_public(config)) {
@@ -682,6 +588,90 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     co_create(&task->co, NULL, co_handler_read_transfer_fd, (void*)task);
     co_resume(task->co);
     return true;
+}
+
+void* Network::co_handler_read_transfer_fd(void* d) {
+    co_enable_hook_sys();
+    co_task_t* task = (co_task_t*)d;
+    Network* net = (Network*)task->c->privdata();
+    return net->handler_read_transfer_fd(d);
+}
+
+void* Network::handler_read_transfer_fd(void* d) {
+    LOG_TRACE("handler_read_transfer_fd....");
+
+    int err;
+    int data_fd;
+    channel_t ch;
+    co_task_t* task;
+    Codec::TYPE codec;
+    Connection* c = nullptr;
+
+    task = (co_task_t*)d;
+    data_fd = task->c->fd();
+
+    for (;;) {
+        /* read fd from parent. */
+        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
+        if (err != 0) {
+            if (err == EAGAIN) {
+                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                co_sleep(1000, data_fd, POLLIN);
+                continue;
+            } else {
+                destory();
+                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
+                exit(EXIT_FD_TRANSFER);
+            }
+        }
+
+        /* limit coroutines. */
+        if (m_coroutines.size() > m_max_co_cnt) {
+            LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
+            close_conn(ch.fd);
+            continue;
+        }
+
+        codec = static_cast<Codec::TYPE>(ch.codec);
+        c = create_conn(ch.fd, codec);
+        if (c == nullptr) {
+            LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
+            close_conn(ch.fd);
+            continue;
+        }
+
+        if (ch.is_system) {
+            c->set_system(true);
+        }
+
+        LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
+                  ch.fd, ch.family, ch.codec, ch.is_system);
+
+        co_task_t* t;
+        if (m_co_free.size() > 0) {
+            auto it = m_co_free.begin();
+            t = *it;
+            m_coroutines.insert(t);
+            m_co_free.erase(it);
+            t->c = c;
+            co_resume(t->co);
+        } else {
+            t = (co_task_t*)calloc(1, sizeof(co_task_t));
+            t->c = c;
+            m_coroutines.insert(t);
+            co_create(&t->co, NULL, co_handler_requests, (void*)t);
+            co_resume(t->co);
+        }
+    }
+
+    return 0;
+}
+
+void Network::co_sleep(int ms, int fd, int events) {
+    struct pollfd pf = {0};
+    pf.fd = fd;
+    pf.events = events | POLLERR | POLLHUP;
+    poll(&pf, 1, ms);
 }
 
 int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {

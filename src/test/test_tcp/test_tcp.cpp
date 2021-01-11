@@ -6,7 +6,7 @@
 
 #include "protobuf/proto/msg.pb.h"
 
-#define SEND_PACKETS 1
+#define SEND_PACKETS 10
 #define PROTO_MSG_HEAD_LEN 15
 
 enum {
