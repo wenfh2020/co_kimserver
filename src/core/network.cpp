@@ -146,7 +146,7 @@ void* Network::handler_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            co_sleep(1000, m_gate_host_fd, POLLIN);
+            m_coroutines->co_sleep(1000, m_gate_host_fd, POLLIN);
             continue;
         }
 
@@ -238,7 +238,7 @@ void* Network::handler_requests(void* d) {
                 task->c = nullptr;
                 break;
             }
-            co_sleep(1000, fd, POLLIN);
+            m_coroutines->co_sleep(1000, fd, POLLIN);
         }
     }
 
@@ -291,25 +291,26 @@ bool Network::process_tcp_msg(Connection* c) {
 
         head->Clear();
         body->Clear();
+        res = ERR_UNKOWN_CMD;
 
         /* continue to decode recv buffer. */
         codec_res = c->fetch_data(*head, *body);
-        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+        LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
     }
 
     if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
-        LOG_TRACE("conn read failed. fd: %d", fd);
+        LOG_DEBUG("conn read failed. fd: %d", fd);
         SAFE_DELETE(req);
         return false;
     }
 
     codec_res = c->conn_write();
     if (codec_res == Codec::STATUS::ERR) {
-        LOG_TRACE("conn read failed. fd: %d", fd);
+        LOG_DEBUG("conn read failed. fd: %d", fd);
         SAFE_DELETE(req);
         return false;
     } else if (codec_res == Codec::STATUS::PAUSE) {
-        co_sleep(1000, fd, POLLOUT);
+        m_coroutines->co_sleep(1000, fd, POLLOUT);
     }
 
     SAFE_DELETE(req);
@@ -445,7 +446,7 @@ bool Network::load_corotines() {
 }
 
 bool Network::load_config(const CJsonObject& config) {
-    uint64_t secs;
+    int secs;
     m_config = config;
     std::string codec;
 
@@ -625,7 +626,7 @@ void* Network::handler_read_transfer_fd(void* d) {
         if (err != 0) {
             if (err == EAGAIN) {
                 LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                co_sleep(1000, data_fd, POLLIN);
+                m_coroutines->co_sleep(1000, data_fd, POLLIN);
                 continue;
             } else {
                 destory();
@@ -659,13 +660,6 @@ void* Network::handler_read_transfer_fd(void* d) {
     }
 
     return 0;
-}
-
-void Network::co_sleep(int ms, int fd, int events) {
-    struct pollfd pf = {0};
-    pf.fd = fd;
-    pf.events = events | POLLERR | POLLHUP;
-    poll(&pf, 1, ms);
 }
 
 int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {

@@ -27,6 +27,8 @@ class Coroutines {
     co_task_t* create_co_task(Connection* c, pfn_co_routine_t fn);
     bool add_free_co_task(co_task_t* task);
 
+    void co_sleep(int ms, int fd = -1, int events = 0);
+
    private:
     Log* m_logger = nullptr;
     std::set<co_task_t*> m_coroutines;

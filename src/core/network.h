@@ -90,7 +90,6 @@ class Network : public INet {
     bool process_http_msg(Connection* c);
 
     /* coroutines. */
-    void co_sleep(int ms, int fd = -1, int events = 0);
     static void* co_handler_accept_nodes_conn(void*);
     static void* co_handler_accept_gate_conn(void*);
     void* handler_accept_gate_conn(void*);

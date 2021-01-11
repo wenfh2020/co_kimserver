@@ -46,4 +46,11 @@ bool Coroutines::add_free_co_task(co_task_t* task) {
     return it.second;
 }
 
+void Coroutines::co_sleep(int ms, int fd, int events) {
+    struct pollfd pf = {0};
+    pf.fd = fd;
+    pf.events = events | POLLERR | POLLHUP;
+    poll(&pf, 1, ms);
+}
+
 }  // namespace kim
