@@ -20,6 +20,9 @@ Manager::~Manager() {
 void Manager::destory() {
     SAFE_DELETE(m_net);
     SAFE_DELETE(m_logger);
+    if (m_co_timer != nullptr) {
+        co_release(m_co_timer);
+    }
 }
 
 void Manager::run() {
@@ -54,9 +57,8 @@ bool Manager::init(const char* conf_path) {
     set_proc_title("%s", m_conf("server_name").c_str());
 
     /* timer */
-    stCoRoutine_t* co;
-    co_create(&co, NULL, co_handle_timer, this);
-    co_resume(co);
+    co_create(&m_co_timer, NULL, co_handle_timer, this);
+    co_resume(m_co_timer);
 
     LOG_INFO("init manager done!");
     return true;
@@ -165,8 +167,6 @@ bool Manager::create_worker(int worker_index) {
 
     if ((pid = fork()) == 0) {
         /* child. */
-        // m_net->close_fds();
-        // m_net->clear_routines();
         destory();
 
         close(ctrl_fds[0]);

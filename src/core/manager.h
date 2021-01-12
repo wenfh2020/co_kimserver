@@ -34,6 +34,8 @@ class Manager {
 
     node_info m_node_info;          /* cluster node. */
     CJsonObject m_conf, m_old_conf; /* config. */
+
+    stCoRoutine_t* m_co_timer = nullptr;
 };
 
 }  // namespace kim

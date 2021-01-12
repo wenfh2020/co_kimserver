@@ -7,6 +7,8 @@
 
 using namespace kim;
 
+#define MAX_SEND_PACKETS_ONCE 300
+
 int g_packets = 0;
 int g_send_cnt = 0;
 int g_callback_cnt = 0;
@@ -130,18 +132,22 @@ bool is_connect_ok(Connection* c) {
 }
 
 bool check_connect(Connection* c) {
-    if (!c->is_connected()) {
-        if (!is_connect_ok(c)) {
-            LOG_DEBUG("connect failed! fd: %d", c->fd());
-            g_conns.erase(c->fd());
-            return false;
-        }
-        if (!c->is_connected()) {
-            LOG_DEBUG("connect next time! fd: %d", c->fd());
-            return false;
-        }
-        LOG_DEBUG("connect ok! fd: %d", c->fd());
+    if (c->is_connected()) {
+        return true;
     }
+
+    if (!is_connect_ok(c)) {
+        LOG_DEBUG("connect failed! fd: %d", c->fd());
+        g_conns.erase(c->fd());
+        return false;
+    }
+
+    if (!c->is_connected()) {
+        LOG_DEBUG("connect next time! fd: %d", c->fd());
+        return false;
+    }
+
+    LOG_INFO("connect ok! fd: %d", c->fd());
     return true;
 }
 
@@ -150,10 +156,12 @@ bool del_connect(Connection* c) {
         LOG_ERROR("invalid params!");
         return false;
     }
+
     auto it = g_conns.find(c->fd());
     if (it == g_conns.end()) {
         return false;
     }
+
     free((statistics_user_data_t*)c->privdata());
     close(c->fd());
     SAFE_DELETE(it->second);
@@ -193,7 +201,7 @@ Codec::STATUS send_packets(Connection* c) {
 
     if ((stat->packets > 0 && stat->send_cnt < stat->packets &&
          stat->send_cnt == stat->callback_cnt)) {
-        for (int i = 0; i < 300 && i < stat->packets; i++) {
+        for (int i = 0; i < MAX_SEND_PACKETS_ONCE && i < stat->packets; i++) {
             if (stat->send_cnt >= stat->packets) {
                 LOG_INFO("send cnt == packets, fd: %d", c->fd());
                 return Codec::STATUS::OK;
@@ -220,9 +228,7 @@ bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body) {
 
     if (body.rsp_result().code() != ERR_OK) {
         LOG_ERROR("rsp code is not ok, error! fd: %d, error: %d, errstr: %s",
-                  c->fd(),
-                  body.rsp_result().code(),
-                  body.rsp_result().msg().c_str());
+                  c->fd(), body.rsp_result().code(), body.rsp_result().msg().c_str());
         return false;
     }
 
