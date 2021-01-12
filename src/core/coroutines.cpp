@@ -1,5 +1,7 @@
 #include "coroutines.h"
 
+#include "libco/co_routine_inner.h"
+
 namespace kim {
 
 Coroutines::Coroutines(Log* logger) : m_logger(logger) {
@@ -23,7 +25,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
     co_task_t* task;
 
     if (m_co_free.size() == 0) {
-        if (m_coroutines.size() > m_max_co_cnt) {
+        if ((int)m_coroutines.size() > m_max_co_cnt) {
             LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
             return nullptr;
         }
