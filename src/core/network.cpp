@@ -2,6 +2,8 @@
 
 #include "request.h"
 
+#define MAX_TRY_RESEND_FD_CNT 10
+
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
@@ -17,10 +19,8 @@ void Network::clear_routines() {
 }
 
 void Network::destory() {
-    // end_ev_loop();
     close_fds();
     clear_routines();
-
     for (const auto& it : m_wait_send_fds) {
         free(it);
     }
@@ -29,7 +29,9 @@ void Network::destory() {
 
 void Network::run() {
     LOG_INFO("network run: %d", (int)m_type);
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    if (m_coroutines != nullptr) {
+        m_coroutines->run();
+    }
 }
 
 void Network::close_fds() {
@@ -154,7 +156,7 @@ void Network::check_wait_send_fds() {
 
         err = write_channel(chanel_fd, &data->ch, sizeof(channel_t), m_logger);
         if (err == 0 || (err != 0 && err != EAGAIN) ||
-            ((err == EAGAIN) && (++data->count >= 3))) {
+            ((err == EAGAIN) && (++data->count >= MAX_TRY_RESEND_FD_CNT))) {
             if (err != 0) {
                 LOG_ERROR("resend chanel failed! fd: %d, errno: %d", data->ch.fd, err);
             }

@@ -21,6 +21,10 @@ void Coroutines::clear_tasks() {
     m_coroutines.clear();
 }
 
+void Coroutines::run() {
+    co_eventloop(co_get_epoll_ct(), 0, 0);
+}
+
 co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
     co_task_t* task;
 

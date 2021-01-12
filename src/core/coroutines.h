@@ -21,6 +21,7 @@ class Coroutines {
     virtual ~Coroutines();
 
     void clear_tasks();
+    void run();
 
     int get_max_co_cnt() { return m_max_co_cnt; }
     void set_max_co_cnt(int cnt) { m_max_co_cnt = cnt; }

@@ -225,13 +225,11 @@ bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body) {
         LOG_ERROR("no rsp result! fd: %d, cmd: %d", c->fd(), head.cmd());
         return false;
     }
-
     if (body.rsp_result().code() != ERR_OK) {
         LOG_ERROR("rsp code is not ok, error! fd: %d, error: %d, errstr: %s",
                   c->fd(), body.rsp_result().code(), body.rsp_result().msg().c_str());
         return false;
     }
-
     return true;
 }
 
