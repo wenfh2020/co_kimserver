@@ -6,7 +6,28 @@ co_kimserver 是基于 `libco` 轻量级协程库的 tcp 高性能 C++ 多进程
 
 ---
 
-## 1. 测试
+## 1. 编译
+
+co_kimserver 根目录，执行编译脚本。
+
+```shell
+ ./run.sh compile all
+```
+
+---
+
+## 2. 运行
+
+编程成功后，进入 bin 目录运行执行问题。
+
+```shell
+cd bin
+./co_kimserver config.json
+```
+
+---
+
+## 3. 测试
 
 [压测源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)。
 
@@ -16,7 +37,7 @@ co_kimserver 是基于 `libco` 轻量级协程库的 tcp 高性能 C++ 多进程
 
 ---
 
-### 1.1. MacOS
+### 3.1. MacOS
 
 并发：125,006 / s。
 
@@ -32,7 +53,7 @@ err callback cnt: 0
 
 ---
 
-### 1.2. Linux
+### 3.2. Linux
 
 并发：184,838 / s。
 
