@@ -333,6 +333,7 @@ ssize_t read(int fd, void *buf, size_t nbyte) {
 
     return readret;
 }
+
 ssize_t write(int fd, const void *buf, size_t nbyte) {
     HOOK_SYS_FUNC(write);
 
@@ -345,6 +346,7 @@ ssize_t write(int fd, const void *buf, size_t nbyte) {
         ssize_t ret = g_sys_write_func(fd, buf, nbyte);
         return ret;
     }
+
     size_t wrotelen = 0;
     int timeout = (lp->write_timeout.tv_sec * 1000) + (lp->write_timeout.tv_usec / 1000);
 
@@ -357,6 +359,7 @@ ssize_t write(int fd, const void *buf, size_t nbyte) {
     if (writeret > 0) {
         wrotelen += writeret;
     }
+
     while (wrotelen < nbyte) {
         struct pollfd pf = {0};
         pf.fd = fd;
@@ -370,6 +373,7 @@ ssize_t write(int fd, const void *buf, size_t nbyte) {
         }
         wrotelen += writeret;
     }
+
     if (writeret <= 0 && wrotelen == 0) {
         return writeret;
     }

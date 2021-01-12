@@ -1,63 +1,42 @@
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <time.h>
-#include <unistd.h>
-
-#include <iostream>
 
 #include "./libco/co_routine.h"
 #include "connection.h"
+#include "error.h"
 #include "net/anet.h"
-#include "server.h"
-#include "util/log.h"
 #include "util/util.h"
 
 using namespace kim;
 
-/* 需求：
- * 1. 开 1000 个用户，每个用户发 1000 个包。
- * 2. 统计数据。
- * */
-
 int g_packets = 0;
 int g_send_cnt = 0;
 int g_callback_cnt = 0;
+int g_ok_callback_cnt = 0;
+int g_err_callback_cnt = 0;
 
 int g_test_users = 0;
-int g_test_packets = 0;
+int g_test_user_packets = 0;
 
 int g_server_port = 3355;
 std::string g_server_host = "127.0.0.1";
 
-Log* m_logger = nullptr;
-char g_errstr[256];
 int g_seq = 0;
+char g_errstr[256];
+Log* m_logger = nullptr;
+double g_begin_time = 0.0;
+std::unordered_map<int, kim::Connection*> g_conns;
 
 size_t g_saddr_len;
 struct sockaddr g_saddr;
 
-std::unordered_map<int, kim::Connection*> g_conns;
-
-typedef struct statistics_data_s {
+typedef struct statistics_user_data_s {
     int packets = 0;
     int send_cnt = 0;
     int callback_cnt = 0;
-} statistics_data_t;
+} statistics_user_data_t;
 
 enum {
     KP_REQ_TEST_PROTO = 1001,
     KP_RSP_TEST_PROTO = 1002,
-    KP_REQ_TEST_AUTO_SEND = 1003,
-    KP_RSP_TEST_AUTO_SEND = 1004,
 };
 
 bool check_args(int args, char** argv) {
@@ -72,7 +51,8 @@ bool check_args(int args, char** argv) {
     g_server_host = argv[1];
     g_server_port = atoi(argv[2]);
     g_test_users = atoi(argv[3]);
-    g_test_packets = atoi(argv[4]);
+    g_test_user_packets = atoi(argv[4]);
+    g_send_cnt = g_test_users * g_test_user_packets;
     return true;
 }
 
@@ -84,7 +64,7 @@ bool load_logger(const char* path) {
         std::cerr << "set log path failed!" << std::endl;
         return false;
     }
-    m_logger->set_level(Log::LL_DEBUG);
+    m_logger->set_level(Log::LL_INFO);
     m_logger->set_worker_index(0);
     m_logger->set_process_type(true);
     return true;
@@ -92,12 +72,13 @@ bool load_logger(const char* path) {
 
 Connection* get_connect(const char* host, int port) {
     if (host == nullptr || port == 0) {
-        LOG_ERROR("invalid params!");
+        LOG_ERROR("invalid host or port!");
         return nullptr;
     }
 
     int fd;
     Connection* c;
+    statistics_user_data_t* stat;
 
     fd = anet_tcp_connect(g_errstr, host, port, false, &g_saddr, &g_saddr_len);
     if (fd == -1) {
@@ -106,21 +87,20 @@ Connection* get_connect(const char* host, int port) {
         return nullptr;
     }
 
-    // connection.
-    c = new Connection(m_logger, fd, 0);
+    c = new Connection(m_logger, fd, new_seq());
     if (c == nullptr) {
         close(fd);
         LOG_ERROR("alloc connection failed! fd: %d", fd);
         return nullptr;
     }
 
-    statistics_data_t* stat_data = (statistics_data_t*)calloc(1, sizeof(statistics_data_t));
-    stat_data->packets = g_test_packets;
+    stat = (statistics_user_data_t*)calloc(1, sizeof(statistics_user_data_t));
+    stat->packets = g_test_user_packets;
 
     c->init(Codec::TYPE::PROTOBUF);
     c->set_state(Connection::STATE::CONNECTING);
     c->set_addr_info(&g_saddr, g_saddr_len);
-    c->set_privdata(stat_data);
+    c->set_privdata(stat);
     g_conns[fd] = c;
     LOG_INFO("new connection done! fd: %d", fd);
     return c;
@@ -159,6 +139,22 @@ bool check_connect(Connection* c) {
     return true;
 }
 
+bool del_connect(Connection* c) {
+    if (c == nullptr) {
+        LOG_ERROR("invalid params!");
+        return false;
+    }
+    auto it = g_conns.find(c->fd());
+    if (it == g_conns.end()) {
+        return false;
+    }
+    free((statistics_user_data_t*)c->privdata());
+    close(c->fd());
+    SAFE_DELETE(it->second);
+    g_conns.erase(it);
+    return true;
+}
+
 Codec::STATUS send_proto(Connection* c, int cmd, const std::string& data) {
     MsgHead head;
     MsgBody body;
@@ -183,14 +179,18 @@ Codec::STATUS send_packets(Connection* c) {
     }
 
     Codec::STATUS ret = Codec::STATUS::PAUSE;
-    statistics_data_t* stat = (statistics_data_t*)c->privdata();
+    statistics_user_data_t* stat = (statistics_user_data_t*)c->privdata();
+
+    if (stat->send_cnt >= stat->packets) {
+        return Codec::STATUS::OK;
+    }
 
     if ((stat->packets > 0 && stat->send_cnt < stat->packets &&
          stat->send_cnt == stat->callback_cnt)) {
-        for (int i = 0; i < 100 && i < stat->packets; i++) {
+        for (int i = 0; i < 300 && i < stat->packets; i++) {
             if (stat->send_cnt >= stat->packets) {
                 LOG_INFO("send cnt == packets, fd: %d", c->fd());
-                return Codec::STATUS::CLOSED;
+                return Codec::STATUS::OK;
             }
             stat->send_cnt++;
             LOG_DEBUG("packets info: fd: %d, packets: %d, send cnt: %d, callback cnt: %d\n",
@@ -206,20 +206,40 @@ Codec::STATUS send_packets(Connection* c) {
     return ret;
 }
 
-bool del_connect(Connection* c) {
-    if (c == nullptr) {
-        LOG_ERROR("invalid params!");
+bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body) {
+    if (!body.has_rsp_result()) {
+        LOG_ERROR("no rsp result! fd: %d, cmd: %d", c->fd(), head.cmd());
         return false;
     }
-    auto it = g_conns.find(c->fd());
-    if (it == g_conns.end()) {
+
+    if (body.rsp_result().code() != ERR_OK) {
+        LOG_ERROR("rsp code is not ok, error! fd: %d, error: %d, errstr: %s",
+                  c->fd(),
+                  body.rsp_result().code(),
+                  body.rsp_result().msg().c_str());
         return false;
     }
-    free((statistics_data_t*)c->privdata());
-    close(c->fd());
-    SAFE_DELETE(it->second);
-    g_conns.erase(it);
+
     return true;
+}
+
+void show_statics_result(bool force = false) {
+    LOG_DEBUG("send cnt: %d, cur callback cnt: %d", g_send_cnt, g_callback_cnt);
+
+    if (force && g_send_cnt == g_callback_cnt) {
+        return;
+    }
+
+    if (g_send_cnt == g_callback_cnt || force) {
+        std::cout << "------" << std::endl
+                  << "spend time: " << time_now() - g_begin_time << std::endl
+                  << "avg:        " << g_send_cnt / (time_now() - g_begin_time) << std::endl;
+
+        std::cout << "send cnt:         " << g_send_cnt << std::endl
+                  << "callback cnt:     " << g_callback_cnt << std::endl
+                  << "ok callback cnt:  " << g_ok_callback_cnt << std::endl
+                  << "err callback cnt: " << g_err_callback_cnt << std::endl;
+    }
 }
 
 void co_sleep(int ms, int fd = -1, int events = 0) {
@@ -229,15 +249,15 @@ void co_sleep(int ms, int fd = -1, int events = 0) {
     poll(&pf, 1, ms);
 }
 
-static void* readwrite_routine(void* arg) {
+void* readwrite_routine(void* arg) {
     co_enable_hook_sys();
 
     int fd = -1;
     Connection* c;
     MsgHead head;
     MsgBody body;
-    Codec::STATUS codec_ret;
-    statistics_data_t* stat;
+    Codec::STATUS ret;
+    statistics_user_data_t* stat;
 
     c = get_connect(g_server_host.c_str(), g_server_port);
     if (c == nullptr) {
@@ -253,37 +273,48 @@ static void* readwrite_routine(void* arg) {
         }
 
         fd = c->fd();
-        stat = (statistics_data_t*)c->privdata();
-        codec_ret = c->conn_read(head, body);
+        stat = (statistics_user_data_t*)c->privdata();
+        ret = c->conn_read(head, body);
 
-        while (codec_ret == Codec::STATUS::OK) {
+        while (ret == Codec::STATUS::OK) {
+            g_callback_cnt++;
             stat->callback_cnt++;
-            LOG_DEBUG("callback cnt: %d, fd: %d", stat->callback_cnt, c->fd());
+            LOG_DEBUG("fd: %d, callback cnt: %d.", c->fd(), stat->callback_cnt);
+
+            check_rsp(c, head, body) ? g_ok_callback_cnt++ : g_err_callback_cnt++;
+            show_statics_result();
+
             if (stat->callback_cnt == stat->packets) {
-                LOG_INFO("handle all packets! fd: %d", c->fd());
+                LOG_DEBUG("handle all packets! fd: %d", c->fd());
                 del_connect(c);
                 return 0;
             }
+
             head.Clear();
             body.Clear();
-            codec_ret = c->fetch_data(head, body);
-            LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)codec_ret);
+            ret = c->fetch_data(head, body);
+            LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)ret);
         }
 
-        if (codec_ret == Codec::STATUS::ERR ||
-            codec_ret == Codec::STATUS::CLOSED) {
-            LOG_ERROR("conn read failed. fd: %d", fd);
+        show_statics_result();
+
+        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
+            if (ret == Codec::STATUS::ERR) {
+                g_callback_cnt++;
+                g_err_callback_cnt++;
+                stat->callback_cnt++;
+                LOG_ERROR("conn read failed. fd: %d", fd);
+            }
+            del_connect(c);
             return 0;
         }
 
-        codec_ret = send_packets(c);
-        if (codec_ret == Codec::STATUS::ERR ||
-            codec_ret == Codec::STATUS::CLOSED) {
-            printf("55555\n");
+        ret = send_packets(c);
+        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
             del_connect(c);
             LOG_ERROR("conn read failed. fd: %d", fd);
             return 0;
-        } else if (codec_ret == Codec::STATUS::PAUSE) {
+        } else if (ret == Codec::STATUS::PAUSE) {
             co_sleep(1000, fd);
             continue;
         }
@@ -291,6 +322,18 @@ static void* readwrite_routine(void* arg) {
         co_sleep(1000, fd, POLLIN);
         continue;
     }
+
+    return 0;
+}
+
+void* co_handle_timer(void* arg) {
+    co_enable_hook_sys();
+
+    for (;;) {
+        co_sleep(5000);
+        show_statics_result(true);
+    }
+
     return 0;
 }
 
@@ -304,15 +347,20 @@ int main(int args, char** argv) {
     }
 
     LOG_INFO("start pressure, host: %s, port: %d, users: %d, packets: %d",
-             g_server_host.c_str(), g_server_port, g_test_users, g_test_packets);
+             g_server_host.c_str(), g_server_port, g_test_users, g_test_user_packets);
 
+    g_begin_time = time_now();
+
+    stCoRoutine_t* co;
     for (int i = 0; i < g_test_users; i++) {
-        stCoRoutine_t* co;
         co_create(&co, NULL, readwrite_routine, nullptr);
         co_resume(co);
     }
-    co_eventloop(co_get_epoll_ct(), 0, 0);
 
-    exit(0);
+    /* timer */
+    co_create(&co, NULL, co_handle_timer, nullptr);
+    co_resume(co);
+
+    co_eventloop(co_get_epoll_ct(), 0, 0);
     return 0;
 }

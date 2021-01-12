@@ -26,6 +26,8 @@ class Manager {
 
     std::string worker_name(int index);
 
+    static void* co_handle_timer(void* arg);
+
    private:
     Log* m_logger = nullptr;  /* logger. */
     Network* m_net = nullptr; /* net work. */

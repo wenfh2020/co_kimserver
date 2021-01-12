@@ -132,6 +132,43 @@ void* Network::co_handler_accept_gate_conn(void* d) {
     return net->handler_accept_gate_conn(d);
 }
 
+void Network::co_handle_timer() {
+    if (is_manager()) {
+        check_wait_send_fds();
+    }
+}
+
+void Network::check_wait_send_fds() {
+    int err;
+    int chanel_fd;
+    chanel_resend_data_t* data;
+
+    for (auto it = m_wait_send_fds.begin(); it != m_wait_send_fds.end();) {
+        data = *it;
+
+        chanel_fd = m_worker_data_mgr->get_next_worker_data_fd();
+        if (chanel_fd <= 0) {
+            LOG_ERROR("can not find next worker chanel!");
+            return;
+        }
+
+        err = write_channel(chanel_fd, &data->ch, sizeof(channel_t), m_logger);
+        if (err == 0 || (err != 0 && err != EAGAIN) ||
+            ((err == EAGAIN) && (++data->count >= 3))) {
+            if (err != 0) {
+                LOG_ERROR("resend chanel failed! fd: %d, errno: %d", data->ch.fd, err);
+            }
+            close_fd(data->ch.fd);
+            free(data);
+            m_wait_send_fds.erase(it++);
+            continue;
+        }
+
+        it++;
+        LOG_DEBUG("wait to write channel, errno: %d", err);
+    }
+}
+
 void* Network::handler_accept_gate_conn(void* d) {
     LOG_TRACE("handler_accept_gate_conn...");
 
@@ -171,7 +208,7 @@ void* Network::handler_accept_gate_conn(void* d) {
                 memset(ch_data, 0, sizeof(chanel_resend_data_t));
                 ch_data->ch = ch;
                 m_wait_send_fds.push_back(ch_data);
-                LOG_TRACE("wait to write channel, errno: %d", err);
+                LOG_INFO("wait to write channel, errno: %d", err);
                 continue;
             }
             LOG_ERROR("write channel failed! errno: %d", err);
@@ -238,7 +275,7 @@ void* Network::handler_requests(void* d) {
                 task->c = nullptr;
                 break;
             }
-            m_coroutines->co_sleep(1000, fd, POLLIN);
+            m_coroutines->co_sleep(100, fd, POLLIN);
         }
     }
 
@@ -310,7 +347,7 @@ bool Network::process_tcp_msg(Connection* c) {
         SAFE_DELETE(req);
         return false;
     } else if (codec_res == Codec::STATUS::PAUSE) {
-        m_coroutines->co_sleep(1000, fd, POLLOUT);
+        m_coroutines->co_sleep(100, fd, POLLOUT);
     }
 
     SAFE_DELETE(req);
@@ -626,7 +663,7 @@ void* Network::handler_read_transfer_fd(void* d) {
         if (err != 0) {
             if (err == EAGAIN) {
                 LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                m_coroutines->co_sleep(1000, data_fd, POLLIN);
+                m_coroutines->co_sleep(100, data_fd, POLLIN);
                 continue;
             } else {
                 destory();
@@ -647,8 +684,8 @@ void* Network::handler_read_transfer_fd(void* d) {
             c->set_system(true);
         }
 
-        LOG_TRACE("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
-                  ch.fd, ch.family, ch.codec, ch.is_system);
+        LOG_INFO("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
+                 ch.fd, ch.family, ch.codec, ch.is_system);
 
         co_task_t* co_task = m_coroutines->create_co_task(c, co_handler_requests);
         if (co_task == nullptr) {

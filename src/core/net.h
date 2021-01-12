@@ -19,6 +19,9 @@ class INet {
     virtual uint64_t new_seq() { return 0; }
     virtual CJsonObject& config() { return m_config; }
 
+    virtual bool is_worker() { return false; }
+    virtual bool is_manager() { return false; }
+
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return false; }
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) { return false; }
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") { return false; }

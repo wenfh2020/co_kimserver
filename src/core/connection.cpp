@@ -122,8 +122,10 @@ Codec::STATUS Connection::conn_write() {
         if (m_errno == EAGAIN) {
             return Codec::STATUS::PAUSE;
         } else {
-            LOG_ERROR("send data failed! fd: %d, seq: %llu, readable len: %d",
-                      fd(), id(), sbuf->readable_len());
+            LOG_ERROR(
+                "send data failed! error: %d, errstr: %s, "
+                " fd: %d, seq: %llu, readable len: %d",
+                m_errno, strerror(m_errno), fd(), id(), sbuf->readable_len());
             return Codec::STATUS::ERR;
         }
     }

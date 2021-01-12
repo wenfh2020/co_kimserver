@@ -47,6 +47,10 @@ class Network : public INet {
     virtual uint64_t now() override { return mstime(); }
     virtual uint64_t new_seq() override { return ++m_seq; }
 
+    /* node info. */
+    virtual bool is_worker() override { return m_type == TYPE::WORKER; }
+    virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
+
     /* events. */
     void run();
 
@@ -62,6 +66,8 @@ class Network : public INet {
     bool load_corotines();
     WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
 
+    void check_wait_send_fds();
+
     /* use in fork. */
     void close_fds();
     /* close connection by fd. */
@@ -76,6 +82,8 @@ class Network : public INet {
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
+
+    void co_handle_timer();
 
    private:
     /* socket. */

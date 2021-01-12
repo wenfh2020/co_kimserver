@@ -4,6 +4,13 @@
 
 namespace kim {
 
+Coroutines::Coroutines(Log* logger) {
+    stShareStack_t* share_stack;
+    share_stack = co_alloc_sharestack(128, 4 * 1024 * 1024);
+    m_co_attr.stack_size = 0;
+    m_co_attr.share_stack = share_stack;
+}
+
 Coroutines::~Coroutines() {
     clear_tasks();
 }
@@ -26,7 +33,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         task = (co_task_t*)calloc(1, sizeof(co_task_t));
         task->c = c;
         m_coroutines.insert(task);
-        co_create(&task->co, NULL, fn, (void*)task);
+        co_create(&task->co, nullptr, fn, (void*)task);
     } else {
         auto it = m_co_free.begin();
         task = *it;
@@ -36,6 +43,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         task->c = c;
         task->co->pfn = fn;
         m_co_free.erase(it);
+        LOG_INFO("use free co: %p", task->co);
     }
 
     return task;

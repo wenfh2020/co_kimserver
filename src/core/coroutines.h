@@ -6,7 +6,7 @@
 #include "server.h"
 #include "util/log.h"
 
-#define MAX_CO_CNT 100
+#define MAX_CO_CNT 100000
 
 namespace kim {
 
@@ -17,7 +17,7 @@ typedef struct co_task_s {
 
 class Coroutines {
    public:
-    Coroutines(Log* logger) {}
+    Coroutines(Log* logger);
     virtual ~Coroutines();
 
     void clear_tasks();
@@ -34,6 +34,7 @@ class Coroutines {
     std::set<co_task_t*> m_coroutines;
     std::set<co_task_t*> m_co_free;
     int m_max_co_cnt = MAX_CO_CNT;
+    stCoRoutineAttr_t m_co_attr;
 };
 
 }  // namespace kim

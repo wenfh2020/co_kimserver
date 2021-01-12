@@ -52,8 +52,32 @@ bool Manager::init(const char* conf_path) {
 
     create_workers();
     set_proc_title("%s", m_conf("server_name").c_str());
+
+    /* timer */
+    stCoRoutine_t* co;
+    co_create(&co, NULL, co_handle_timer, this);
+    co_resume(co);
+
     LOG_INFO("init manager done!");
     return true;
+}
+
+void* Manager::co_handle_timer(void* arg) {
+    co_enable_hook_sys();
+
+    Manager* m = (Manager*)arg;
+
+    for (;;) {
+        struct pollfd pf = {0};
+        pf.fd = -1;
+        poll(&pf, 1, 100);
+
+        if (m->m_net != nullptr) {
+            m->m_net->co_handle_timer();
+        }
+    }
+
+    return 0;
 }
 
 bool Manager::load_logger() {
