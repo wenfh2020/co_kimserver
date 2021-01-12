@@ -1,18 +1,15 @@
 #include "coroutines.h"
 
-#include "co_routine_inner.h"
-
 namespace kim {
 
-Coroutines::Coroutines(Log* logger) {
-    stShareStack_t* share_stack;
-    share_stack = co_alloc_sharestack(128, 4 * 1024 * 1024);
+Coroutines::Coroutines(Log* logger) : m_logger(logger) {
+    m_co_attr.share_stack = co_alloc_sharestack(64, 4 * 1024 * 1024);
     m_co_attr.stack_size = 0;
-    m_co_attr.share_stack = share_stack;
 }
 
 Coroutines::~Coroutines() {
     clear_tasks();
+    co_release_sharestack(m_co_attr.share_stack);
 }
 
 void Coroutines::clear_tasks() {
@@ -43,7 +40,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         task->c = c;
         task->co->pfn = fn;
         m_co_free.erase(it);
-        LOG_INFO("use free co: %p", task->co);
+        LOG_DEBUG("use free co: %p", task->co);
     }
 
     return task;

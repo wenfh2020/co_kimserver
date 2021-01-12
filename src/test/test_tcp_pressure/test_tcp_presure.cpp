@@ -87,6 +87,12 @@ Connection* get_connect(const char* host, int port) {
         return nullptr;
     }
 
+    if (anet_no_block(g_errstr, fd) != ANET_OK) {
+        LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, g_errstr);
+        close(fd);
+        return nullptr;
+    }
+
     c = new Connection(m_logger, fd, new_seq());
     if (c == nullptr) {
         close(fd);
