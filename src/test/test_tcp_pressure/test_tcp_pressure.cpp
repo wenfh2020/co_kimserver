@@ -321,11 +321,11 @@ void* readwrite_routine(void* arg) {
             LOG_ERROR("conn read failed. fd: %d", fd);
             return 0;
         } else if (ret == Codec::STATUS::PAUSE) {
-            co_sleep(1000, fd);
+            co_sleep(100, fd);
             continue;
         }
 
-        co_sleep(1000, fd, POLLIN);
+        co_sleep(100, fd, POLLIN);
         continue;
     }
 
