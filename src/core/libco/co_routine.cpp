@@ -258,6 +258,16 @@ stShareStack_t *co_alloc_sharestack(int count, int stack_size) {
     return share_stack;
 }
 
+void co_release_sharestack(stShareStack_t *mem) {
+    if (mem != nullptr) {
+        for (int i = 0; i < mem->count; i++) {
+            free(mem->stack_array[i]);
+        }
+        free(mem->stack_array);
+        free(mem);
+    }
+}
+
 static stStackMem_t *co_get_stackmem(stShareStack_t *share_stack) {
     if (!share_stack) {
         return NULL;
