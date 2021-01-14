@@ -4,7 +4,6 @@
 
 #define DEF_CONN_CNT 5
 #define MAX_CONN_CNT 30
-#define MYSQL_CONN_TIMEOUT_SECS 30000
 
 namespace kim {
 
@@ -19,7 +18,7 @@ void DBMgr::destory_db_infos() {
     for (auto& it : m_conns) {
         auto& list = it.second.second;
         for (auto& itr : list) {
-            mysql_close(itr);
+            SAFE_DELETE(itr);
         }
     }
     m_conns.clear();
@@ -81,10 +80,19 @@ int DBMgr::sql_write(const std::string& node, const std::string& sql) {
         return ERR_INVALID_PARAMS;
     }
 
-    MYSQL* c = sql_exec(node, sql);
+    int ret;
+    MysqlConn* c;
+
+    c = get_db_conn(node);
     if (c == nullptr) {
-        LOG_ERROR("query sql failed! node: %s, sql: %s", node.c_str(), sql.c_str());
-        return ERR_DB_EXEC_FAILED;
+        LOG_ERROR("get db conn failed, node: %s", node.c_str());
+        return ERR_DB_GET_CONNECTION;
+    }
+
+    ret = c->sql_write(sql);
+    if (ret != ERR_OK) {
+        LOG_ERROR("sql write failed! node: %s.", node.c_str());
+        return ret;
     }
 
     return ERR_OK;
@@ -96,55 +104,33 @@ int DBMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& 
         return ERR_INVALID_PARAMS;
     }
 
-    if (!check_query_sql(sql)) {
-        LOG_ERROR("invalid query sql: %s", sql.c_str());
-        return ERR_DB_INVALID_QUERY_SQL;
-    }
+    int ret;
+    MysqlConn* c;
 
-    MYSQL* c;
-    MYSQL_RES* res;
-    MysqlResult result;
-
-    c = sql_exec(node, sql);
+    c = get_db_conn(node);
     if (c == nullptr) {
-        LOG_ERROR("query sql failed! node: %s, sql: %s", node.c_str(), sql.c_str());
-        return ERR_DB_QUERY_FAILED;
+        LOG_ERROR("get db conn failed, node: %s", node.c_str());
+        return ERR_DB_GET_CONNECTION;
     }
 
-    res = mysql_store_result(c);
-    if (result.init(c, res)) {
-        result.result_data(rows);
+    ret = c->sql_read(sql, rows);
+    if (ret != ERR_OK) {
+        LOG_ERROR("sql read failed! node: %s.", node.c_str());
+        return ret;
     }
-    mysql_free_result(res);
 
     LOG_DEBUG("sql read done! node: %s, sql: %s", node.c_str(), sql.c_str());
     return ERR_OK;
 }
 
-bool DBMgr::check_query_sql(const std::string& sql) {
-    /* split the first world. */
-    std::stringstream ss(sql);
-    std::string oper;
-    ss >> oper;
-
-    /* find the select's word. */
-    const char* select[] = {"select", "show", "explain", "desc"};
-    for (int i = 0; i < 4; i++) {
-        if (!strcasecmp(oper.c_str(), select[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-MYSQL* DBMgr::get_db_conn(const std::string& node) {
+MysqlConn* DBMgr::get_db_conn(const std::string& node) {
     auto itr = m_dbs.find(node);
     if (itr == m_dbs.end()) {
         LOG_ERROR("invalid db node: %s!", node.c_str());
         return nullptr;
     }
 
-    MYSQL* c;
+    MysqlConn* c;
     db_info_t* db;
     std::string conn_id;
 
@@ -153,13 +139,12 @@ MYSQL* DBMgr::get_db_conn(const std::string& node) {
 
     auto it = m_conns.find(conn_id);
     if (it == m_conns.end()) {
-        c = db_connect(db);
-        if (c == nullptr) {
-            LOG_ERROR("db connect failed! %s:%d, error: %d, errstr: %s",
-                      db->host.c_str(), db->port, mysql_errno(c), mysql_error(c));
+        c = new MysqlConn(logger());
+        if (c == nullptr || c->connect(db) == nullptr) {
+            LOG_ERROR("db connect failed! host: %s, port: %d", db->host.c_str(), db->port);
             return nullptr;
         }
-        std::list<MYSQL*> conns({c});
+        std::list<MysqlConn*> conns({c});
         m_conns.insert({conn_id, {conns.begin(), conns}});
         MysqlConnPair& pair = m_conns.begin()->second;
         pair.first = pair.second.begin();
@@ -168,10 +153,9 @@ MYSQL* DBMgr::get_db_conn(const std::string& node) {
         auto& list = it->second.second;
         auto& list_itr = it->second.first;
         if ((int)list.size() < db->max_conn_cnt) {
-            c = db_connect(db);
-            if (c == nullptr) {
-                LOG_ERROR("db connect failed! %s:%d, error: %d, errstr: %s",
-                          db->host.c_str(), db->port, mysql_errno(c), mysql_error(c));
+            c = new MysqlConn(logger());
+            if (c == nullptr || c->connect(db) == nullptr) {
+                LOG_ERROR("db connect failed! host: %s, port: %d", db->host.c_str(), db->port);
                 return nullptr;
             }
             list.push_back(c);
@@ -186,18 +170,17 @@ MYSQL* DBMgr::get_db_conn(const std::string& node) {
     return c;
 }
 
-bool DBMgr::close_db_conn(MYSQL* c) {
+bool DBMgr::close_db_conn(MysqlConn* c) {
     if (c == nullptr) {
         return false;
     }
-
-    mysql_close(c);
 
     for (auto& it : m_conns) {
         auto& list = it.second.second;
         auto itr = list.begin();
         for (; itr != list.end(); itr++) {
             if (*itr == c) {
+                SAFE_DELETE(c);
                 list.erase(itr);
                 it.second.first = list.begin();
                 return true;
@@ -206,56 +189,6 @@ bool DBMgr::close_db_conn(MYSQL* c) {
     }
 
     return false;
-}
-
-MYSQL* DBMgr::sql_exec(const std::string& node, const std::string& sql) {
-    if (node.empty() || sql.empty()) {
-        return nullptr;
-    }
-
-    LOG_DEBUG("sql exec, node: %s, sql: %s", node.c_str(), sql.c_str());
-
-    MYSQL* c;
-    int ret, error;
-
-    c = get_db_conn(node);
-    if (c == nullptr) {
-        LOG_ERROR("get db conn failed! node: %s", node.c_str());
-        return nullptr;
-    }
-    
-    ret = mysql_real_query(c, sql.c_str(), sql.length());
-    if (ret != 0) {
-        error = mysql_errno(c);
-        if (error != CR_SERVER_LOST && error != CR_SERVER_GONE_ERROR) {
-            LOG_ERROR("db query failed! node: %s, error: %d, errstr: %s",
-                      node.c_str(), mysql_errno(c), mysql_error(c));
-            return nullptr;
-        }
-
-        if (!close_db_conn(c)) {
-            LOG_ERROR("close db connection failed! node: %s", node.c_str());
-            return nullptr;
-        }
-
-        /* reconnect. */
-        // ret = mysql_ping(c);
-        c = get_db_conn(node);
-        if (c == nullptr) {
-            LOG_ERROR("db reconnect failed! node: %s, error: %d, errstr: %s",
-                      node.c_str(), mysql_errno(c), mysql_error(c));
-            return nullptr;
-        }
-
-        ret = mysql_real_query(c, sql.c_str(), sql.length());
-        if (ret != 0) {
-            LOG_ERROR("db query failed! node: %s, error: %d, errstr: %s",
-                      node.c_str(), mysql_errno(c), mysql_error(c));
-            return nullptr;
-        }
-    }
-
-    return c;
 }
 
 }  // namespace kim

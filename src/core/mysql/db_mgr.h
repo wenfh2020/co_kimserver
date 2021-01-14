@@ -1,8 +1,8 @@
 #ifndef __KIM_DB_MGR_H__
 #define __KIM_DB_MGR_H__
 
-#include "server.h"
 #include "mysql_conn.h"
+#include "server.h"
 
 namespace kim {
 
@@ -19,10 +19,8 @@ class DBMgr : Logger {
 
    private:
     void destory_db_infos();
-    MYSQL* get_db_conn(const std::string& node);
-    bool close_db_conn(MYSQL* c);
-    bool check_query_sql(const std::string& sql);
-    MYSQL* sql_exec(const std::string& node, const std::string& sql);
+    MysqlConn* get_db_conn(const std::string& node);
+    bool close_db_conn(MysqlConn* c);
 
    private:
     typedef std::pair<std::list<MysqlConn*>::iterator, std::list<MysqlConn*>> MysqlConnPair;

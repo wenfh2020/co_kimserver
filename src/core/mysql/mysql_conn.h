@@ -14,22 +14,24 @@ typedef struct db_info_s {
 } db_info_t;
 
 class MysqlConn : Logger {
-public:
+   public:
     MysqlConn(Log* logger);
     virtual ~MysqlConn();
 
-    /* write. */
     int sql_write(const std::string& sql);
-    /* read. */
     int sql_read(const std::string& sql, vec_row_t& rows);
 
     MYSQL* connect(db_info_t* db);
     MYSQL* get_conn() { return m_conn; }
 
-private:
+   private:
+    int sql_exec(const std::string& sql);
+    bool check_query_sql(const std::string& sql);
+
+   private:
     MYSQL* m_conn = nullptr;
 };
 
-}
+}  // namespace kim
 
-#endif //__KIM_MYSQL_CONN_H__
+#endif  //__KIM_MYSQL_CONN_H__
