@@ -10,6 +10,8 @@
 
 namespace kim {
 
+class DBMgr;
+
 class INet {
    public:
     INet() {}
@@ -18,6 +20,7 @@ class INet {
     virtual uint64_t now() { return mstime(); }
     virtual uint64_t new_seq() { return 0; }
     virtual CJsonObject& config() { return m_config; }
+    virtual DBMgr* db_mgr() { return nullptr; }
 
     virtual bool is_worker() { return false; }
     virtual bool is_manager() { return false; }

@@ -5,14 +5,13 @@
 #include "connection.h"
 #include "coroutines.h"
 #include "module_mgr.h"
+#include "mysql/db_mgr.h"
 #include "net.h"
 #include "net/anet.h"
 #include "net/chanel.h"
 #include "nodes.h"
 #include "protobuf/sys/nodes.pb.h"
 #include "protobuf/sys/payload.pb.h"
-#include "util/log.h"
-#include "util/util.h"
 #include "worker_data_mgr.h"
 
 namespace kim {
@@ -50,6 +49,8 @@ class Network : public INet {
     /* node info. */
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
+
+    virtual DBMgr* db_mgr() override { return m_db_mgr; }
 
     /* events. */
     void run();
@@ -137,7 +138,8 @@ class Network : public INet {
 
     Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
-    Payload m_payload;                 /* payload data. */
+    DBMgr* m_db_mgr = nullptr;
+    Payload m_payload; /* payload data. */
 };
 
 }  // namespace kim

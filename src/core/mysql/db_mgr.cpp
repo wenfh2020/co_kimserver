@@ -34,6 +34,10 @@ bool DBMgr::init(CJsonObject& config) {
     std::vector<std::string> vec;
     config.GetKeys(vec);
 
+    /*
+        bin/config.json
+        {"database":{"test":{"host":"127.0.0.1","port":3306,"user":"root","password":"123456","charset":"utf8mb4","max_conn_cnt":3}}}
+    */
     for (const auto& it : vec) {
         const CJsonObject& obj = config[it];
         db_info_t* db = new db_info_t;
@@ -206,7 +210,7 @@ MYSQL* DBMgr::get_db_conn(const std::string& node) {
         m_conns.insert({conn_id, {conns.begin(), conns}});
         MysqlConnPair& pair = m_conns.begin()->second;
         pair.first = pair.second.begin();
-        return nullptr;
+        return c;
     } else {
         auto& list = it->second.second;
         auto& list_itr = it->second.first;
