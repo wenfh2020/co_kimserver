@@ -95,11 +95,10 @@ bool Network::set_gate_codec(const std::string& codec_type) {
 
 int Network::listen_to_port(const char* host, int port) {
     int fd = -1;
-    char errstr[256];
 
-    fd = anet_tcp_server(errstr, host, port, TCP_BACK_LOG);
+    fd = anet_tcp_server(m_errstr, host, port, TCP_BACK_LOG);
     if (fd == -1) {
-        LOG_ERROR("bind tcp ipv4 failed! %s", errstr);
+        LOG_ERROR("bind tcp ipv4 failed! %s", m_errstr);
         return -1;
     }
 
@@ -124,14 +123,6 @@ void Network::close_fd(int fd) {
 void* Network::co_handler_accept_nodes_conn(void*) {
     co_enable_hook_sys();
     return 0;
-}
-
-void* Network::co_handler_accept_gate_conn(void* d) {
-    co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Connection* c = task->c;
-    Network* net = (Network*)c->privdata();
-    return net->handler_accept_gate_conn(d);
 }
 
 void Network::co_handle_timer() {
@@ -171,9 +162,15 @@ void Network::check_wait_send_fds() {
     }
 }
 
-void* Network::handler_accept_gate_conn(void* d) {
-    LOG_TRACE("handler_accept_gate_conn...");
+void* Network::co_handler_accept_gate_conn(void* d) {
+    co_enable_hook_sys();
+    co_task_t* task = (co_task_t*)d;
+    Connection* c = task->c;
+    Network* net = (Network*)c->privdata();
+    return net->handler_accept_gate_conn(d);
+}
 
+void* Network::handler_accept_gate_conn(void* d) {
     channel_t ch;
     chanel_resend_data_t* ch_data;
     char ip[NET_IP_STR_LEN] = {0};
@@ -198,29 +195,27 @@ void* Network::handler_accept_gate_conn(void* d) {
             continue;
         }
 
-        LOG_TRACE("send client fd: %d to worker through chanel fd %d", fd, chanel_fd);
+        LOG_DEBUG("send client fd: %d to worker through chanel fd %d", fd, chanel_fd);
 
-        /* parent send to child. */
+        /* parent process transfers fd to child. */
         ch = {fd, family, static_cast<int>(m_gate_codec), 0};
         err = write_channel(chanel_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
             if (err == EAGAIN) {
                 /* re send again in timer. */
-                ch_data = (chanel_resend_data_t*)malloc(sizeof(chanel_resend_data_t));
-                memset(ch_data, 0, sizeof(chanel_resend_data_t));
+                ch_data = (chanel_resend_data_t*)calloc(1, sizeof(chanel_resend_data_t));
                 ch_data->ch = ch;
                 m_wait_send_fds.push_back(ch_data);
-                LOG_INFO("wait to write channel, errno: %d", err);
+                LOG_DEBUG("wait to write channel, errno: %d", err);
+                m_coroutines->co_sleep(100, m_gate_host_fd);
                 continue;
             }
             LOG_ERROR("write channel failed! errno: %d", err);
         }
-
         close_fd(fd);
         continue;
     }
 
-    LOG_WARN("exit gate accept coroutine!");
     return 0;
 }
 

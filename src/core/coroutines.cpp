@@ -43,6 +43,9 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         if (task->c != nullptr) {
             LOG_WARN("pls ensure connection: %p\n", c);
         }
+        if (task->co->cEnd) {
+            co_reset(task->co);
+        }
         task->c = c;
         task->co->pfn = fn;
         m_co_free.erase(it);

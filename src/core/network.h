@@ -83,6 +83,7 @@ class Network : public INet {
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
 
+    /* call by manager/worker 10 times/s on Linux. */
     void co_handle_timer();
 
    private:

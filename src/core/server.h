@@ -14,6 +14,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "util/json/CJsonObject.hpp"
+#include "util/log.h"
+#include "util/util.h"
+
 namespace kim {
 
 // exit code.
