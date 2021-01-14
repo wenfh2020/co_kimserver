@@ -4,7 +4,7 @@
 
 #define DEF_CONN_CNT 5
 #define MAX_CONN_CNT 30
-#define MYSQL_CONN_TIMEOUT_SECS 15
+#define MYSQL_CONN_TIMEOUT_SECS 30000
 
 namespace kim {
 
@@ -81,17 +81,8 @@ int DBMgr::sql_write(const std::string& node, const std::string& sql) {
         return ERR_INVALID_PARAMS;
     }
 
-    bool ret;
-    MYSQL* c;
-
-    c = get_db_conn(node);
+    MYSQL* c = sql_exec(node, sql);
     if (c == nullptr) {
-        LOG_ERROR("get db conn failed! node: %s", node.c_str());
-        return ERR_DB_GET_CONNECTION;
-    }
-
-    ret = sql_exec(c, node, sql);
-    if (!ret) {
         LOG_ERROR("query sql failed! node: %s, sql: %s", node.c_str(), sql.c_str());
         return ERR_DB_EXEC_FAILED;
     }
@@ -110,19 +101,12 @@ int DBMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& 
         return ERR_DB_INVALID_QUERY_SQL;
     }
 
-    bool ret;
     MYSQL* c;
     MYSQL_RES* res;
     MysqlResult result;
 
-    c = get_db_conn(node);
+    c = sql_exec(node, sql);
     if (c == nullptr) {
-        LOG_ERROR("get db conn failed! node: %s", node.c_str());
-        return ERR_DB_GET_CONNECTION;
-    }
-
-    ret = sql_exec(c, node, sql);
-    if (!ret) {
         LOG_ERROR("query sql failed! node: %s, sql: %s", node.c_str(), sql.c_str());
         return ERR_DB_QUERY_FAILED;
     }
@@ -151,37 +135,6 @@ bool DBMgr::check_query_sql(const std::string& sql) {
         }
     }
     return false;
-}
-
-MYSQL* DBMgr::db_connect(db_info_t* db) {
-    MYSQL* c;
-    char is_reconnect = 1;
-    unsigned int timeout = MYSQL_CONN_TIMEOUT_SECS;
-
-    c = mysql_init(NULL);
-    if (c == nullptr) {
-        LOG_ERROR("mysql init failed!");
-        return nullptr;
-    }
-
-    mysql_options(c, MYSQL_OPT_COMPRESS, NULL);
-    mysql_options(c, MYSQL_OPT_LOCAL_INFILE, NULL);
-    mysql_options(c, MYSQL_OPT_CONNECT_TIMEOUT, reinterpret_cast<char*>(&timeout));
-    if (!mysql_real_connect(c, db->host.c_str(), db->user.c_str(),
-                            db->password.c_str(), "mysql", db->port, NULL, 0)) {
-        LOG_ERROR("db connect failed! %s:%d, error: %d, errstr: %s",
-                  db->host.c_str(), db->port, mysql_errno(c), mysql_error(c));
-        return nullptr;
-    }
-
-    /* https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html */
-    /* https://dev.mysql.com/doc/c-api/8.0/en/c-api-auto-reconnect.html */
-    mysql_options(c, MYSQL_OPT_RECONNECT, &is_reconnect);
-    mysql_set_character_set(c, db->charset.c_str());
-
-    LOG_INFO("mysql connect done! host:%s, port: %d, db name: %s",
-             db->host.c_str(), db->port, db->db_name.c_str());
-    return c;
 }
 
 MYSQL* DBMgr::get_db_conn(const std::string& node) {
@@ -233,38 +186,76 @@ MYSQL* DBMgr::get_db_conn(const std::string& node) {
     return c;
 }
 
-bool DBMgr::sql_exec(MYSQL* c, const std::string& node, const std::string& sql) {
-    if (c == nullptr || node.empty() || sql.empty()) {
+bool DBMgr::close_db_conn(MYSQL* c) {
+    if (c == nullptr) {
         return false;
+    }
+
+    mysql_close(c);
+
+    for (auto& it : m_conns) {
+        auto& list = it.second.second;
+        auto itr = list.begin();
+        for (; itr != list.end(); itr++) {
+            if (*itr == c) {
+                list.erase(itr);
+                it.second.first = list.begin();
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+MYSQL* DBMgr::sql_exec(const std::string& node, const std::string& sql) {
+    if (node.empty() || sql.empty()) {
+        return nullptr;
     }
 
     LOG_DEBUG("sql exec, node: %s, sql: %s", node.c_str(), sql.c_str());
 
-    int ret = mysql_real_query(c, sql.c_str(), sql.length());
+    MYSQL* c;
+    int ret, error;
+
+    c = get_db_conn(node);
+    if (c == nullptr) {
+        LOG_ERROR("get db conn failed! node: %s", node.c_str());
+        return nullptr;
+    }
+    
+    ret = mysql_real_query(c, sql.c_str(), sql.length());
     if (ret != 0) {
-        if (ret != CR_SERVER_LOST && ret != CR_SERVER_GONE_ERROR) {
+        error = mysql_errno(c);
+        if (error != CR_SERVER_LOST && error != CR_SERVER_GONE_ERROR) {
             LOG_ERROR("db query failed! node: %s, error: %d, errstr: %s",
                       node.c_str(), mysql_errno(c), mysql_error(c));
-            return false;
+            return nullptr;
+        }
+
+        if (!close_db_conn(c)) {
+            LOG_ERROR("close db connection failed! node: %s", node.c_str());
+            return nullptr;
         }
 
         /* reconnect. */
-        ret = mysql_ping(c);
-        if (ret != 0) {
+        // ret = mysql_ping(c);
+        c = get_db_conn(node);
+        if (c == nullptr) {
             LOG_ERROR("db reconnect failed! node: %s, error: %d, errstr: %s",
                       node.c_str(), mysql_errno(c), mysql_error(c));
-            return false;
+            return nullptr;
         }
 
         ret = mysql_real_query(c, sql.c_str(), sql.length());
         if (ret != 0) {
             LOG_ERROR("db query failed! node: %s, error: %d, errstr: %s",
                       node.c_str(), mysql_errno(c), mysql_error(c));
-            return false;
+            return nullptr;
         }
     }
 
-    return true;
+    return c;
 }
 
 }  // namespace kim

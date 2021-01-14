@@ -14,6 +14,8 @@ Log* m_logger = nullptr;
 DBMgr* g_db_mgr = nullptr;
 CJsonObject g_config;
 
+char sql[1024];
+
 typedef struct co_task_s {
     int id;
     stCoRoutine_t* co;
@@ -83,7 +85,6 @@ void* co_handler_mysql(void* arg) {
     int i, ret;
     vec_row_t rows;
     co_task_t* task;
-    char sql[1024];
     double begin, spend;
 
     task = (co_task_t*)arg;
@@ -138,10 +139,16 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    stCoRoutineAttr_t attr;
+    attr.share_stack = co_alloc_sharestack(16, 1024 * 1024 * 1024);
+    attr.stack_size = 0;
+
     for (i = 0; i < g_co_cnt; i++) {
         task = (co_task_t*)calloc(1, sizeof(co_task_t));
+        task->id = i;
+        task->co = nullptr;
         g_coroutines.push_back(task);
-        co_create(&(task->co), NULL, co_handler_mysql, task);
+        co_create(&task->co, &attr, co_handler_mysql, task);
         co_resume(task->co);
     }
 
