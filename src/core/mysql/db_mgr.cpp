@@ -12,17 +12,19 @@ DBMgr::DBMgr(Log* logger) : Logger(logger) {
 
 DBMgr::~DBMgr() {
     destory_db_infos();
+    co_cond_free(m_sql_task_cond);
+    co_cond_free(m_sql_task_wait_resume_cond);
+    for (auto& it : m_sql_tasks) {
+        std::queue<sql_task_t*>& que = it.second;
+        while (!que.empty()) {
+            SAFE_DELETE(que.front());
+            que.pop();
+        }
+    }
+    m_sql_tasks.clear();
 }
 
 void DBMgr::destory_db_infos() {
-    for (auto& it : m_conns) {
-        auto& list = it.second.second;
-        for (auto& itr : list) {
-            SAFE_DELETE(itr);
-        }
-    }
-    m_conns.clear();
-
     for (auto& it : m_dbs) {
         SAFE_DELETE(it.second);
     }
@@ -48,6 +50,7 @@ bool DBMgr::init(CJsonObject& config) {
         db->user = obj("user");
         db->port = str_to_int(obj("port"));
         db->max_conn_cnt = str_to_int(obj("max_conn_cnt"));
+        db->node = it;
 
         if (db->max_conn_cnt == 0) {
             db->max_conn_cnt = DEF_CONN_CNT;
@@ -71,7 +74,134 @@ bool DBMgr::init(CJsonObject& config) {
         m_dbs.insert({it, db});
     }
 
+    stCoRoutineAttr_t attr;
+    attr.share_stack = co_alloc_sharestack(16, 16 * 1024 * 1024);
+    attr.stack_size = 0;
+
+    m_sql_task_cond = co_cond_alloc();
+    m_sql_task_wait_resume_cond = co_cond_alloc();
+
+    for (auto& it : m_dbs) {
+        for (int i = 0; i < it.second->max_conn_cnt; i++) {
+            db_co_task_t* task = new db_co_task_t;
+            task->db = it.second;
+            task->privdata = this;
+            task->c = nullptr;
+            co_create(&(task->co), &attr, co_handler_sql, task);
+            co_resume(task->co);
+
+            co_resume_data_t* data = new co_resume_data_t;
+            data->privdata = this;
+            co_create(&data->co, &attr, co_handler_resume, data);
+            co_resume(data->co);
+            SAFE_DELETE(data);
+        }
+    }
+
     return true;
+}
+
+void* DBMgr::co_handler_sql(void* arg) {
+    co_enable_hook_sys();
+    db_co_task_t* task = (db_co_task_t*)arg;
+    DBMgr* d = (DBMgr*)task->privdata;
+    return d->handler_sql(arg);
+}
+
+void* DBMgr::handler_sql(void* arg) {
+    int hanle_cnt = 0;
+    db_co_task_t* co_task;
+    sql_task_t* sql_task;
+
+    co_task = (db_co_task_t*)arg;
+
+    if (co_task->c == nullptr) {
+        co_task->c = new MysqlConn(logger());
+        if (co_task->c->connect(co_task->db) == nullptr) {
+            SAFE_DELETE(co_task->c);
+            LOG_ERROR("db connect failed! host: %s, port: %d",
+                      co_task->db->host.c_str(), co_task->db->port);
+            return 0;
+        }
+    }
+
+    for (;;) {
+        auto it = m_sql_tasks.find(co_task->db->node);
+        if ((it == m_sql_tasks.end() || it->second.empty()) || hanle_cnt >= 300) {
+            if (hanle_cnt > 0) {
+                hanle_cnt = 0;
+                co_cond_signal(m_sql_task_wait_resume_cond);
+                if (it != m_sql_tasks.end() && !it->second.empty()) {
+                    continue;
+                }
+            }
+            co_cond_timedwait(m_sql_task_cond, -1);
+            continue;
+        }
+
+        sql_task = it->second.front();
+        it->second.pop();
+
+        if (sql_task->is_read) {
+            sql_task->ret = co_task->c->sql_read(sql_task->sql, *sql_task->query_res_rows);
+        } else {
+            sql_task->ret = co_task->c->sql_write(sql_task->sql);
+        }
+
+        hanle_cnt++;
+        m_wait_resume_tasks.push(sql_task);
+    }
+
+    return 0;
+}
+
+void* DBMgr::co_handler_resume(void* arg) {
+    co_enable_hook_sys();
+    co_resume_data_t* data = (co_resume_data_t*)arg;
+    DBMgr* d = (DBMgr*)data->privdata;
+    return d->handler_resume(arg);
+}
+
+void* DBMgr::handler_resume(void* arg) {
+    sql_task_t* sql_task;
+
+    for (;;) {
+        if (m_wait_resume_tasks.empty()) {
+            co_cond_timedwait(m_sql_task_wait_resume_cond, -1);
+            continue;
+        }
+        sql_task = m_wait_resume_tasks.front();
+        m_wait_resume_tasks.pop();
+        co_resume(sql_task->co);
+    }
+
+    return 0;
+}
+
+int DBMgr::send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
+    int ret;
+    sql_task_t* task = new sql_task_t;
+
+    task->co = GetCurrThreadCo();
+    task->is_read = is_read;
+    task->sql = sql;
+    task->query_res_rows = rows;
+
+    auto it = m_sql_tasks.find(node);
+    if (it == m_sql_tasks.end()) {
+        std::queue<sql_task_t*> q;
+        q.push(task);
+        m_sql_tasks[node] = q;
+    } else {
+        it->second.push(task);
+    }
+
+    co_cond_signal(m_sql_task_cond);
+    co_yield_ct();
+
+    ret = task->ret;
+    SAFE_DELETE(task);
+    return ret;
 }
 
 int DBMgr::sql_write(const std::string& node, const std::string& sql) {
@@ -80,22 +210,7 @@ int DBMgr::sql_write(const std::string& node, const std::string& sql) {
         return ERR_INVALID_PARAMS;
     }
 
-    int ret;
-    MysqlConn* c;
-
-    c = get_db_conn(node);
-    if (c == nullptr) {
-        LOG_ERROR("get db conn failed, node: %s", node.c_str());
-        return ERR_DB_GET_CONNECTION;
-    }
-
-    ret = c->sql_write(sql);
-    if (ret != ERR_OK) {
-        LOG_ERROR("sql write failed! node: %s.", node.c_str());
-        return ret;
-    }
-
-    return ERR_OK;
+    return send_sql_task(node, sql, false);
 }
 
 int DBMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& rows) {
@@ -104,91 +219,7 @@ int DBMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& 
         return ERR_INVALID_PARAMS;
     }
 
-    int ret;
-    MysqlConn* c;
-
-    c = get_db_conn(node);
-    if (c == nullptr) {
-        LOG_ERROR("get db conn failed, node: %s", node.c_str());
-        return ERR_DB_GET_CONNECTION;
-    }
-
-    ret = c->sql_read(sql, rows);
-    if (ret != ERR_OK) {
-        LOG_ERROR("sql read failed! node: %s.", node.c_str());
-        return ret;
-    }
-
-    LOG_DEBUG("sql read done! node: %s, sql: %s", node.c_str(), sql.c_str());
-    return ERR_OK;
-}
-
-MysqlConn* DBMgr::get_db_conn(const std::string& node) {
-    auto itr = m_dbs.find(node);
-    if (itr == m_dbs.end()) {
-        LOG_ERROR("invalid db node: %s!", node.c_str());
-        return nullptr;
-    }
-
-    MysqlConn* c;
-    db_info_t* db;
-    std::string conn_id;
-
-    db = itr->second;
-    conn_id = format_str("%s:%d:%s", db->host.c_str(), db->port, db->db_name.c_str());
-
-    auto it = m_conns.find(conn_id);
-    if (it == m_conns.end()) {
-        c = new MysqlConn(logger());
-        if (c == nullptr || c->connect(db) == nullptr) {
-            LOG_ERROR("db connect failed! host: %s, port: %d", db->host.c_str(), db->port);
-            return nullptr;
-        }
-        std::list<MysqlConn*> conns({c});
-        m_conns.insert({conn_id, {conns.begin(), conns}});
-        MysqlConnPair& pair = m_conns.begin()->second;
-        pair.first = pair.second.begin();
-        return c;
-    } else {
-        auto& list = it->second.second;
-        auto& list_itr = it->second.first;
-        if ((int)list.size() < db->max_conn_cnt) {
-            c = new MysqlConn(logger());
-            if (c == nullptr || c->connect(db) == nullptr) {
-                LOG_ERROR("db connect failed! host: %s, port: %d", db->host.c_str(), db->port);
-                return nullptr;
-            }
-            list.push_back(c);
-        } else {
-            if (++list_itr == list.end()) {
-                list_itr = list.begin();
-            }
-            c = *list_itr;
-        }
-    }
-
-    return c;
-}
-
-bool DBMgr::close_db_conn(MysqlConn* c) {
-    if (c == nullptr) {
-        return false;
-    }
-
-    for (auto& it : m_conns) {
-        auto& list = it.second.second;
-        auto itr = list.begin();
-        for (; itr != list.end(); itr++) {
-            if (*itr == c) {
-                SAFE_DELETE(c);
-                list.erase(itr);
-                it.second.first = list.begin();
-                return true;
-            }
-        }
-    }
-
-    return false;
+    return send_sql_task(node, sql, true, &rows);
 }
 
 }  // namespace kim

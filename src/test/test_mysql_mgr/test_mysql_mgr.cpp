@@ -13,15 +13,16 @@ double g_begin_time = 0.0;
 Log* m_logger = nullptr;
 DBMgr* g_db_mgr = nullptr;
 CJsonObject g_config;
+bool g_end = false;
 
 char sql[1024];
 
 typedef struct co_task_s {
     int id;
     stCoRoutine_t* co;
-} co_task_t;
+} test_co_task_t;
 
-std::list<co_task_t*> g_coroutines;
+std::list<test_co_task_t*> g_coroutines;
 
 #define LOG_PATH "test.log"
 #define CONFIG_PATH "../../../bin/config.json"
@@ -83,19 +84,19 @@ void* co_handler_mysql(void* arg) {
     co_enable_hook_sys();
 
     int i, ret;
-    vec_row_t rows;
-    co_task_t* task;
+    vec_row_t* rows = new vec_row_t;
+    test_co_task_t* task;
     double begin, spend;
 
-    task = (co_task_t*)arg;
+    task = (test_co_task_t*)arg;
     begin = time_now();
 
     for (i = 0; i < g_co_query_cnt; i++) {
         g_cur_test_cnt++;
         if (g_is_read) {
             snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = 1;");
-            ret = g_db_mgr->sql_read("test", sql, rows);
-            // show_mysql_res(rows);
+            ret = g_db_mgr->sql_read("test", sql, *rows);
+            show_mysql_res(*rows);
         } else {
             snprintf(sql, sizeof(sql),
                      "insert into mytest.test_async_mysql (value) values ('%s %d');", "hello world", i);
@@ -107,11 +108,12 @@ void* co_handler_mysql(void* arg) {
         }
     }
 
-    spend = time_now() - begin;
-    printf("id: %d, test cnt: %d, cur spend time: %lf\n",
-           task->id, g_co_query_cnt, spend);
+    // spend = time_now() - begin;
+    // printf("id: %d, test cnt: %d, cur spend time: %lf\n",
+    //        task->id, g_co_query_cnt, spend);
 
-    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt) {
+    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_end) {
+        g_end = true;
         spend = time_now() - g_begin_time;
         printf("total cnt: %d, total time: %lf, avg: %lf\n",
                g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
@@ -127,7 +129,7 @@ int main(int argc, char** argv) {
     }
 
     int i;
-    co_task_t* task;
+    test_co_task_t* task;
 
     g_is_read = !strcasecmp(argv[1], "r");
     g_co_cnt = atoi(argv[2]);
@@ -140,11 +142,11 @@ int main(int argc, char** argv) {
     }
 
     stCoRoutineAttr_t attr;
-    attr.share_stack = co_alloc_sharestack(16, 1024 * 1024 * 1024);
+    attr.share_stack = co_alloc_sharestack(16, 16 * 1024 * 1024);
     attr.stack_size = 0;
 
     for (i = 0; i < g_co_cnt; i++) {
-        task = (co_task_t*)calloc(1, sizeof(co_task_t));
+        task = (test_co_task_t*)calloc(1, sizeof(test_co_task_t));
         task->id = i;
         task->co = nullptr;
         g_coroutines.push_back(task);

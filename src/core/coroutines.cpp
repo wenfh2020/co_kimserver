@@ -36,7 +36,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         task = (co_task_t*)calloc(1, sizeof(co_task_t));
         task->c = c;
         m_coroutines.insert(task);
-        co_create(&task->co, nullptr, fn, (void*)task);
+        co_create(&task->co, &m_co_attr, fn, (void*)task);
     } else {
         auto it = m_co_free.begin();
         task = *it;
