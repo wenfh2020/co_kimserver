@@ -1029,7 +1029,9 @@ stCoCond_t *co_cond_alloc() {
 }
 
 int co_cond_free(stCoCond_t *cc) {
-    free(cc);
+    if (cc != NULL) {
+        free(cc);
+    }
     return 0;
 }
 
