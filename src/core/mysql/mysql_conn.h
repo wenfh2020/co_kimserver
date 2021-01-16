@@ -10,7 +10,7 @@ namespace kim {
 typedef struct db_info_s {
     int port = 0;
     int max_conn_cnt = 0;
-    std::string host, db_name, password, charset, user;
+    std::string host, db_name, password, charset, user, node;
 } db_info_t;
 
 class MysqlConn : Logger {

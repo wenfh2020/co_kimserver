@@ -1,3 +1,4 @@
+#include <mysql/errmsg.h>
 #include <mysql/mysql.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,6 +80,11 @@ void* co_handler_mysql_query(void* arg) {
     /* connect mysql */
     if (task->mysql == nullptr) {
         task->mysql = mysql_init(NULL);
+        char is_reconnect = 1;
+        unsigned int timeout = 30;
+        mysql_options(task->mysql, MYSQL_OPT_RECONNECT, &is_reconnect);
+        mysql_options(task->mysql, MYSQL_OPT_CONNECT_TIMEOUT, reinterpret_cast<char*>(&timeout));
+
         if (!mysql_real_connect(
                 task->mysql,
                 db->host.c_str(),
@@ -94,29 +100,39 @@ void* co_handler_mysql_query(void* arg) {
 
     begin = time_now();
 
-    for (i = 0; i < g_co_query_cnt; i++) {
+    // for (i = 0; i < g_co_query_cnt; i++) {
+    for (;;) {
         g_cur_test_cnt++;
         /* select mysql. */
         query = "select * from mytest.test_async_mysql where id = 1;";
         if (mysql_real_query(task->mysql, query, strlen(query))) {
+            /* mysql_real_query will reconnect if MYSQL_OPT_RECONNECT set. */
             show_mysql_error(task->mysql);
-            return nullptr;
+            struct pollfd pf = {0};
+            pf.fd = -1;
+            poll(&pf, 1, 1000);
+            continue;
         }
 
         res = mysql_store_result(task->mysql);
-        // show_mysql_query_data(task->mysql, res);
+        show_mysql_query_data(task->mysql, res);
         mysql_free_result(res);
+
+        struct pollfd pf = {0};
+        pf.fd = -1;
+        poll(&pf, 1, 40000);
+        continue;
     }
 
-    spend = time_now() - begin;
-    printf("id: %d, test cnt: %d, cur spend time: %lf\n",
-           task->id, g_co_query_cnt, spend);
+    // spend = time_now() - begin;
+    // printf("id: %d, test cnt: %d, cur spend time: %lf\n",
+    //        task->id, g_co_query_cnt, spend);
 
-    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt) {
-        spend = time_now() - g_begin_time;
-        printf("total cnt: %d, total time: %lf, avg: %lf\n",
-               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
-    }
+    // if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt) {
+    //     spend = time_now() - g_begin_time;
+    //     printf("total cnt: %d, total time: %lf, avg: %lf\n",
+    //            g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+    // }
 
     /* close mysql. */
     mysql_close(task->mysql);
@@ -141,7 +157,7 @@ int main(int argc, char** argv) {
     g_co_cnt = atoi(argv[1]);
     g_co_query_cnt = atoi(argv[2]);
     g_begin_time = time_now();
-    db = new db_t{"127.0.0.1", 3306, "topnews", "topnews2016", "utf8mb4"};
+    db = new db_t{"127.0.0.1", 3306, "root", "root123!@#", "utf8mb4"};
 
     for (i = 0; i < g_co_cnt; i++) {
         task = new task_t{i, db, nullptr, nullptr};

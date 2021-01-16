@@ -1,8 +1,9 @@
 #ifndef __KIM_MYSQL_RESULT_H__
 #define __KIM_MYSQL_RESULT_H__
 
-#include <mysql/mysql.h>
 #include <mysql/errmsg.h>
+#include <mysql/mysql.h>
+
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -13,7 +14,7 @@ typedef std::unordered_map<std::string, std::string> map_row_t;
 typedef std::vector<map_row_t> vec_row_t;
 
 class MysqlResult {
-public:
+   public:
     MysqlResult() {}
     MysqlResult(MYSQL* mysql, MYSQL_RES* res);
     MysqlResult(const MysqlResult&) = delete;
@@ -41,7 +42,7 @@ public:
         return m_errstr;
     }
 
-private:
+   private:
     int m_error = -1;
     std::string m_errstr;
 
