@@ -86,7 +86,7 @@ void* co_handler_mysql(void* arg) {
     int i, ret;
     vec_row_t* rows = new vec_row_t;
     test_co_task_t* task;
-    // double begin, spend;
+    double begin, spend;
 
     task = (test_co_task_t*)arg;
     // begin = time_now();
@@ -115,13 +115,14 @@ void* co_handler_mysql(void* arg) {
     //        task->id, g_co_query_cnt, spend);
     if (ret != 0) {
         printf("test failed!\n");
-    } else {
-        if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_end) {
-            g_end = true;
-            spend = time_now() - g_begin_time;
-            printf("total cnt: %d, total time: %lf, avg: %lf\n",
-                   g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
-        }
+        return 0;
+    }
+
+    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_end) {
+        g_end = true;
+        spend = time_now() - g_begin_time;
+        printf("total cnt: %d, total time: %lf, avg: %lf\n",
+               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
     }
 
     return 0;
@@ -146,16 +147,12 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    stCoRoutineAttr_t attr;
-    attr.share_stack = co_alloc_sharestack(16, 16 * 1024 * 1024);
-    attr.stack_size = 0;
-
     for (i = 0; i < g_co_cnt; i++) {
         task = (test_co_task_t*)calloc(1, sizeof(test_co_task_t));
         task->id = i;
         task->co = nullptr;
         g_coroutines.push_back(task);
-        co_create(&task->co, &attr, co_handler_mysql, task);
+        co_create(&task->co, nullptr, co_handler_mysql, task);
         co_resume(task->co);
     }
 
