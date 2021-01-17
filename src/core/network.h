@@ -5,7 +5,7 @@
 #include "connection.h"
 #include "coroutines.h"
 #include "module_mgr.h"
-#include "mysql/db_mgr.h"
+#include "mysql/mysql_mgr.h"
 #include "net.h"
 #include "net/anet.h"
 #include "net/chanel.h"
@@ -50,7 +50,7 @@ class Network : public INet {
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
 
-    virtual DBMgr* db_mgr() override { return m_db_mgr; }
+    virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
 
     /* events. */
     void run();
@@ -138,7 +138,7 @@ class Network : public INet {
 
     Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
-    DBMgr* m_db_mgr = nullptr;
+    MysqlMgr* m_mysql_mgr = nullptr;
     Payload m_payload; /* payload data. */
 };
 

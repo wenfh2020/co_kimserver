@@ -1,4 +1,4 @@
-#include "db_mgr.h"
+#include "mysql_mgr.h"
 
 #include "error.h"
 
@@ -7,14 +7,14 @@
 
 namespace kim {
 
-DBMgr::DBMgr(Log* logger) : Logger(logger) {
+MysqlMgr::MysqlMgr(Log* logger) : Logger(logger) {
 }
 
-DBMgr::~DBMgr() {
+MysqlMgr::~MysqlMgr() {
     destory();
 }
 
-void DBMgr::destory() {
+void MysqlMgr::destory() {
     for (auto& it : m_dbs) {
         SAFE_DELETE(it.second);
     }
@@ -30,17 +30,15 @@ void DBMgr::destory() {
     m_sql_tasks.clear();
 
     co_cond_free(m_sql_task_cond);
-    co_cond_free(m_sql_task_wait_resume_cond);
     for (const auto& co : m_coroutines) {
         co_release(co);
     }
     m_coroutines.clear();
 }
 
-bool DBMgr::init(CJsonObject& config) {
+bool MysqlMgr::init(CJsonObject& config) {
     db_info_t* db;
     db_co_task_t* task;
-    stCoRoutineAttr_t attr;
     std::vector<std::string> vec;
 
     config.GetKeys(vec);
@@ -49,6 +47,10 @@ bool DBMgr::init(CJsonObject& config) {
         bin/config.json
         {"database":{"test":{"host":"127.0.0.1","port":3306,"user":"root","password":"123456","charset":"utf8mb4","max_conn_cnt":3}}}
     */
+    if (vec.size() == 0) {
+        LOG_ERROR("database info is empty.");
+        return false;
+    }
 
     for (const auto& it : vec) {
         const CJsonObject& obj = config[it];
@@ -85,11 +87,7 @@ bool DBMgr::init(CJsonObject& config) {
         m_dbs.insert({it, db});
     }
 
-    attr.stack_size = 0;
-    attr.share_stack = co_alloc_sharestack(8, 16 * 1024 * 1024);
-
     m_sql_task_cond = co_cond_alloc();
-    m_sql_task_wait_resume_cond = co_cond_alloc();
 
     for (auto& it : m_dbs) {
         for (int i = 0; i < it.second->max_conn_cnt; i++) {
@@ -98,28 +96,23 @@ bool DBMgr::init(CJsonObject& config) {
             task->privdata = this;
             task->c = nullptr;
 
-            co_create(&(task->co), &attr, co_handler_sql, task);
+            co_create(&(task->co), nullptr, co_handler_sql, task);
             co_resume(task->co);
             m_coroutines.insert(task->co);
-
-            stCoRoutine_t* co;
-            co_create(&co, &attr, co_handler_resume, this);
-            co_resume(co);
-            m_coroutines.insert(co);
         }
     }
 
     return true;
 }
 
-void* DBMgr::co_handler_sql(void* arg) {
+void* MysqlMgr::co_handler_sql(void* arg) {
     co_enable_hook_sys();
     db_co_task_t* task = (db_co_task_t*)arg;
-    DBMgr* d = (DBMgr*)task->privdata;
+    MysqlMgr* d = (MysqlMgr*)task->privdata;
     return d->handler_sql(arg);
 }
 
-void* DBMgr::handler_sql(void* arg) {
+void* MysqlMgr::handler_sql(void* arg) {
     sql_task_t* sql_task;
     db_co_task_t* co_task;
 
@@ -140,7 +133,7 @@ void* DBMgr::handler_sql(void* arg) {
 
     for (;;) {
         auto it = m_sql_tasks.find(co_task->db->node);
-        if ((it == m_sql_tasks.end() || it->second.empty())) {
+        if (it == m_sql_tasks.end() || it->second.empty()) {
             co_cond_timedwait(m_sql_task_cond, -1);
             continue;
         }
@@ -154,36 +147,13 @@ void* DBMgr::handler_sql(void* arg) {
             sql_task->ret = co_task->c->sql_write(sql_task->sql);
         }
 
-        m_wait_resume_tasks.push(sql_task);
-        co_cond_signal(m_sql_task_wait_resume_cond);
-    }
-
-    return 0;
-}
-
-void* DBMgr::co_handler_resume(void* arg) {
-    co_enable_hook_sys();
-    DBMgr* d = (DBMgr*)arg;
-    return d->handler_resume(arg);
-}
-
-void* DBMgr::handler_resume(void* arg) {
-    sql_task_t* sql_task;
-
-    for (;;) {
-        if (m_wait_resume_tasks.empty()) {
-            co_cond_timedwait(m_sql_task_wait_resume_cond, -1);
-            continue;
-        }
-        sql_task = m_wait_resume_tasks.front();
-        m_wait_resume_tasks.pop();
         co_resume(sql_task->co);
     }
 
     return 0;
 }
 
-int DBMgr::send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
+int MysqlMgr::send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
     int ret;
     sql_task_t* task;
 
@@ -210,7 +180,7 @@ int DBMgr::send_sql_task(const std::string& node, const std::string& sql, bool i
     return ret;
 }
 
-int DBMgr::sql_write(const std::string& node, const std::string& sql) {
+int MysqlMgr::sql_write(const std::string& node, const std::string& sql) {
     if (node.empty() || sql.empty()) {
         LOG_ERROR("invalid db exec params!");
         return ERR_INVALID_PARAMS;
@@ -219,7 +189,7 @@ int DBMgr::sql_write(const std::string& node, const std::string& sql) {
     return send_sql_task(node, sql, false);
 }
 
-int DBMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& rows) {
+int MysqlMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& rows) {
     if (node.empty() || sql.empty()) {
         LOG_ERROR("invalid db query params!");
         return ERR_INVALID_PARAMS;

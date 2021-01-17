@@ -1,5 +1,5 @@
 #include "./libco/co_routine.h"
-#include "mysql/db_mgr.h"
+#include "mysql/mysql_mgr.h"
 #include "server.h"
 
 using namespace kim;
@@ -11,7 +11,7 @@ bool g_is_read = false;
 double g_begin_time = 0.0;
 
 Log* m_logger = nullptr;
-DBMgr* g_db_mgr = nullptr;
+MysqlMgr* g_mysql_mgr = nullptr;
 CJsonObject g_config;
 bool g_end = false;
 
@@ -39,9 +39,9 @@ bool load_logger(const char* path) {
     return true;
 }
 
-bool load_db_mgr(Log* logger, CJsonObject& config) {
-    g_db_mgr = new DBMgr(logger);
-    if (!g_db_mgr->init(config)) {
+bool load_mysql_mgr(Log* logger, CJsonObject& config) {
+    g_mysql_mgr = new MysqlMgr(logger);
+    if (!g_mysql_mgr->init(config)) {
         LOG_ERROR("load db mgr failed!");
     }
     return true;
@@ -57,7 +57,7 @@ bool load_config(const std::string& path) {
 
 bool load_common() {
     if (!load_logger(LOG_PATH) || !load_config(CONFIG_PATH) ||
-        !load_db_mgr(m_logger, g_config["database"])) {
+        !load_mysql_mgr(m_logger, g_config["database"])) {
         return false;
     }
     return true;
@@ -65,7 +65,7 @@ bool load_common() {
 
 void destory() {
     SAFE_FREE(m_logger);
-    SAFE_FREE(g_db_mgr);
+    SAFE_FREE(g_mysql_mgr);
     for (auto& it : g_coroutines) {
         free(it);
     }
@@ -86,20 +86,20 @@ void* co_handler_mysql(void* arg) {
     int i, ret;
     vec_row_t* rows = new vec_row_t;
     test_co_task_t* task;
-    double begin, spend;
+    // double begin, spend;
 
     task = (test_co_task_t*)arg;
-    begin = time_now();
+    // begin = time_now();
 
     for (i = 0; i < g_co_query_cnt; i++) {
         if (g_is_read) {
             snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = 1;");
-            ret = g_db_mgr->sql_read("test", sql, *rows);
+            ret = g_mysql_mgr->sql_read("test", sql, *rows);
             show_mysql_res(*rows);
         } else {
             snprintf(sql, sizeof(sql),
                      "insert into mytest.test_async_mysql (value) values ('%s %d');", "hello world", i);
-            ret = g_db_mgr->sql_write("test", sql);
+            ret = g_mysql_mgr->sql_write("test", sql);
         }
 
         g_cur_test_cnt++;
