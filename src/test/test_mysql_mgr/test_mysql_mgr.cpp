@@ -92,7 +92,6 @@ void* co_handler_mysql(void* arg) {
     begin = time_now();
 
     for (i = 0; i < g_co_query_cnt; i++) {
-        g_cur_test_cnt++;
         if (g_is_read) {
             snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = 1;");
             ret = g_db_mgr->sql_read("test", sql, *rows);
@@ -102,21 +101,27 @@ void* co_handler_mysql(void* arg) {
                      "insert into mytest.test_async_mysql (value) values ('%s %d');", "hello world", i);
             ret = g_db_mgr->sql_write("test", sql);
         }
+
+        g_cur_test_cnt++;
+
         if (ret != 0) {
             LOG_ERROR("sql read failed! node: %s, sql: %s", "test", sql);
-            return 0;
+            break;
         }
     }
 
     // spend = time_now() - begin;
     // printf("id: %d, test cnt: %d, cur spend time: %lf\n",
     //        task->id, g_co_query_cnt, spend);
-
-    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_end) {
-        g_end = true;
-        spend = time_now() - g_begin_time;
-        printf("total cnt: %d, total time: %lf, avg: %lf\n",
-               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+    if (ret != 0) {
+        printf("test failed!\n");
+    } else {
+        if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_end) {
+            g_end = true;
+            spend = time_now() - g_begin_time;
+            printf("total cnt: %d, total time: %lf, avg: %lf\n",
+                   g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+        }
     }
 
     return 0;

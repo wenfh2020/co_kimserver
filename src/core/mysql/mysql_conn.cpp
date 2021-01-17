@@ -10,7 +10,7 @@ MysqlConn::MysqlConn(Log* logger) : Logger(logger) {
 MysqlConn::~MysqlConn() {
 }
 
-MYSQL* MysqlConn::connect(db_info_t* db) {
+bool MysqlConn::connect(db_info_t* db) {
     if (m_conn != nullptr) {
         mysql_close(m_conn);
     }
@@ -20,7 +20,7 @@ MYSQL* MysqlConn::connect(db_info_t* db) {
     m_conn = mysql_init(m_conn);
     if (m_conn == nullptr) {
         LOG_ERROR("mysql init failed!");
-        return nullptr;
+        return false;
     }
 
     /* https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html */
@@ -34,12 +34,12 @@ MYSQL* MysqlConn::connect(db_info_t* db) {
                             db->password.c_str(), "mysql", db->port, NULL, 0)) {
         LOG_ERROR("db connect failed! %s:%d, error: %d, errstr: %s",
                   db->host.c_str(), db->port, mysql_errno(m_conn), mysql_error(m_conn));
-        return nullptr;
+        return false;
     }
 
     LOG_INFO("mysql connect done! host:%s, port: %d, db name: %s",
              db->host.c_str(), db->port, db->db_name.c_str());
-    return m_conn;
+    return true;
 }
 
 int MysqlConn::sql_write(const std::string& sql) {
@@ -78,6 +78,7 @@ int MysqlConn::sql_read(const std::string& sql, vec_row_t& rows) {
         return ERR_DB_QUERY_FAILED;
     }
 
+    /* pls malloc/new obj: rows, for safe coroutine's stack! */
     res = mysql_store_result(m_conn);
     if (result.init(m_conn, res)) {
         result.result_data(rows);
@@ -89,32 +90,21 @@ int MysqlConn::sql_read(const std::string& sql, vec_row_t& rows) {
 
 int MysqlConn::sql_exec(const std::string& sql) {
     if (sql.empty()) {
-        return -1;
+        LOG_ERROR("sql is empty.");
+        return ERR_INVALID_PARAMS;
     }
 
+    int ret;
     LOG_DEBUG("sql exec, sql: %s.", sql.c_str());
-
-    int ret = 0, error = 0;
 
     ret = mysql_real_query(m_conn, sql.c_str(), sql.length());
     if (ret != 0) {
-        error = mysql_errno(m_conn);
-        if (error != CR_SERVER_LOST && error != CR_SERVER_GONE_ERROR) {
-            LOG_ERROR("db query failed! error: %d, errstr: %s",
-                      mysql_errno(m_conn), mysql_error(m_conn));
-            return error;
-        }
-
-        ret = mysql_real_query(m_conn, sql.c_str(), sql.length());
-        if (ret != 0) {
-            error = mysql_errno(m_conn);
-            LOG_ERROR("db query failed! error: %d, errstr: %s",
-                      mysql_errno(m_conn), mysql_error(m_conn));
-            return error;
-        }
+        ret = mysql_errno(m_conn);
+        LOG_ERROR("db query failed! error: %d, errstr: %s",
+                  mysql_errno(m_conn), mysql_error(m_conn));
     }
 
-    return error;
+    return ret;
 }
 
 bool MysqlConn::check_query_sql(const std::string& sql) {

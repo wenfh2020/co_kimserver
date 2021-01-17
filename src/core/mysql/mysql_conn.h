@@ -21,7 +21,7 @@ class MysqlConn : Logger {
     int sql_write(const std::string& sql);
     int sql_read(const std::string& sql, vec_row_t& rows);
 
-    MYSQL* connect(db_info_t* db);
+    bool connect(db_info_t* db);
     MYSQL* get_conn() { return m_conn; }
 
    private:

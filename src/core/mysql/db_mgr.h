@@ -24,11 +24,6 @@ typedef struct db_co_task_s {
     void* privdata;
 } db_co_task_t;
 
-typedef struct co_resume_data_s {
-    stCoRoutine_t* co;
-    void* privdata;
-} co_resume_data_t;
-
 class DBMgr : Logger {
    public:
     DBMgr(Log* logger);
@@ -41,7 +36,7 @@ class DBMgr : Logger {
     int sql_read(const std::string& node, const std::string& sql, vec_row_t& rows);
 
    private:
-    void destory_db_infos();
+    void destory();
 
     static void* co_handler_sql(void* arg);
     void* handler_sql(void* arg);
@@ -52,9 +47,11 @@ class DBMgr : Logger {
     int send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);
 
    private:
-    std::unordered_map<std::string, db_info_t*> m_dbs;
+    std::set<stCoRoutine_t*> m_coroutines;
     stCoCond_t* m_sql_task_cond = nullptr;
     stCoCond_t* m_sql_task_wait_resume_cond = nullptr;
+
+    std::unordered_map<std::string, db_info_t*> m_dbs;
     std::unordered_map<std::string, std::queue<sql_task_t*>> m_sql_tasks;
     std::queue<sql_task_t*> m_wait_resume_tasks;
 };
