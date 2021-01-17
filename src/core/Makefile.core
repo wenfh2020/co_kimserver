@@ -1,5 +1,5 @@
 CC = gcc
-CXX = g++
+CXX = $(shell command -v ccache >/dev/null 2>&1 && echo "ccache g++" || echo "g++")
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
 CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
 
@@ -20,7 +20,6 @@ CPP_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cpp))
 CC_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cc))
 C_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.c))
 OBJS = $(patsubst %.cpp,%.o,$(CPP_SRCS)) $(patsubst %.c,%.o,$(C_SRCS)) $(patsubst %.cc,%.o,$(CC_SRCS))
-
 
 SERVER_NAME = co_kimserver
 

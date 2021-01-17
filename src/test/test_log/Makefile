@@ -1,5 +1,5 @@
 CC = gcc
-CXX = g++
+CXX = $(shell command -v ccache >/dev/null 2>&1 && echo "ccache g++" || echo "g++")
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
 CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
 CURRENT_DIR = $(notdir $(shell pwd))
