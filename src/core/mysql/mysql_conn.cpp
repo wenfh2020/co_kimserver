@@ -94,10 +94,9 @@ int MysqlConn::sql_exec(const std::string& sql) {
         return ERR_INVALID_PARAMS;
     }
 
-    int ret;
     LOG_DEBUG("sql exec, sql: %s.", sql.c_str());
 
-    ret = mysql_real_query(m_conn, sql.c_str(), sql.length());
+    int ret = mysql_real_query(m_conn, sql.c_str(), sql.length());
     if (ret != 0) {
         ret = mysql_errno(m_conn);
         LOG_ERROR("db query failed! error: %d, errstr: %s",

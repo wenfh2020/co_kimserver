@@ -4,7 +4,6 @@
 
 #define DEF_CONN_CNT 5
 #define MAX_CONN_CNT 30
-#define MAX_HANDLE_MYSQL_TASKS 300
 
 namespace kim {
 
@@ -176,7 +175,6 @@ void* DBMgr::handler_resume(void* arg) {
             co_cond_timedwait(m_sql_task_wait_resume_cond, -1);
             continue;
         }
-        // printf("3-----\n");
         sql_task = m_wait_resume_tasks.front();
         m_wait_resume_tasks.pop();
         co_resume(sql_task->co);
@@ -187,8 +185,9 @@ void* DBMgr::handler_resume(void* arg) {
 
 int DBMgr::send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
     int ret;
-    sql_task_t* task = new sql_task_t;
+    sql_task_t* task;
 
+    task = new sql_task_t;
     task->co = GetCurrThreadCo();
     task->is_read = is_read;
     task->sql = sql;
