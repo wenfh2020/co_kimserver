@@ -36,6 +36,7 @@ void* co_handler2(void* arg) {
         }
         co_sleep(-1, 1000);
     }
+    return 0;
 }
 
 int main() {

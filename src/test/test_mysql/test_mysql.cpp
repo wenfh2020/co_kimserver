@@ -13,6 +13,7 @@ int g_co_cnt = 0;
 int g_co_query_cnt = 0;
 int g_cur_test_cnt = 0;
 double g_begin_time = 0.0;
+bool g_is_end = false;
 
 typedef struct db_s {
     std::string host;
@@ -67,13 +68,12 @@ int show_mysql_query_data(MYSQL* mysql, MYSQL_RES* res) {
 void* co_handler_mysql_query(void* arg) {
     co_enable_hook_sys();
 
-    // int i;
+    int i;
     db_t* db;
     task_t* task;
     MYSQL_RES* res;
-    const char* query;
-    double begin;
-    // double spend;
+    const char* sql;
+    double begin, spend;
 
     task = (task_t*)arg;
     db = task->db;
@@ -101,12 +101,9 @@ void* co_handler_mysql_query(void* arg) {
 
     begin = time_now();
 
-    // for (i = 0; i < g_co_query_cnt; i++) {
-    for (;;) {
-        g_cur_test_cnt++;
-        /* select mysql. */
-        query = "select * from mytest.test_async_mysql where id = 1;";
-        if (mysql_real_query(task->mysql, query, strlen(query))) {
+    for (i = 0; i < g_co_query_cnt; i++) {
+        sql = "select * from mytest.test_async_mysql where id = 1;";
+        if (mysql_real_query(task->mysql, sql, strlen(sql))) {
             /* mysql_real_query will reconnect if MYSQL_OPT_RECONNECT set. */
             show_mysql_error(task->mysql);
             struct pollfd pf = {0};
@@ -115,25 +112,23 @@ void* co_handler_mysql_query(void* arg) {
             continue;
         }
 
-        res = mysql_store_result(task->mysql);
-        show_mysql_query_data(task->mysql, res);
-        mysql_free_result(res);
+        g_cur_test_cnt++;
 
-        struct pollfd pf = {0};
-        pf.fd = -1;
-        poll(&pf, 1, 40000);
+        res = mysql_store_result(task->mysql);
+        // show_mysql_query_data(task->mysql, res);
+        mysql_free_result(res);
         continue;
     }
 
-    // spend = time_now() - begin;
-    // printf("id: %d, test cnt: %d, cur spend time: %lf\n",
-    //        task->id, g_co_query_cnt, spend);
+    spend = time_now() - begin;
+    printf("id: %d, test cnt: %d, cur spend time: %lf\n",
+           task->id, g_co_query_cnt, spend);
 
-    // if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt) {
-    //     spend = time_now() - g_begin_time;
-    //     printf("total cnt: %d, total time: %lf, avg: %lf\n",
-    //            g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
-    // }
+    if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt) {
+        spend = time_now() - g_begin_time;
+        printf("total cnt: %d, total time: %lf, avg: %lf\n",
+               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+    }
 
     /* close mysql. */
     mysql_close(task->mysql);
@@ -148,7 +143,7 @@ void* test_co(void* arg) {
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        printf("pls: ./test_libco [co_cnt] [co_query_cnt]\n");
+        printf("pls: ./test_mysql [co_cnt] [co_query_cnt]\n");
         return -1;
     }
 

@@ -40,7 +40,7 @@ PRINT:
 	@echo "-------$(PROC_NAME)-------"
 
 $(PROC_NAME): $(OBJS) $(CORE_OBJS)
-	$(SERVER_LD) -o $@ $^
+	$(SERVER_LD) -o $@ $^ $(LDFLAGS)
 
 %.o:%.c
 	$(SERVER_CC) -c -o $@ $<
@@ -65,5 +65,5 @@ QUIET_CPP = @printf '    %b %b\n' $(CCCOLOR)CXX$(ENDCOLOR) $(SRCCOLOR)$@$(ENDCOL
 QUIET_LINK = @printf '    %b %b\n' $(LINKCOLOR)LINK$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR) 1>&2;
 
 SERVER_CC = $(QUIET_CC) $(CC) $(CFLAGS) $(INC)
-SERVER_LD = $(QUIET_LINK) $(CXX) $(CXXFLAG) $(INC) $(LDFLAGS)
+SERVER_LD = $(QUIET_LINK) $(CXX) $(CXXFLAG) $(INC)
 SERVER_CPP = $(QUIET_CPP) $(CXX) $(CXXFLAG) $(INC)
