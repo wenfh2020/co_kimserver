@@ -15,8 +15,6 @@ MysqlMgr* g_mysql_mgr = nullptr;
 CJsonObject g_config;
 bool g_end = false;
 
-char sql[1024];
-
 typedef struct co_task_s {
     int id;
     stCoRoutine_t* co;
@@ -86,12 +84,14 @@ void* co_handler_mysql(void* arg) {
     int i, ret;
     vec_row_t* rows = new vec_row_t;
     test_co_task_t* task;
-    double begin, spend;
+    // double begin;
+    double spend;
 
     task = (test_co_task_t*)arg;
     // begin = time_now();
 
     for (i = 0; i < g_co_query_cnt; i++) {
+        char sql[1024];
         if (g_is_read) {
             snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = 1;");
             ret = g_mysql_mgr->sql_read("test", sql, *rows);
@@ -127,6 +127,8 @@ void* co_handler_mysql(void* arg) {
 
     return 0;
 }
+
+/* ./test_mysql_mgr.cpp r 1 1 */
 
 int main(int argc, char** argv) {
     if (argc < 4) {

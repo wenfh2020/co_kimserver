@@ -67,12 +67,13 @@ int show_mysql_query_data(MYSQL* mysql, MYSQL_RES* res) {
 void* co_handler_mysql_query(void* arg) {
     co_enable_hook_sys();
 
-    int i;
+    // int i;
     db_t* db;
     task_t* task;
     MYSQL_RES* res;
     const char* query;
-    double begin, spend;
+    double begin;
+    // double spend;
 
     task = (task_t*)arg;
     db = task->db;
@@ -142,6 +143,7 @@ void* co_handler_mysql_query(void* arg) {
 
 void* test_co(void* arg) {
     printf("hello world\n");
+    return 0;
 }
 
 int main(int argc, char** argv) {
