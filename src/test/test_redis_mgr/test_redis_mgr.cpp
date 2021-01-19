@@ -1,5 +1,93 @@
-#include <iostream>
+#include "../common/common.h"
 
-int main() {
+int g_co_cnt = 0;
+int g_co_cmd_cnt = 0;
+int g_cur_test_cnt = 0;
+double g_begin_time = 0.0;
+
+bool g_is_end = false;
+bool g_is_read = false;
+
+bool load_common() {
+    if (!load_logger(LOG_PATH) ||
+        !load_config(CONFIG_PATH) ||
+        !load_redis_mgr(m_logger, g_config["redis"])) {
+        return false;
+    }
+    // m_logger->set_level(Log::LL_DEBUG);
+    m_logger->set_level(Log::LL_INFO);
+    return true;
+}
+
+void show_result(redisReply* r) {
+    if (r->type == REDIS_REPLY_ERROR) {
+        printf("reply error, type: %d, str: %s\n", r->type, r->str);
+        return;
+    }
+    printf("reply data, type: %d, str: %s\n", r->type, r->str);
+}
+
+void* co_handler(void* arg) {
+    co_enable_hook_sys();
+
+    int i;
+    double spend;
+    char cmd[256];
+    redisReply* reply;
+    const char* node = "test";
+    const char* key = "key111";
+    const char* val = "value111";
+
+    for (i = 0; i < g_co_cmd_cnt; i++) {
+        if (g_is_read) {
+            snprintf(cmd, sizeof(cmd), "get %s", key);
+        } else {
+            snprintf(cmd, sizeof(cmd), "set %s %s:%d", key, val, i);
+        }
+
+        reply = g_redis_mgr->exec_cmd(node, cmd);
+        g_cur_test_cnt++;
+        if (reply == nullptr) {
+            printf("redis oper failed! node: %s, cmd: %s\n", node, cmd);
+            break;
+        }
+        // show_result(reply);
+        freeReplyObject(reply);
+    }
+
+    if (!g_is_end && g_cur_test_cnt == g_co_cnt * g_co_cmd_cnt) {
+        g_is_end = true;
+        spend = time_now() - g_begin_time;
+        printf("total cnt: %d, total time: %lf, avg: %lf\n",
+               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+    }
+
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    if (argc < 4) {
+        /* ./test_redis_mgr r 1 1 */
+        printf("pls: ./test_redis_mgr [read/write] [co_cnt] [co_cmd_cnt]\n");
+        return -1;
+    }
+
+    g_is_read = !strcasecmp(argv[1], "r");
+    g_co_cnt = atoi(argv[2]);
+    g_co_cmd_cnt = atoi(argv[3]);
+    g_begin_time = time_now();
+
+    if (!load_common()) {
+        std::cerr << "load common fail!" << std::endl;
+        return -1;
+    }
+
+    for (int i = 0; i < g_co_cnt; i++) {
+        stCoRoutine_t* co;
+        co_create(&co, nullptr, co_handler, nullptr);
+        co_resume(co);
+    }
+
+    co_eventloop(co_get_epoll_ct(), 0, 0);
     return 0;
 }

@@ -12,9 +12,10 @@ INC := $(INC) \
         -I ./libco
 
 LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
-        -L ./libco/lib \
-        -L /usr/local/lib \
-        -lcolib -lmysqlclient -lpthread -ldl -lcryptopp -lprotobuf
+		-L ./libco/lib \
+		-L /usr/local/lib \
+        -lcolib -lpthread -ldl \
+		-lmysqlclient -lcryptopp -lprotobuf -lhiredis
 
 CPP_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cpp))
 CC_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cc))

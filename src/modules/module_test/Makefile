@@ -15,7 +15,7 @@ INC := $(INC) \
 LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
         -L $(CORE_PATH)/libco/lib \
         -L /usr/local/lib \
-        -lcolib -lmysqlclient -lpthread -ldl -lcryptopp -lprotobuf
+        -lcolib -lmysqlclient -lpthread -ldl -lcryptopp -lprotobuf -lhiredis
 
 # so objs.
 SO_PATH = .
