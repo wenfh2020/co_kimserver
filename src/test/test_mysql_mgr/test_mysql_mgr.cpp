@@ -8,9 +8,6 @@ double g_begin_time = 0.0;
 bool g_is_end = false;
 bool g_is_read = false;
 
-#define LOG_PATH "test.log"
-#define CONFIG_PATH "../../../bin/config.json"
-
 typedef struct co_task_s {
     int id;
     stCoRoutine_t* co;

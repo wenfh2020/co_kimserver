@@ -29,7 +29,7 @@ void MysqlMgr::destory() {
     }
     m_sql_tasks.clear();
 
-    co_cond_free(m_sql_task_cond);
+    co_cond_free(m_task_cond);
     for (const auto& co : m_coroutines) {
         co_release(co);
     }
@@ -38,7 +38,7 @@ void MysqlMgr::destory() {
 
 bool MysqlMgr::init(CJsonObject& config) {
     db_info_t* db;
-    db_co_task_t* task;
+    db_co_t* db_co;
     std::vector<std::string> vec;
 
     config.GetKeys(vec);
@@ -87,43 +87,43 @@ bool MysqlMgr::init(CJsonObject& config) {
         m_dbs.insert({it, db});
     }
 
-    m_sql_task_cond = co_cond_alloc();
+    m_task_cond = co_cond_alloc();
 
     for (auto& it : m_dbs) {
         for (int i = 0; i < it.second->max_conn_cnt; i++) {
-            task = new db_co_task_t;
-            task->db = it.second;
-            task->privdata = this;
-            task->c = nullptr;
+            db_co = new db_co_t;
+            db_co->db = it.second;
+            db_co->privdata = this;
+            db_co->c = nullptr;
 
-            co_create(&(task->co), nullptr, co_handler_sql, task);
-            co_resume(task->co);
-            m_coroutines.insert(task->co);
+            co_create(&(db_co->co), nullptr, co_handle_task, db_co);
+            co_resume(db_co->co);
+            m_coroutines.insert(db_co->co);
         }
     }
 
     return true;
 }
 
-void* MysqlMgr::co_handler_sql(void* arg) {
+void* MysqlMgr::co_handle_task(void* arg) {
     co_enable_hook_sys();
-    db_co_task_t* task = (db_co_task_t*)arg;
-    MysqlMgr* d = (MysqlMgr*)task->privdata;
-    return d->handler_sql(arg);
+    db_co_t* db_co = (db_co_t*)arg;
+    MysqlMgr* d = (MysqlMgr*)db_co->privdata;
+    return d->handle_task(arg);
 }
 
-void* MysqlMgr::handler_sql(void* arg) {
+void* MysqlMgr::handle_task(void* arg) {
+    db_co_t* db_co;
     sql_task_t* sql_task;
-    db_co_task_t* co_task;
 
-    co_task = (db_co_task_t*)arg;
+    db_co = (db_co_t*)arg;
 
-    if (co_task->c == nullptr) {
-        co_task->c = new MysqlConn(logger());
-        while (!co_task->c->connect(co_task->db)) {
+    if (db_co->c == nullptr) {
+        db_co->c = new MysqlConn(logger());
+        while (!db_co->c->connect(db_co->db)) {
             LOG_ERROR("db connect failed! node: %s, host: %s, port: %d",
-                      co_task->db->node.c_str(), co_task->db->host.c_str(),
-                      co_task->db->port);
+                      db_co->db->node.c_str(), db_co->db->host.c_str(),
+                      db_co->db->port);
             struct pollfd pf = {0};
             pf.fd = -1;
             poll(&pf, 1, 1000);
@@ -132,9 +132,9 @@ void* MysqlMgr::handler_sql(void* arg) {
     }
 
     for (;;) {
-        auto it = m_sql_tasks.find(co_task->db->node);
+        auto it = m_sql_tasks.find(db_co->db->node);
         if (it == m_sql_tasks.end() || it->second.empty()) {
-            co_cond_timedwait(m_sql_task_cond, -1);
+            co_cond_timedwait(m_task_cond, -1);
             continue;
         }
 
@@ -142,9 +142,9 @@ void* MysqlMgr::handler_sql(void* arg) {
         it->second.pop();
 
         if (sql_task->is_read) {
-            sql_task->ret = co_task->c->sql_read(sql_task->sql, *sql_task->query_res_rows);
+            sql_task->err = db_co->c->sql_read(sql_task->sql, *sql_task->query_res_rows);
         } else {
-            sql_task->ret = co_task->c->sql_write(sql_task->sql);
+            sql_task->err = db_co->c->sql_write(sql_task->sql);
         }
 
         co_resume(sql_task->co);
@@ -153,8 +153,14 @@ void* MysqlMgr::handler_sql(void* arg) {
     return 0;
 }
 
-int MysqlMgr::send_sql_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
-    int ret;
+int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
+    auto it_node = m_dbs.find(node);
+    if (it_node == m_dbs.end()) {
+        LOG_ERROR("can not find node: %s.", node.c_str());
+        return ERR_DB_CAT_NOT_FIND_NODE;
+    }
+
+    int err;
     sql_task_t* task;
 
     task = new sql_task_t;
@@ -172,12 +178,12 @@ int MysqlMgr::send_sql_task(const std::string& node, const std::string& sql, boo
         it->second.push(task);
     }
 
-    co_cond_signal(m_sql_task_cond);
+    co_cond_signal(m_task_cond);
     co_yield_ct();
 
-    ret = task->ret;
+    err = task->err;
     SAFE_DELETE(task);
-    return ret;
+    return err;
 }
 
 int MysqlMgr::sql_write(const std::string& node, const std::string& sql) {
@@ -186,7 +192,7 @@ int MysqlMgr::sql_write(const std::string& node, const std::string& sql) {
         return ERR_INVALID_PARAMS;
     }
 
-    return send_sql_task(node, sql, false);
+    return send_task(node, sql, false);
 }
 
 int MysqlMgr::sql_read(const std::string& node, const std::string& sql, vec_row_t& rows) {
@@ -195,7 +201,7 @@ int MysqlMgr::sql_read(const std::string& node, const std::string& sql, vec_row_
         return ERR_INVALID_PARAMS;
     }
 
-    return send_sql_task(node, sql, true, &rows);
+    return send_task(node, sql, true, &rows);
 }
 
 }  // namespace kim

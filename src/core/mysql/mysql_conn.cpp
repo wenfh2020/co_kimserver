@@ -78,7 +78,7 @@ int MysqlConn::sql_read(const std::string& sql, vec_row_t& rows) {
         return ERR_DB_QUERY_FAILED;
     }
 
-    /* pls malloc/new obj: rows, for safe coroutine's stack! */
+    /* for safe coroutine's stack, pls malloc/new obj: rows! */
     res = mysql_store_result(m_conn);
     if (result.init(m_conn, res)) {
         result.result_data(rows);

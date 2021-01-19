@@ -26,6 +26,7 @@ enum E_ERROR {
     ERR_DB_INVALID_QUERY_SQL = 12003,
     ERR_DB_QUERY_FAILED = 12004, /* read. */
     ERR_DB_EXEC_FAILED = 12005,  /* write. */
+    ERR_DB_CAT_NOT_FIND_NODE = 12006,
 };
 
 }  // namespace kim
