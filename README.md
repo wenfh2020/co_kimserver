@@ -33,7 +33,7 @@ co_kimserver 是基于 `libco` 轻量级协程库的 tcp 高性能 C++ 多进程
 
 ## 3. 运行
 
-编程成功后，进入 bin 目录运行执行问题。
+编程成功后，进入 bin 目录运行启动服务。
 
 ```shell
 cd bin
