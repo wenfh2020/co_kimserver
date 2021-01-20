@@ -19,20 +19,22 @@ class RedisMgr : Logger {
         int port = 0;
     } redis_info_t;
 
-    /* coroutines arg info. */
-    typedef struct rds_co_data_s {
-        stCoRoutine_t* co = nullptr;
-        redis_info_t* rds = nullptr;
-        redisContext* c = nullptr;
-        void* privdata = nullptr;
-    } rds_co_data_t;
-
     /* redis cmd task. */
     typedef struct task_s {
-        stCoRoutine_t* co = nullptr;
-        std::string cmd;
-        redisReply* reply = nullptr;
+        std::string cmd;             /* redis cmd. */
+        stCoRoutine_t* co = nullptr; /* user's coroutine. */
+        redisReply* reply = nullptr; /* redis cmd's reply. */
     } task_t;
+
+    /* coroutines arg. */
+    typedef struct rds_co_data_s {
+        stCoCond_t* cond = nullptr;  /* coroutine cond. */
+        stCoRoutine_t* co = nullptr; /* redis conn's coroutine. */
+        redis_info_t* rds = nullptr; /* redis info(host,port...) */
+        redisContext* c = nullptr;   /* redis conn. */
+        std::queue<task_t*> tasks;   /* tasks wait to be handled. */
+        void* privdata = nullptr;
+    } rds_co_data_t;
 
    public:
     RedisMgr(Log* logger);
@@ -44,19 +46,20 @@ class RedisMgr : Logger {
 
    private:
     void destory();
+    void co_sleep(int ms);
+    void wait_connect(rds_co_data_t* rds_co);
+    bool del_valid_connect(rds_co_data_t* rds_co);
+    bool add_valid_connect(rds_co_data_t* rds_co);
     redisContext* connect(const std::string& host, int port);
 
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
-
     redisReply* send_task(const std::string& node, const std::string& cmd);
 
    private:
-    stCoCond_t* m_task_cond = nullptr;
-    std::set<rds_co_data_t*> m_co_datas;
-
     std::unordered_map<std::string, redis_info_t*> m_rds_infos;
-    std::unordered_map<std::string, std::queue<task_t*>> m_tasks;
+    std::unordered_map<std::string, std::vector<rds_co_data_t*>> m_valid_coroutines;
+    std::list<rds_co_data_t*> m_all_coroutines;
 };
 
 }  // namespace kim

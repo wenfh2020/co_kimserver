@@ -3,10 +3,16 @@
 int g_co_cnt = 0;
 int g_co_cmd_cnt = 0;
 int g_cur_test_cnt = 0;
+int g_cur_success_cnt = 0;
+int g_cur_fail_cnt = 0;
 double g_begin_time = 0.0;
 
 bool g_is_end = false;
 bool g_is_read = false;
+
+#define LOG_LEVEL Log::LL_INFO
+// #define LOG_LEVEL Log::LL_DEBUG
+// #define LOG_LEVEL Log::LL_TRACE
 
 bool load_common() {
     if (!load_logger(LOG_PATH) ||
@@ -14,17 +20,26 @@ bool load_common() {
         !load_redis_mgr(m_logger, g_config["redis"])) {
         return false;
     }
-    // m_logger->set_level(Log::LL_DEBUG);
-    m_logger->set_level(Log::LL_INFO);
+    m_logger->set_level(LOG_LEVEL);
     return true;
 }
 
 void show_result(redisReply* r) {
+    if (r == nullptr) {
+        return;
+    }
+
     if (r->type == REDIS_REPLY_ERROR) {
         printf("reply error, type: %d, str: %s\n", r->type, r->str);
         return;
     }
     printf("reply data, type: %d, str: %s\n", r->type, r->str);
+}
+
+void co_sleep(int ms) {
+    struct pollfd pf = {0};
+    pf.fd = -1;
+    poll(&pf, 1, ms);
 }
 
 void* co_handler(void* arg) {
@@ -46,10 +61,15 @@ void* co_handler(void* arg) {
         }
 
         reply = g_redis_mgr->exec_cmd(node, cmd);
+
         g_cur_test_cnt++;
-        if (reply == nullptr) {
-            printf("redis oper failed! node: %s, cmd: %s\n", node, cmd);
-            break;
+        if (reply != nullptr) {
+            g_cur_success_cnt++;
+            // printf("redis oper failed! node: %s, cmd: %s\n", node, cmd);
+        } else {
+            g_cur_fail_cnt++;
+            co_sleep(1);
+            // printf("----\n");
         }
         // show_result(reply);
         freeReplyObject(reply);
@@ -58,8 +78,9 @@ void* co_handler(void* arg) {
     if (!g_is_end && g_cur_test_cnt == g_co_cnt * g_co_cmd_cnt) {
         g_is_end = true;
         spend = time_now() - g_begin_time;
-        printf("total cnt: %d, total time: %lf, avg: %lf\n",
-               g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
+        printf("total cnt: %d, total time: %lf, avg: %lf\nsuccess cnt: %d, fail cnt: %d\n",
+               g_cur_test_cnt, spend, (g_cur_test_cnt / spend),
+               g_cur_success_cnt, g_cur_fail_cnt);
     }
 
     return 0;

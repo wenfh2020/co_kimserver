@@ -254,12 +254,12 @@ int connect(int fd, const struct sockaddr *address, socklen_t address_len) {
         return ret;
     }
 
-    //2.wait
+    // 2.wait
     int pollret = 0;
     struct pollfd pf = {0};
 
     for (int i = 0; i < 3; i++) {
-        //25s * 3 = 75s
+        // 25s * 3 = 75s
         memset(&pf, 0, sizeof(pf));
         pf.fd = fd;
         pf.events = (POLLOUT | POLLERR | POLLHUP);
@@ -271,8 +271,8 @@ int connect(int fd, const struct sockaddr *address, socklen_t address_len) {
         }
     }
 
-    if (pf.revents & POLLOUT)  //connect succ
-    {
+    // connect succ
+    if (pf.revents & POLLOUT) {
         // 3.check getsockopt ret
         int err = 0;
         socklen_t errlen = sizeof(err);
