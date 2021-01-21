@@ -1,8 +1,7 @@
 CC = gcc
 CXX = $(shell command -v ccache >/dev/null 2>&1 && echo "ccache g++" || echo "g++")
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
-CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
-CURRENT_DIR = $(notdir $(shell pwd))
+CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT -DTHREADED
 
 VPATH = .
 DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
@@ -16,7 +15,7 @@ LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
         -L $(CORE_PATH)/libco/lib \
         -L /usr/local/lib \
         -lcolib -lmysqlclient -lpthread -ldl \
-        -lcryptopp -lprotobuf -lhiredis
+        -lcryptopp -lprotobuf -lhiredis -lzookeeper_mt
 
 # cur dir objs.
 CPP_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cpp))
@@ -32,6 +31,7 @@ CORE_C_SRCS = $(foreach dir, $(CORE_PATH_SRC), $(wildcard $(dir)/*.c))
 _CORE_OBJS = $(patsubst %.cpp,%.o,$(CORE_CPP_SRCS)) $(patsubst %.c,%.o,$(CORE_C_SRCS)) $(patsubst %.cc,%.o,$(CORE_CC_SRCS))
 CORE_OBJS = $(filter-out $(CORE_PATH)/server.o, $(_CORE_OBJS)) 
 
+CURRENT_DIR = $(notdir $(shell pwd))
 PROC_NAME = $(CURRENT_DIR)
 
 all: PRINT $(PROC_NAME)

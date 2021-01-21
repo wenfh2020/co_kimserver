@@ -25,6 +25,10 @@ void Network::destory() {
         free(it);
     }
     m_wait_send_fds.clear();
+
+    SAFE_DELETE(m_zk_cli);
+    SAFE_DELETE(m_module_mgr);
+    SAFE_DELETE(m_mysql_mgr);
 }
 
 void Network::run() {
@@ -120,7 +124,7 @@ void Network::close_fd(int fd) {
     LOG_DEBUG("close fd: %d.", fd);
 }
 
-void* Network::co_handler_accept_nodes_conn(void*) {
+void* Network::co_handle_accept_nodes_conn(void*) {
     co_enable_hook_sys();
     return 0;
 }
@@ -128,6 +132,9 @@ void* Network::co_handler_accept_nodes_conn(void*) {
 void Network::co_handle_timer() {
     if (is_manager()) {
         check_wait_send_fds();
+        if (m_zk_cli != nullptr) {
+            m_zk_cli->on_repeat_timer();
+        }
     }
 }
 
@@ -162,15 +169,15 @@ void Network::check_wait_send_fds() {
     }
 }
 
-void* Network::co_handler_accept_gate_conn(void* d) {
+void* Network::co_handle_accept_gate_conn(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
     Connection* c = task->c;
     Network* net = (Network*)c->privdata();
-    return net->handler_accept_gate_conn(d);
+    return net->handle_accept_gate_conn(d);
 }
 
-void* Network::handler_accept_gate_conn(void* d) {
+void* Network::handle_accept_gate_conn(void* d) {
     channel_t ch;
     chanel_resend_data_t* ch_data;
     char ip[NET_IP_STR_LEN] = {0};
@@ -219,14 +226,14 @@ void* Network::handler_accept_gate_conn(void* d) {
     return 0;
 }
 
-void* Network::co_handler_requests(void* d) {
+void* Network::co_handle_requests(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
     Network* net = (Network*)task->c->privdata();
-    return net->handler_requests(d);
+    return net->handle_requests(d);
 }
 
-void* Network::handler_requests(void* d) {
+void* Network::handle_requests(void* d) {
     int fd;
     Connection* c;
     co_task_t* task;
@@ -511,6 +518,19 @@ bool Network::load_worker_data_mgr() {
     return (m_worker_data_mgr != nullptr);
 }
 
+bool Network::load_zk_mgr() {
+    m_zk_cli = new ZkClient(m_logger, this);
+    if (m_zk_cli == nullptr) {
+        LOG_ERROR("new zk mgr failed!");
+        return false;
+    }
+
+    if (m_zk_cli->init(m_config)) {
+        LOG_INFO("load zk client done!");
+    }
+    return true;
+}
+
 /* parent. */
 bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     if (ai == nullptr) {
@@ -528,6 +548,11 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
 
     if (!load_worker_data_mgr()) {
         LOG_ERROR("new worker data mgr failed!");
+        return false;
+    }
+
+    if (!load_zk_mgr()) {
+        LOG_ERROR("load zookeeper mgr failed!");
         return false;
     }
 
@@ -577,7 +602,7 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
             return false;
         }
 
-        task = m_coroutines->create_co_task(c, co_handler_accept_gate_conn);
+        task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
         if (task == nullptr) {
             LOG_ERROR("create new corotines failed!");
             close_conn(c);
@@ -624,7 +649,7 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     m_worker_index = index;
     LOG_INFO("create network done!");
 
-    task = m_coroutines->create_co_task(conn_data, co_handler_read_transfer_fd);
+    task = m_coroutines->create_co_task(conn_data, co_handle_read_transfer_fd);
     if (task == nullptr) {
         LOG_ERROR("create new corotines failed!");
         close_conn(conn_data);
@@ -634,15 +659,15 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     return true;
 }
 
-void* Network::co_handler_read_transfer_fd(void* d) {
+void* Network::co_handle_read_transfer_fd(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
     Network* net = (Network*)task->c->privdata();
-    return net->handler_read_transfer_fd(d);
+    return net->handle_read_transfer_fd(d);
 }
 
-void* Network::handler_read_transfer_fd(void* d) {
-    LOG_TRACE("handler_read_transfer_fd....");
+void* Network::handle_read_transfer_fd(void* d) {
+    LOG_TRACE("handle_read_transfer_fd....");
 
     int err;
     int data_fd;
@@ -684,7 +709,7 @@ void* Network::handler_read_transfer_fd(void* d) {
         LOG_INFO("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
                  ch.fd, ch.family, ch.codec, ch.is_system);
 
-        co_task_t* co_task = m_coroutines->create_co_task(c, co_handler_requests);
+        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
         if (co_task == nullptr) {
             LOG_ERROR("create new corotines failed!");
             close_conn(c);

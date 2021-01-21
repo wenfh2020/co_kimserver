@@ -1,7 +1,7 @@
 CC = gcc
 CXX = $(shell command -v ccache >/dev/null 2>&1 && echo "ccache g++" || echo "g++")
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
-CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT
+CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT -DTHREADED
 
 VPATH = .
 SUB_DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
@@ -12,10 +12,10 @@ INC := $(INC) \
         -I ./libco
 
 LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
-		-L ./libco/lib \
-		-L /usr/local/lib \
-        -lcolib -lpthread -ldl \
-		-lmysqlclient -lcryptopp -lprotobuf -lhiredis
+        -L ./libco/lib \
+        -L /usr/local/lib \
+        -lcolib -lmysqlclient -lpthread -ldl \
+        -lcryptopp -lprotobuf -lhiredis -lzookeeper_mt
 
 CPP_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cpp))
 CC_SRCS = $(foreach dir, $(DIRS), $(wildcard $(dir)/*.cc))
