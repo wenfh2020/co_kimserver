@@ -25,11 +25,11 @@ class ZkClient : public Bio {
     /* set zk log before connect. */
     void set_zk_log(const std::string& path, utility::zoo_log_lvl level = utility::zoo_log_lvl_info);
 
-    /* call by bio (sync). */
+    /* (sync) call by bio thread. */
     virtual void bio_process_cmd(zk_task_t* task) override;
-    /* timer (async). */
+    /* (async) timer. */
     virtual void on_repeat_timer() override;
-    /* call by timer (async). */
+    /* (async) call by timer. */
     virtual void timer_process_ack(zk_task_t* task) override;
 
     /* payload data. */
@@ -61,7 +61,6 @@ class ZkClient : public Bio {
 
    private:
     INet* m_net = nullptr;
-    /* config. */
     CJsonObject m_config;
 
     /* zk. */

@@ -9,8 +9,7 @@
 #include "net/anet.h"
 #include "net/chanel.h"
 #include "nodes.h"
-#include "protobuf/sys/nodes.pb.h"
-#include "protobuf/sys/payload.pb.h"
+#include "util/json/CJsonObject.hpp"
 #include "worker_data_mgr.h"
 #include "zk_client.h"
 
@@ -47,42 +46,37 @@ class Network : public INet {
 
     void destory();
 
+    bool set_gate_codec(const std::string& codec);
+    void set_keep_alive(uint64_t ms) { m_keep_alive = ms; }
+    uint64_t keep_alive() { return m_keep_alive; }
+    bool is_request(int cmd) { return (cmd & 0x00000001); }
+
+    virtual CJsonObject* config() override { return &m_config; }
     virtual uint64_t now() override { return mstime(); }
     virtual uint64_t new_seq() override { return ++m_seq; }
 
-    /* process type. */
+    /* pro's type. */
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
 
     virtual Nodes* nodes() override { return m_nodes; }
     virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
 
-    bool set_gate_codec(const std::string& codec);
-    void set_keep_alive(uint64_t ms) { m_keep_alive = ms; }
-    uint64_t keep_alive() { return m_keep_alive; }
-    bool is_request(int cmd) { return (cmd & 0x00000001); }
-
-    WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
-
-    void check_wait_send_fds();
-
-    /* use in fork. */
-    void close_fds();
-    /* close connection by fd. */
-    bool close_conn(int fd);
-    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
-    /* manager and worker contack by socketpair. */
-    void close_chanel(int* fds);
-
-    Connection* get_conn(const fd_t& f);
-    void clear_routines();
-
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
 
-    /* call by manager/worker 10 times/s on Linux. */
-    void co_handle_timer();
+    WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
+
+    /* connection. */
+    void close_fds(); /* use in fork. */
+    bool close_conn(int fd);
+    void close_chanel(int* fds); /* close socketpair. */
+    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
+    Connection* get_conn(const fd_t& f);
+
+    void clear_routines();
+    void co_handle_timer(); /* call by parent, 10 times/s on Linux. */
 
    private:
     bool load_config(const CJsonObject& config);
@@ -90,14 +84,14 @@ class Network : public INet {
     bool load_worker_data_mgr();
     bool load_modules();
     bool load_corotines();
-    bool load_zk_mgr();
+    bool load_zk_mgr(); /* zookeeper client. */
 
-    /* socket. */
+    /* socket & connection. */
     int listen_to_port(const char* host, int port);
     void close_fd(int fd);
-
     bool close_conn(Connection* c);
     Connection* create_conn(int fd);
+    void check_wait_send_fds();
 
     bool process_msg(Connection* c);
     bool process_tcp_msg(Connection* c);
@@ -113,7 +107,8 @@ class Network : public INet {
     void* handle_requests(void*);
 
    private:
-    Log* m_logger;                                             /* logger. */
+    Log* m_logger; /* logger. */
+    CJsonObject m_config;
     Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
     std::unordered_map<int, Connection*> m_conns;              /* key: fd, value: connection. */
     std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
@@ -147,8 +142,8 @@ class Network : public INet {
     Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
     MysqlMgr* m_mysql_mgr = nullptr;
-    ZkClient* m_zk_cli = nullptr; /* zookeeper client. */
-    Payload m_payload;            /* payload data. */
+    ZkClient* m_zk_mgr = nullptr; /* zookeeper client. */
+    Payload m_payload;            /* pro's payload data. */
 };
 
 }  // namespace kim

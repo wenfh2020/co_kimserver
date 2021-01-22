@@ -2,10 +2,10 @@
 
 ## 1. 简述
 
-`co_kimserver` 是高性能的网络通信框架。
+`co_kimserver` 是高性能的 TCP 网络通信框架。
 
 * 多进程框架（manager/workers）。
-* 基于腾讯的 `libco` 轻量级协程库。
+* 基于腾讯开源的轻量级协程库 [libco](https://github.com/Tencent/libco)。
 * 主要使用 C/C++11 语言开发。
 * 支持 tcp 协议。
 * 使用 protobuf 封装协议包。
@@ -23,11 +23,12 @@
 源码编译前需要先安装依赖的第三方库：
 
 * mysqlclient
-* cryptopp
 * protobuf
 * hiredis
+* cryptopp
+* zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
-> 【注意】Linux 环境，Libco 不支持与 jemalloc 同时使用，jemalloc 容易出现死锁。
+>【注意】Linux 环境，Libco 不支持与 jemalloc 同时使用，jemalloc 容易出现死锁。
 
 ---
 

@@ -111,7 +111,6 @@ void Bio::add_ack_task(zk_task_t* task) {
 }
 
 void Bio::on_repeat_timer() {
-    /* acks */
     handle_acks();
 }
 

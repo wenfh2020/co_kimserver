@@ -26,7 +26,7 @@ void Network::destory() {
     }
     m_wait_send_fds.clear();
 
-    SAFE_DELETE(m_zk_cli);
+    SAFE_DELETE(m_zk_mgr);
     SAFE_DELETE(m_module_mgr);
     SAFE_DELETE(m_mysql_mgr);
 }
@@ -132,8 +132,8 @@ void* Network::co_handle_accept_nodes_conn(void*) {
 void Network::co_handle_timer() {
     if (is_manager()) {
         check_wait_send_fds();
-        if (m_zk_cli != nullptr) {
-            m_zk_cli->on_repeat_timer();
+        if (m_zk_mgr != nullptr) {
+            m_zk_mgr->on_repeat_timer();
         }
     }
 }
@@ -519,13 +519,13 @@ bool Network::load_worker_data_mgr() {
 }
 
 bool Network::load_zk_mgr() {
-    m_zk_cli = new ZkClient(m_logger, this);
-    if (m_zk_cli == nullptr) {
+    m_zk_mgr = new ZkClient(m_logger, this);
+    if (m_zk_mgr == nullptr) {
         LOG_ERROR("new zk mgr failed!");
         return false;
     }
 
-    if (m_zk_cli->init(m_config)) {
+    if (m_zk_mgr->init(m_config)) {
         LOG_INFO("load zk client done!");
     }
     return true;

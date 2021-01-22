@@ -32,9 +32,9 @@ class Bio {
 
     /* bio thread. */
     static void* bio_process_tasks(void* arg);
-    /* call by bio. */
+    /* call by bio thread. */
     virtual void bio_process_cmd(zk_task_t* task) {}
-    /* call by timer. */
+    /* call by timer. (async) */
     virtual void timer_process_ack(zk_task_t* task) {}
 
     /* timer. */
