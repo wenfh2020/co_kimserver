@@ -2,8 +2,6 @@
 
 #include "request.h"
 
-#define MAX_TRY_RESEND_FD_CNT 20
-
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
@@ -218,7 +216,6 @@ void* Network::co_handle_accept_nodes_conn(void*) {
 
 void Network::on_repeat_timer() {
     if (is_manager()) {
-        check_wait_send_fds();
         if (m_zk_cli != nullptr) {
             m_zk_cli->on_repeat_timer();
         }
@@ -316,37 +313,6 @@ bool Network::report_payload_to_manager() {
     return true;
 }
 
-void Network::check_wait_send_fds() {
-    int err;
-    int chanel_fd;
-    chanel_resend_data_t* data;
-
-    for (auto it = m_wait_send_fds.begin(); it != m_wait_send_fds.end();) {
-        data = *it;
-
-        chanel_fd = m_worker_data_mgr->get_next_worker_data_fd();
-        if (chanel_fd <= 0) {
-            LOG_ERROR("can not find next worker chanel!");
-            return;
-        }
-
-        err = write_channel(chanel_fd, &data->ch, sizeof(channel_t), m_logger);
-        if (err == 0 || (err != 0 && err != EAGAIN) ||
-            ((err == EAGAIN) && (++data->count >= MAX_TRY_RESEND_FD_CNT))) {
-            if (err != 0) {
-                LOG_ERROR("resend chanel failed! fd: %d, errno: %d", data->ch.fd, err);
-            }
-            close_fd(data->ch.fd);
-            free(data);
-            m_wait_send_fds.erase(it++);
-            continue;
-        }
-
-        it++;
-        LOG_DEBUG("wait to write channel, errno: %d", err);
-    }
-}
-
 void* Network::co_handle_accept_gate_conn(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
@@ -357,9 +323,8 @@ void* Network::co_handle_accept_gate_conn(void* d) {
 
 void* Network::handle_accept_gate_conn(void* d) {
     channel_t ch;
-    chanel_resend_data_t* ch_data;
     char ip[NET_IP_STR_LEN] = {0};
-    int fd, port, family, chanel_fd, err;
+    int fd, port, family, channel_fd, err;
 
     for (;;) {
         fd = anet_tcp_accept(m_errstr, m_gate_host_fd, ip, sizeof(ip), &port, &family);
@@ -373,30 +338,32 @@ void* Network::handle_accept_gate_conn(void* d) {
 
         LOG_INFO("accepted client: %s:%d, fd: %d", ip, port, fd);
 
-        chanel_fd = m_worker_data_mgr->get_next_worker_data_fd();
-        if (chanel_fd <= 0) {
-            LOG_ERROR("find next worker chanel failed!");
+        channel_fd = m_worker_data_mgr->get_next_worker_data_fd();
+        if (channel_fd <= 0) {
+            LOG_ERROR("find next worker channel failed!");
             close_fd(fd);
             continue;
         }
 
-        LOG_DEBUG("send client fd: %d to worker through chanel fd %d", fd, chanel_fd);
+        LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
 
-        /* parent process transfers fd to child. */
-        ch = {fd, family, static_cast<int>(m_gate_codec), 0};
-        err = write_channel(chanel_fd, &ch, sizeof(channel_t), m_logger);
-        if (err != 0) {
-            if (err == EAGAIN) {
-                /* re send again in timer. */
-                ch_data = (chanel_resend_data_t*)calloc(1, sizeof(chanel_resend_data_t));
-                ch_data->ch = ch;
-                m_wait_send_fds.push_back(ch_data);
-                LOG_DEBUG("wait to write channel, errno: %d", err);
-                m_coroutines->co_sleep(100, m_gate_host_fd);
-                continue;
+        /* manager transfers client fd to worker. */
+        for (;;) {
+            ch = {fd, family, static_cast<int>(m_gate_codec), 0};
+            err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
+            if (err == ERR_OK) {
+                break;
+            } else {
+                if (err == EAGAIN) {
+                    LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
+                    m_coroutines->co_sleep(1000, channel_fd, POLLOUT);
+                    continue;
+                }
+                LOG_ERROR("write channel failed! errno: %d", err);
+                break;
             }
-            LOG_ERROR("write channel failed! errno: %d", err);
         }
+
         close_fd(fd);
         continue;
     }
@@ -605,7 +572,7 @@ bool Network::process_http_msg(Connection* c) {
     // old_cnt = c->read_cnt();
     // old_bytes = c->read_bytes();
 
-    // codec_res = c->conn_read(*req.http_msg());
+    // codec_res = c->c onn_read(*req.http_msg());
     // if (codec_res != Codec::STATUS::ERR) {
     //     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
     //     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
@@ -629,13 +596,13 @@ bool Network::process_http_msg(Connection* c) {
     return true;
 }
 
-Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
+Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
     if (anet_no_block(m_errstr, fd) != ANET_OK) {
         LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
         return nullptr;
     }
 
-    if (!is_chanel) {
+    if (!is_channel) {
         if (anet_keep_alive(m_errstr, fd, 100) != ANET_OK) {
             LOG_ERROR("set socket keep alive failed! fd: %d, errstr: %s", fd, m_errstr);
             return nullptr;
@@ -649,7 +616,7 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     Connection* c = create_conn(fd);
     if (c == nullptr) {
         close_fd(fd);
-        LOG_ERROR("add chanel event failed! fd: %d", fd);
+        LOG_ERROR("add channel event failed! fd: %d", fd);
         return nullptr;
     }
     c->init(codec);
@@ -657,7 +624,7 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     c->set_active_time(now());
     c->set_state(Connection::STATE::CONNECTED);
 
-    if (is_chanel) {
+    if (is_channel) {
         c->set_system(true);
     }
 
@@ -878,6 +845,34 @@ int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
     return ret;
 }
 
+int Network::send_to_worker(int cmd, uint64_t seq, const std::string& data) {
+    LOG_TRACE("send to children, cmd: %d, seq: %llu", cmd, seq);
+
+    if (!is_manager()) {
+        LOG_ERROR("send_to_children only for manager!");
+        return ERR_INVALID_PROCESS_TYPE;
+    }
+
+    /* manger and workers communicate through socketpair. */
+    const std::unordered_map<int, worker_info_t*>& infos =
+        m_worker_data_mgr->get_infos();
+
+    for (auto& v : infos) {
+        auto it = m_conns.find(v.second->ctrl_fd);
+        if (it == m_conns.end() || it->second->is_invalid()) {
+            LOG_ALERT("ctrl fd is invalid! fd: %d", v.second->ctrl_fd);
+            continue;
+        }
+
+        if (!send_req(it->second, cmd, seq, data)) {
+            LOG_ALERT("send to child failed! fd: %d", v.second->ctrl_fd);
+            continue;
+        }
+    }
+
+    return ERR_OK;
+}
+
 void Network::clear_routines() {
     SAFE_DELETE(m_coroutines);
     FreeLibcoEnv();
@@ -886,10 +881,6 @@ void Network::clear_routines() {
 void Network::destory() {
     close_fds();
     clear_routines();
-    for (const auto& it : m_wait_send_fds) {
-        free(it);
-    }
-    m_wait_send_fds.clear();
 
     SAFE_DELETE(m_zk_cli);
     SAFE_DELETE(m_module_mgr);
@@ -908,8 +899,8 @@ void Network::close_fds() {
     m_conns.clear();
 }
 
-void Network::close_chanel(int* fds) {
-    LOG_DEBUG("close chanel, fd0: %d, fd1: %d", fds[0], fds[1]);
+void Network::close_channel(int* fds) {
+    LOG_DEBUG("close channel, fd0: %d, fd1: %d", fds[0], fds[1]);
     close_fd(fds[0]);
     close_fd(fds[1]);
 }

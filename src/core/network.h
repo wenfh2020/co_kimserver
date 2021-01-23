@@ -7,7 +7,7 @@
 #include "module_mgr.h"
 #include "net.h"
 #include "net/anet.h"
-#include "net/chanel.h"
+#include "net/channel.h"
 #include "nodes.h"
 #include "sys_cmd.h"
 #include "util/json/CJsonObject.hpp"
@@ -23,13 +23,6 @@ class Network : public INet {
         MANAGER,
         WORKER,
     };
-
-    /* manager transfer fd to worker by sendmsg, 
-     * when (ret == -1 && errno == EAGIN), then resend which in timer. */
-    typedef struct chanel_resend_data_s {
-        channel_t ch;
-        int count = 0;
-    } chanel_resend_data_t;
 
     Network(Log* logger, TYPE type);
     virtual ~Network();
@@ -76,13 +69,16 @@ class Network : public INet {
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
     virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) override;
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) override;
+
+    /* channel. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) override;
+    virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) override;
 
     /* connection. */
     void close_fds(); /* use in fork. */
     bool close_conn(int fd);
-    void close_chanel(int* fds); /* close socketpair. */
-    Connection* create_conn(int fd, Codec::TYPE codec, bool is_chanel = false);
+    void close_channel(int* fds); /* close socketpair. */
+    Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
     Connection* get_conn(const fd_t& f);
 
     void clear_routines();
@@ -105,7 +101,6 @@ class Network : public INet {
     void close_fd(int fd);
     bool close_conn(Connection* c);
     Connection* create_conn(int fd);
-    void check_wait_send_fds();
 
     bool process_msg(Connection* c);
     bool process_tcp_msg(Connection* c);
@@ -130,10 +125,9 @@ class Network : public INet {
     uint64_t m_seq = 0;          /* incremental serial number. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */
 
-    TYPE m_type = TYPE::UNKNOWN;                      /* owner type. */
-    uint64_t m_keep_alive = IO_TIMEOUT_VAL;           /* io timeout. */
-    WorkerDataMgr* m_worker_data_mgr = nullptr;       /* manager handle worker data. */
-    std::list<chanel_resend_data_t*> m_wait_send_fds; /* maybe sendmsg return -1 and errno == EAGAIN. */
+    TYPE m_type = TYPE::UNKNOWN;                /* owner type. */
+    uint64_t m_keep_alive = IO_TIMEOUT_VAL;     /* io timeout. */
+    WorkerDataMgr* m_worker_data_mgr = nullptr; /* manager handle worker data. */
 
     /* node for inner servers. */
     std::string m_node_host;
