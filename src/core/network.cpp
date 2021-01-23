@@ -2,7 +2,7 @@
 
 #include "request.h"
 
-#define MAX_TRY_RESEND_FD_CNT 10
+#define MAX_TRY_RESEND_FD_CNT 20
 
 namespace kim {
 

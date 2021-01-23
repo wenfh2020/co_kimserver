@@ -37,6 +37,8 @@ class CoTimer {
             poll(&pf, 1, 100);
             m->on_repeat_timer();
         }
+
+        return 0;
     }
 };
 
