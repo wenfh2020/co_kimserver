@@ -20,9 +20,6 @@ Manager::~Manager() {
 void Manager::destory() {
     SAFE_DELETE(m_net);
     SAFE_DELETE(m_logger);
-    if (m_co_timer != nullptr) {
-        co_release(m_co_timer);
-    }
 }
 
 void Manager::run() {
@@ -56,30 +53,16 @@ bool Manager::init(const char* conf_path) {
     create_workers();
     set_proc_title("%s", m_conf("server_name").c_str());
 
-    /* timer */
-    co_create(&m_co_timer, NULL, co_handle_timer, this);
-    co_resume(m_co_timer);
-
+    init_timer();
     LOG_INFO("init manager done!");
     return true;
 }
 
-void* Manager::co_handle_timer(void* arg) {
+void Manager::on_repeat_timer() {
     co_enable_hook_sys();
-
-    Manager* m = (Manager*)arg;
-
-    for (;;) {
-        struct pollfd pf = {0};
-        pf.fd = -1;
-        poll(&pf, 1, 100);
-
-        if (m->m_net != nullptr) {
-            m->m_net->co_handle_timer();
-        }
+    if (m_net != nullptr) {
+        m_net->on_repeat_timer();
     }
-
-    return 0;
 }
 
 bool Manager::load_logger() {
@@ -184,10 +167,7 @@ bool Manager::create_worker(int worker_index) {
         close(ctrl_fds[1]);
         close(data_fds[1]);
 
-        if (!m_net->create_conn(ctrl_fds[0], Codec::TYPE::PROTOBUF, true) ||
-            !m_net->create_conn(data_fds[0], Codec::TYPE::PROTOBUF, true)) {
-            m_net->close_conn(ctrl_fds[0]);
-            m_net->close_conn(data_fds[0]);
+        if (!m_net->init_manager_channel(ctrl_fds[0], data_fds[0])) {
             LOG_CRIT("chanel fd add event failed! kill child: %d", pid);
             kill(pid, SIGKILL);
             return false;

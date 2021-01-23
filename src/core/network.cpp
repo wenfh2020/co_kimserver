@@ -13,22 +13,176 @@ Network::~Network() {
     destory();
 }
 
-void Network::clear_routines() {
-    SAFE_DELETE(m_coroutines);
-    FreeLibcoEnv();
+/* parent. */
+bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
+    if (ai == nullptr) {
+        return false;
+    }
+
+    int fd = -1;
+    Connection* c;
+    co_task_t* task;
+
+    if (!load_public(config)) {
+        LOG_ERROR("load public failed!");
+        return false;
+    }
+
+    if (!load_worker_data_mgr()) {
+        LOG_ERROR("new worker data mgr failed!");
+        return false;
+    }
+
+    if (!load_zk_mgr()) {
+        LOG_ERROR("load zookeeper mgr failed!");
+        return false;
+    }
+
+    /* inner listen. */
+    if (!ai->node_host().empty()) {
+        fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
+        if (fd == -1) {
+            LOG_ERROR("listen to port failed! %s:%d",
+                      ai->node_host().c_str(), ai->node_port());
+            return false;
+        }
+
+        m_node_host_fd = fd;
+        m_node_host = ai->node_host();
+        m_node_port = ai->node_port();
+        LOG_INFO("node fd: %d", m_node_host_fd);
+
+        c = create_conn(m_node_host_fd, Codec::TYPE::PROTOBUF);
+        if (c == nullptr) {
+            close_fd(m_node_host_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_node_host_fd);
+            return false;
+        }
+
+        /* 启动集群内部 accept 协程。 */
+    }
+
+    /* gate listen. */
+    if (!ai->gate_host().empty()) {
+        fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
+        if (fd == -1) {
+            LOG_ERROR("listen to gate failed! %s:%d",
+                      ai->gate_host().c_str(), ai->gate_port());
+            return false;
+        }
+
+        m_gate_host_fd = fd;
+        m_gate_host = ai->gate_host();
+        m_gate_port = ai->gate_port();
+        LOG_INFO("gate fd: %d, host: %s, port: %d",
+                 m_gate_host_fd, m_gate_host.c_str(), m_gate_port);
+
+        c = create_conn(m_gate_host_fd, m_gate_codec);
+        if (c == nullptr) {
+            close_fd(m_gate_host_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_gate_host_fd);
+            return false;
+        }
+
+        task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
+        if (task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            return false;
+        }
+        co_resume(task->co);
+    }
+
+    return true;
 }
 
-void Network::destory() {
-    close_fds();
-    clear_routines();
-    for (const auto& it : m_wait_send_fds) {
-        free(it);
+bool Network::init_manager_channel(int ctrl_fd, int data_fd) {
+    if (!is_manager()) {
+        return false;
     }
-    m_wait_send_fds.clear();
 
-    SAFE_DELETE(m_zk_mgr);
-    SAFE_DELETE(m_module_mgr);
-    SAFE_DELETE(m_mysql_mgr);
+    co_task_t* task;
+    Connection *conn_ctrl, *conn_data;
+
+    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_ctrl == nullptr) {
+        close_fd(ctrl_fd);
+        LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
+        return false;
+    }
+
+    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_data == nullptr) {
+        close_fd(data_fd);
+        LOG_ERROR("add read event failed, fd: %d", data_fd);
+        return false;
+    }
+
+    m_manager_ctrl_fd = ctrl_fd;
+    m_manager_data_fd = data_fd;
+
+    /* recv data from worker. */
+    task = m_coroutines->create_co_task(conn_ctrl, co_handle_requests);
+    if (task == nullptr) {
+        LOG_ERROR("create new corotines failed!");
+        close_conn(conn_ctrl);
+        return false;
+    }
+    co_resume(task->co);
+    return true;
+}
+
+/* worker. */
+bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
+    if (!load_public(config)) {
+        LOG_ERROR("load public failed!");
+        return false;
+    }
+
+    if (!load_modules()) {
+        LOG_ERROR("load module failed!");
+        return false;
+    }
+
+    co_task_t* task;
+    Connection *conn_ctrl, *conn_data;
+
+    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_ctrl == nullptr) {
+        close_fd(ctrl_fd);
+        LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
+        return false;
+    }
+
+    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
+    if (conn_data == nullptr) {
+        close_fd(data_fd);
+        LOG_ERROR("add read event failed, fd: %d", data_fd);
+        return false;
+    }
+
+    m_config = config;
+    m_manager_ctrl_fd = ctrl_fd;
+    m_manager_data_fd = data_fd;
+    m_worker_index = index;
+    LOG_INFO("create network done!");
+
+    task = m_coroutines->create_co_task(conn_data, co_handle_read_transfer_fd);
+    if (task == nullptr) {
+        LOG_ERROR("create new corotines failed!");
+        close_conn(conn_data);
+        return false;
+    }
+    co_resume(task->co);
+
+    task = m_coroutines->create_co_task(conn_ctrl, co_handle_requests);
+    if (task == nullptr) {
+        LOG_ERROR("create new corotines failed!");
+        close_conn(conn_ctrl);
+        return false;
+    }
+    co_resume(task->co);
+    return true;
 }
 
 void Network::run() {
@@ -36,65 +190,6 @@ void Network::run() {
     if (m_coroutines != nullptr) {
         m_coroutines->run();
     }
-}
-
-void Network::close_fds() {
-    for (const auto& it : m_conns) {
-        Connection* c = it.second;
-        if (c && !c->is_invalid()) {
-            close_fd(c->fd());
-            SAFE_DELETE(c);
-        }
-    }
-    m_conns.clear();
-}
-
-void Network::close_chanel(int* fds) {
-    LOG_DEBUG("close chanel, fd0: %d, fd1: %d", fds[0], fds[1]);
-    close_fd(fds[0]);
-    close_fd(fds[1]);
-}
-
-bool Network::close_conn(Connection* c) {
-    if (c == nullptr) {
-        return false;
-    }
-    return close_conn(c->fd());
-}
-
-bool Network::close_conn(int fd) {
-    LOG_TRACE("close conn, fd: %d", fd);
-
-    if (fd == -1) {
-        LOG_ERROR("invalid fd: %d", fd);
-        return false;
-    }
-
-    auto it = m_conns.find(fd);
-    if (it == m_conns.end()) {
-        return false;
-    }
-
-    Connection* c = it->second;
-    c->set_state(Connection::STATE::CLOSED);
-
-    if (!c->get_node_id().empty()) {
-        m_node_conns.erase(c->get_node_id());
-    }
-
-    close_fd(fd);
-    SAFE_DELETE(c);
-    m_conns.erase(it);
-    return true;
-}
-
-bool Network::set_gate_codec(const std::string& codec_type) {
-    Codec::TYPE type = Codec::get_codec_type(codec_type);
-    if (type != Codec::TYPE::UNKNOWN) {
-        m_gate_codec = type;
-        return true;
-    }
-    return false;
 }
 
 int Network::listen_to_port(const char* host, int port) {
@@ -116,26 +211,109 @@ int Network::listen_to_port(const char* host, int port) {
     return fd;
 }
 
-void Network::close_fd(int fd) {
-    if (close(fd) == -1) {
-        LOG_WARN("close channel failed, fd: %d. errno: %d, errstr: %s",
-                 fd, errno, strerror(errno));
-    }
-    LOG_DEBUG("close fd: %d.", fd);
-}
-
 void* Network::co_handle_accept_nodes_conn(void*) {
     co_enable_hook_sys();
     return 0;
 }
 
-void Network::co_handle_timer() {
+void Network::on_repeat_timer() {
     if (is_manager()) {
         check_wait_send_fds();
-        if (m_zk_mgr != nullptr) {
-            m_zk_mgr->on_repeat_timer();
+        if (m_zk_cli != nullptr) {
+            m_zk_cli->on_repeat_timer();
+        }
+        report_payload_to_zookeeper();
+    } else {
+        /* send payload info to manager. */
+        report_payload_to_manager();
+    }
+}
+
+bool Network::report_payload_to_zookeeper() {
+    if (!is_manager()) {
+        LOG_ERROR("report payload to zk, only for manager!");
+        return false;
+    }
+
+    NodeData* node;
+    PayloadStats pls;
+    Payload *manager_pls, *worker_pls;
+    std::string json_data;
+    int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0,
+        read_bytes = 0, write_bytes = 0;
+    const std::unordered_map<int, worker_info_t*>& infos =
+        m_worker_data_mgr->get_infos();
+
+    /* node info. */
+    node = pls.mutable_node();
+    node->set_zk_path(m_nodes->get_my_zk_node_path());
+    node->set_node_type(node_type());
+    node->set_node_host(node_host());
+    node->set_node_port(node_port());
+    node->set_gate_host(m_gate_host);
+    node->set_gate_port(m_gate_port);
+    node->set_worker_cnt(infos.size());
+
+    /* worker payload infos. */
+    for (const auto& it : infos) {
+        cmd_cnt += it.second->payload.cmd_cnt();
+        conn_cnt += it.second->payload.conn_cnt();
+        read_cnt += it.second->payload.read_cnt();
+        read_bytes += it.second->payload.read_bytes();
+        write_cnt += it.second->payload.write_cnt();
+        write_bytes += it.second->payload.write_bytes();
+        worker_pls = pls.add_workers();
+        *worker_pls = it.second->payload;
+        if (it.second->payload.worker_index() == 0) {
+            worker_pls->set_worker_index(it.second->index);
         }
     }
+
+    /* manager statistics data results。 */
+    manager_pls = pls.mutable_manager();
+    manager_pls->set_worker_index(worker_index());
+    manager_pls->set_cmd_cnt(cmd_cnt);
+    manager_pls->set_conn_cnt(conn_cnt + m_conns.size());
+    manager_pls->set_read_cnt(read_cnt + m_payload.read_cnt());
+    manager_pls->set_read_bytes(read_bytes + m_payload.read_bytes());
+    manager_pls->set_write_cnt(write_cnt + m_payload.write_cnt());
+    manager_pls->set_write_bytes(write_bytes + m_payload.write_bytes());
+    manager_pls->set_create_time(now());
+
+    m_payload.Clear();
+
+    if (!proto_to_json(pls, json_data)) {
+        LOG_ERROR("proto to json failed!");
+        return false;
+    }
+
+    // LOG_TRACE("data: %s", json_data.c_str());
+    if (m_zk_cli != nullptr) {
+        m_zk_cli->set_payload_data(json_data);
+    }
+    return true;
+}
+
+bool Network::report_payload_to_manager() {
+    if (!is_worker()) {
+        LOG_ERROR("report payload to manager, only for worker!");
+        return false;
+    }
+
+    m_payload.set_worker_index(worker_index());
+    m_payload.set_cmd_cnt(0);
+    m_payload.set_conn_cnt(m_conns.size() + m_node_conns.size());
+    m_payload.set_create_time(now());
+
+    if (!m_sys_cmd->send_payload_to_manager(m_payload)) {
+        m_payload.Clear();
+        return false;
+    }
+
+    /* recv. */
+
+    m_payload.Clear();
+    return true;
 }
 
 void Network::check_wait_send_fds() {
@@ -226,6 +404,68 @@ void* Network::handle_accept_gate_conn(void* d) {
     return 0;
 }
 
+void* Network::co_handle_read_transfer_fd(void* d) {
+    co_enable_hook_sys();
+    co_task_t* task = (co_task_t*)d;
+    Network* net = (Network*)task->c->privdata();
+    return net->handle_read_transfer_fd(d);
+}
+
+void* Network::handle_read_transfer_fd(void* d) {
+    LOG_TRACE("handle_read_transfer_fd....");
+
+    int err;
+    int data_fd;
+    channel_t ch;
+    co_task_t* task;
+    Codec::TYPE codec;
+    Connection* c = nullptr;
+
+    task = (co_task_t*)d;
+    data_fd = task->c->fd();
+
+    for (;;) {
+        /* read fd from parent. */
+        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
+        if (err != 0) {
+            if (err == EAGAIN) {
+                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                m_coroutines->co_sleep(1000, data_fd, POLLIN);
+                continue;
+            } else {
+                destory();
+                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
+                exit(EXIT_FD_TRANSFER);
+            }
+        }
+
+        codec = static_cast<Codec::TYPE>(ch.codec);
+        c = create_conn(ch.fd, codec);
+        if (c == nullptr) {
+            LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
+            close_conn(ch.fd);
+            continue;
+        }
+
+        if (ch.is_system) {
+            c->set_system(true);
+        }
+
+        LOG_INFO("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
+                 ch.fd, ch.family, ch.codec, ch.is_system);
+
+        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
+        if (co_task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            continue;
+        }
+        co_resume(co_task->co);
+    }
+
+    return 0;
+}
+
 void* Network::co_handle_requests(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
@@ -265,13 +505,15 @@ void* Network::handle_requests(void* d) {
         }
 
         for (;;) {
-            /* check connection alive. */
-            if (now() - c->active_time() > m_keep_alive) {
-                close_conn(fd);
-                task->c = nullptr;
-                LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
-                          fd, now(), c->active_time(), m_keep_alive);
-                break;
+            if (!c->is_system()) {
+                /* check connection alive. */
+                if (now() - c->active_time() > m_keep_alive) {
+                    close_conn(fd);
+                    task->c = nullptr;
+                    LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
+                              fd, now(), c->active_time(), m_keep_alive);
+                    break;
+                }
             }
 
             if (!process_msg(c)) {
@@ -279,7 +521,8 @@ void* Network::handle_requests(void* d) {
                 task->c = nullptr;
                 break;
             }
-            m_coroutines->co_sleep(100, fd, POLLIN);
+
+            m_coroutines->co_sleep(1000, fd, POLLIN);
         }
     }
 
@@ -301,7 +544,7 @@ bool Network::process_tcp_msg(Connection* c) {
     uint32_t old_cnt, old_bytes;
 
     fd = c->fd();
-    res = ERR_UNKOWN_CMD;
+    res = ERR_OK;
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
@@ -310,48 +553,42 @@ bool Network::process_tcp_msg(Connection* c) {
     body = req->msg_body();
 
     codec_res = c->conn_read(*head, *body);
-    if (codec_res != Codec::STATUS::ERR) {
-        m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
-        m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
-    }
+
+    m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
+    m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
 
     LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
 
     while (codec_res == Codec::STATUS::OK) {
-        if (res == ERR_UNKOWN_CMD) {
+        if (c->is_system()) {
+            res = m_sys_cmd->handle_msg(req);
+            if (res != ERR_OK) {
+                LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
+                break;
+            }
+        } else {
             res = m_module_mgr->handle_request(req);
-            if (res == ERR_UNKOWN_CMD) {
+            if (res != ERR_OK) {
                 LOG_WARN("find cmd handler failed! fd: %d, cmd: %d",
                          fd, head->cmd());
-            } else {
-                if (res != ERR_OK) {
-                    LOG_TRACE("process tcp msg failed! fd: %d", fd);
-                }
+                break;
             }
         }
 
         head->Clear();
         body->Clear();
-        res = ERR_UNKOWN_CMD;
 
-        /* continue to decode recv buffer. */
+        /* continue to decode the recv buffer. */
         codec_res = c->fetch_data(*head, *body);
-        LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
     }
 
-    if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+    if (res != ERR_OK ||
+        codec_res == Codec::STATUS::ERR ||
+        codec_res == Codec::STATUS::CLOSED) {
         LOG_DEBUG("conn read failed. fd: %d", fd);
         SAFE_DELETE(req);
         return false;
-    }
-
-    codec_res = c->conn_write();
-    if (codec_res == Codec::STATUS::ERR) {
-        LOG_DEBUG("conn read failed. fd: %d", fd);
-        SAFE_DELETE(req);
-        return false;
-    } else if (codec_res == Codec::STATUS::PAUSE) {
-        m_coroutines->co_sleep(100, fd, POLLOUT);
     }
 
     SAFE_DELETE(req);
@@ -392,29 +629,6 @@ bool Network::process_http_msg(Connection* c) {
     return true;
 }
 
-Connection* Network::create_conn(int fd) {
-    auto it = m_conns.find(fd);
-    if (it != m_conns.end()) {
-        LOG_WARN("find old connection, fd: %d", fd);
-        close_conn(fd);
-    }
-
-    uint64_t seq;
-    Connection* c;
-
-    seq = new_seq();
-    c = new Connection(m_logger, fd, seq);
-    if (c == nullptr) {
-        LOG_ERROR("new connection failed! fd: %d", fd);
-        return nullptr;
-    }
-
-    m_conns[fd] = c;
-    c->set_keep_alive(m_keep_alive);
-    LOG_DEBUG("create connection fd: %d, seq: %llu", fd, seq);
-    return c;
-}
-
 Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     if (anet_no_block(m_errstr, fd) != ANET_OK) {
         LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
@@ -451,6 +665,29 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_chanel) {
     return c;
 }
 
+Connection* Network::create_conn(int fd) {
+    auto it = m_conns.find(fd);
+    if (it != m_conns.end()) {
+        LOG_WARN("find old connection, fd: %d", fd);
+        close_conn(fd);
+    }
+
+    uint64_t seq;
+    Connection* c;
+
+    seq = new_seq();
+    c = new Connection(m_logger, fd, seq);
+    if (c == nullptr) {
+        LOG_ERROR("new connection failed! fd: %d", fd);
+        return nullptr;
+    }
+
+    m_conns[fd] = c;
+    c->set_keep_alive(m_keep_alive);
+    LOG_DEBUG("create connection fd: %d, seq: %llu", fd, seq);
+    return c;
+}
+
 bool Network::load_public(const CJsonObject& config) {
     if (!load_config(config)) {
         LOG_ERROR("load config failed!");
@@ -459,6 +696,12 @@ bool Network::load_public(const CJsonObject& config) {
 
     if (!load_corotines()) {
         LOG_ERROR("load coroutines failed!");
+        return false;
+    }
+
+    m_sys_cmd = new SysCmd(m_logger, this);
+    if (m_sys_cmd == nullptr) {
+        LOG_ERROR("alloc sys cmd failed!");
         return false;
     }
 
@@ -519,225 +762,49 @@ bool Network::load_worker_data_mgr() {
 }
 
 bool Network::load_zk_mgr() {
-    m_zk_mgr = new ZkClient(m_logger, this);
-    if (m_zk_mgr == nullptr) {
+    m_zk_cli = new ZkClient(m_logger, this);
+    if (m_zk_cli == nullptr) {
         LOG_ERROR("new zk mgr failed!");
         return false;
     }
 
-    if (m_zk_mgr->init(m_config)) {
+    if (m_zk_cli->init(m_config)) {
         LOG_INFO("load zk client done!");
     }
     return true;
 }
 
-/* parent. */
-bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
-    if (ai == nullptr) {
-        return false;
-    }
-
-    int fd = -1;
-    Connection* c;
-    co_task_t* task;
-
-    if (!load_public(config)) {
-        LOG_ERROR("load public failed!");
-        return false;
-    }
-
-    if (!load_worker_data_mgr()) {
-        LOG_ERROR("new worker data mgr failed!");
-        return false;
-    }
-
-    if (!load_zk_mgr()) {
-        LOG_ERROR("load zookeeper mgr failed!");
-        return false;
-    }
-
-    /* inner listen. */
-    if (!ai->node_host().empty()) {
-        fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
-        if (fd == -1) {
-            LOG_ERROR("listen to port failed! %s:%d",
-                      ai->node_host().c_str(), ai->node_port());
-            return false;
-        }
-
-        m_node_host_fd = fd;
-        m_node_host = ai->node_host();
-        m_node_port = ai->node_port();
-        LOG_INFO("node fd: %d", m_node_host_fd);
-
-        c = create_conn(m_node_host_fd, Codec::TYPE::PROTOBUF);
-        if (c == nullptr) {
-            close_fd(m_node_host_fd);
-            LOG_ERROR("add read event failed, fd: %d", m_node_host_fd);
-            return false;
-        }
-
-        /* 启动集群内部 accept 协程。 */
-    }
-
-    /* gate listen. */
-    if (!ai->gate_host().empty()) {
-        fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
-        if (fd == -1) {
-            LOG_ERROR("listen to gate failed! %s:%d",
-                      ai->gate_host().c_str(), ai->gate_port());
-            return false;
-        }
-
-        m_gate_host_fd = fd;
-        m_gate_host = ai->gate_host();
-        m_gate_port = ai->gate_port();
-        LOG_INFO("gate fd: %d, host: %s, port: %d",
-                 m_gate_host_fd, m_gate_host.c_str(), m_gate_port);
-
-        c = create_conn(m_gate_host_fd, m_gate_codec);
-        if (c == nullptr) {
-            close_fd(m_gate_host_fd);
-            LOG_ERROR("add read event failed, fd: %d", m_gate_host_fd);
-            return false;
-        }
-
-        task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
-        if (task == nullptr) {
-            LOG_ERROR("create new corotines failed!");
-            close_conn(c);
-            return false;
-        }
-        co_resume(task->co);
-    }
-
-    return true;
-}
-
-/* worker. */
-bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
-    if (!load_public(config)) {
-        LOG_ERROR("load public failed!");
-        return false;
-    }
-
-    if (!load_modules()) {
-        LOG_ERROR("load module failed!");
-        return false;
-    }
-
-    co_task_t* task;
-    Connection *conn_ctrl, *conn_data;
-
-    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
-    if (conn_ctrl == nullptr) {
-        close_fd(ctrl_fd);
-        LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
-        return false;
-    }
-
-    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
-    if (conn_data == nullptr) {
-        close_fd(data_fd);
-        LOG_ERROR("add read event failed, fd: %d", data_fd);
-        return false;
-    }
-
-    m_config = config;
-    m_manager_ctrl_fd = ctrl_fd;
-    m_manager_data_fd = data_fd;
-    m_worker_index = index;
-    LOG_INFO("create network done!");
-
-    task = m_coroutines->create_co_task(conn_data, co_handle_read_transfer_fd);
-    if (task == nullptr) {
-        LOG_ERROR("create new corotines failed!");
-        close_conn(conn_data);
-        return false;
-    }
-    co_resume(task->co);
-    return true;
-}
-
-void* Network::co_handle_read_transfer_fd(void* d) {
-    co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Network* net = (Network*)task->c->privdata();
-    return net->handle_read_transfer_fd(d);
-}
-
-void* Network::handle_read_transfer_fd(void* d) {
-    LOG_TRACE("handle_read_transfer_fd....");
-
-    int err;
-    int data_fd;
-    channel_t ch;
-    co_task_t* task;
-    Codec::TYPE codec;
-    Connection* c = nullptr;
-
-    task = (co_task_t*)d;
-    data_fd = task->c->fd();
-
-    for (;;) {
-        /* read fd from parent. */
-        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
-        if (err != 0) {
-            if (err == EAGAIN) {
-                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                m_coroutines->co_sleep(100, data_fd, POLLIN);
-                continue;
-            } else {
-                destory();
-                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
-                exit(EXIT_FD_TRANSFER);
-            }
-        }
-
-        codec = static_cast<Codec::TYPE>(ch.codec);
-        c = create_conn(ch.fd, codec);
-        if (c == nullptr) {
-            LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
-            close_conn(ch.fd);
-            continue;
-        }
-
-        if (ch.is_system) {
-            c->set_system(true);
-        }
-
-        LOG_INFO("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
-                 ch.fd, ch.family, ch.codec, ch.is_system);
-
-        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
-        if (co_task == nullptr) {
-            LOG_ERROR("create new corotines failed!");
-            close_conn(c);
-            continue;
-        }
-        co_resume(co_task->co);
-    }
-
-    return 0;
-}
-
 int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
     if (c == nullptr) {
-        return false;
+        return ERR_INVALID_CONN;
     }
 
     Codec::STATUS ret;
     int old_cnt, old_bytes;
 
-    old_cnt = c->write_cnt();
-    old_bytes = c->write_bytes();
-    ret = c->conn_write(head, body);
-    if (ret != Codec::STATUS::ERR) {
-        m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
-        m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
+    ret = c->conn_append_message(head, body);
+    if (ret != Codec::STATUS::OK) {
+        LOG_ERROR("encode message failed! fd: %d", c->fd());
+        return ERR_ENCODE_DATA_FAILED;
     }
 
-    return true;
+    for (;;) {
+        old_cnt = c->write_cnt();
+        old_bytes = c->write_bytes();
+        ret = c->conn_write();
+        m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
+        m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
+
+        if (ret == Codec::STATUS::OK) {
+            return ERR_OK;
+        } else if (ret == Codec::STATUS::PAUSE) {
+            m_coroutines->co_sleep(100, c->fd(), POLLOUT);
+            continue;
+        } else {
+            LOG_ERROR("send data failed! fd: %d", c->fd());
+            return ERR_SEND_DATA_FAILED;
+        }
+    }
 }
 
 Connection* Network::get_conn(const fd_t& f) {
@@ -762,6 +829,139 @@ int Network::send_ack(const Request* req, int err, const std::string& errstr, co
     head.set_len(body.ByteSizeLong());
 
     return send_to(req->fd_data(), head, body);
+}
+
+int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq,
+                      const std::string& data) {
+    if (c == nullptr) {
+        LOG_DEBUG("invalid connection!");
+        return false;
+    }
+
+    MsgHead head;
+    MsgBody body;
+    body.set_data(data);
+    head.set_cmd(cmd);
+    head.set_seq(seq);
+    head.set_len(body.ByteSizeLong());
+    return send_to(c, head, body);
+}
+
+int Network::send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) {
+    MsgHead head;
+    MsgBody body;
+    body.set_data(data);
+    head.set_seq(seq);
+    head.set_cmd(cmd);
+    head.set_len(body.ByteSizeLong());
+    return send_to(f, head, body);
+}
+
+int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
+    if (!is_worker()) {
+        LOG_ERROR("send_to_parent only for worker!");
+        return ERR_INVALID_PROCESS_TYPE;
+    }
+
+    auto it = m_conns.find(m_manager_ctrl_fd);
+    if (it == m_conns.end()) {
+        LOG_ERROR("can not find manager ctrl fd, fd: %d", m_manager_ctrl_fd);
+        return ERR_INVALID_CONN;
+    }
+
+    int ret = send_req(it->second, cmd, seq, data);
+    if (ret != ERR_OK) {
+        LOG_ALERT("send to parent failed! fd: %d", m_manager_ctrl_fd);
+        return ret;
+    }
+
+    return ret;
+}
+
+void Network::clear_routines() {
+    SAFE_DELETE(m_coroutines);
+    FreeLibcoEnv();
+}
+
+void Network::destory() {
+    close_fds();
+    clear_routines();
+    for (const auto& it : m_wait_send_fds) {
+        free(it);
+    }
+    m_wait_send_fds.clear();
+
+    SAFE_DELETE(m_zk_cli);
+    SAFE_DELETE(m_module_mgr);
+    SAFE_DELETE(m_mysql_mgr);
+    SAFE_DELETE(m_sys_cmd);
+}
+
+void Network::close_fds() {
+    for (const auto& it : m_conns) {
+        Connection* c = it.second;
+        if (c && !c->is_invalid()) {
+            close_fd(c->fd());
+            SAFE_DELETE(c);
+        }
+    }
+    m_conns.clear();
+}
+
+void Network::close_chanel(int* fds) {
+    LOG_DEBUG("close chanel, fd0: %d, fd1: %d", fds[0], fds[1]);
+    close_fd(fds[0]);
+    close_fd(fds[1]);
+}
+
+bool Network::close_conn(Connection* c) {
+    if (c == nullptr) {
+        return false;
+    }
+    return close_conn(c->fd());
+}
+
+bool Network::close_conn(int fd) {
+    LOG_TRACE("close conn, fd: %d", fd);
+
+    if (fd == -1) {
+        LOG_ERROR("invalid fd: %d", fd);
+        return false;
+    }
+
+    auto it = m_conns.find(fd);
+    if (it == m_conns.end()) {
+        return false;
+    }
+
+    Connection* c = it->second;
+    c->set_state(Connection::STATE::CLOSED);
+
+    if (!c->get_node_id().empty()) {
+        m_node_conns.erase(c->get_node_id());
+    }
+
+    close_fd(fd);
+    SAFE_DELETE(c);
+    m_conns.erase(it);
+    return true;
+}
+
+void Network::close_fd(int fd) {
+    if (close(fd) == -1) {
+        LOG_WARN("close channel failed, fd: %d. errno: %d, errstr: %s",
+                 fd, errno, strerror(errno));
+    }
+    LOG_DEBUG("close fd: %d.", fd);
+}
+
+bool Network::set_gate_codec(const std::string& codec_type) {
+    Codec::TYPE type = Codec::get_codec_type(codec_type);
+    if (type != Codec::TYPE::UNKNOWN) {
+        m_gate_codec = type;
+        return true;
+    }
+    return false;
 }
 
 }  // namespace kim

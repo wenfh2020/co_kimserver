@@ -9,6 +9,7 @@
 #include "net/anet.h"
 #include "net/chanel.h"
 #include "nodes.h"
+#include "sys_cmd.h"
 #include "util/json/CJsonObject.hpp"
 #include "worker_data_mgr.h"
 #include "zk_client.h"
@@ -41,6 +42,8 @@ class Network : public INet {
     /* for worker.  */
     bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
 
+    bool init_manager_channel(int ctrl_fd, int data_fd);
+
     /* events. */
     void run();
 
@@ -59,14 +62,21 @@ class Network : public INet {
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
 
+    virtual std::string node_type() override { return m_node_type; }
+    virtual std::string node_host() override { return m_node_host; }
+    virtual int node_port() override { return m_node_port; }
+    virtual int worker_index() override { return m_worker_index; }
+
     virtual Nodes* nodes() override { return m_nodes; }
     virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
+    virtual WorkerDataMgr* worker_data_mgr() override { return m_worker_data_mgr; }
 
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
-
-    WorkerDataMgr* worker_data_mgr() { return m_worker_data_mgr; }
+    virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) override;
+    virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) override;
+    virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) override;
 
     /* connection. */
     void close_fds(); /* use in fork. */
@@ -76,7 +86,11 @@ class Network : public INet {
     Connection* get_conn(const fd_t& f);
 
     void clear_routines();
-    void co_handle_timer(); /* call by parent, 10 times/s on Linux. */
+    void on_repeat_timer(); /* call by parent, 10 times/s on Linux. */
+
+    /* payload. */
+    bool report_payload_to_manager();
+    bool report_payload_to_zookeeper();
 
    private:
     bool load_config(const CJsonObject& config);
@@ -142,8 +156,9 @@ class Network : public INet {
     Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
     MysqlMgr* m_mysql_mgr = nullptr;
-    ZkClient* m_zk_mgr = nullptr; /* zookeeper client. */
+    ZkClient* m_zk_cli = nullptr; /* zookeeper client. */
     Payload m_payload;            /* pro's payload data. */
+    SysCmd* m_sys_cmd = nullptr;  /* for node communication.  */
 };
 
 }  // namespace kim

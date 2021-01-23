@@ -3,18 +3,21 @@
 
 #include "network.h"
 #include "nodes.h"
+#include "timer.h"
 #include "util/json/CJsonObject.hpp"
 #include "worker_data_mgr.h"
 
 namespace kim {
 
-class Worker {
+class Worker : CoTimer {
    public:
     Worker(const std::string& name);
     virtual ~Worker();
 
     bool init(const worker_info_t* info, const CJsonObject& conf);
     void run();
+
+    virtual void on_repeat_timer() override;
 
    private:
     bool load_logger();

@@ -39,6 +39,7 @@ bool Worker::init(const worker_info_t* info, const CJsonObject& conf) {
         return false;
     }
 
+    init_timer();
     return true;
 }
 
@@ -91,6 +92,13 @@ bool Worker::load_network() {
 void Worker::run() {
     if (m_net != nullptr) {
         m_net->run();
+    }
+}
+
+void Worker::on_repeat_timer() {
+    co_enable_hook_sys();
+    if (m_net != nullptr) {
+        m_net->on_repeat_timer();
     }
 }
 

@@ -171,8 +171,45 @@ Codec::STATUS Connection::decode_proto(MsgHead& head, MsgBody& body) {
     return codec->decode(m_recv_buf, head, body);
 }
 
+Codec::STATUS Connection::conn_append_message(const MsgHead& head, const MsgBody& body) {
+    if (is_invalid()) {
+        LOG_ERROR("conn is invalid! fd: %d, seq: %llu", fd(), id());
+        return Codec::STATUS::ERR;
+    }
+
+    CodecProto* codec;
+    Codec::STATUS status;
+
+    codec = dynamic_cast<CodecProto*>(m_codec);
+    if (codec == nullptr) {
+        return Codec::STATUS::ERR;
+    }
+
+    if ((CHECK_NEW(m_send_buf, SocketBuffer)) == nullptr) {
+        LOG_ERROR("alloc send buf failed!");
+        return Codec::STATUS::ERR;
+    }
+
+    status = codec->encode(head, body, m_send_buf);
+    if (status != Codec::STATUS::OK) {
+        LOG_ERROR("encode packed failed! fd: %d, seq: %llu, status: %d",
+                  fd(), id(), (int)status);
+        return status;
+    }
+
+    return status;
+}
+
 Codec::STATUS Connection::conn_write(const MsgHead& head, const MsgBody& body) {
-    return conn_write(head, body, &m_send_buf);
+    Codec::STATUS status;
+
+    status = conn_append_message(head, body);
+    if (status != Codec::STATUS::OK) {
+        LOG_ERROR("encode message failed!");
+        return status;
+    }
+
+    return conn_write();
 }
 
 Codec::STATUS Connection::conn_write_waiting(const MsgHead& head, const MsgBody& body) {
@@ -198,7 +235,7 @@ Codec::STATUS Connection::conn_write(
 
     Codec::STATUS status = codec->encode(head, body, *buf);
     if (status != Codec::STATUS::OK) {
-        LOG_DEBUG("encode packed failed! fd: %d, seq: %llu, status: %d",
+        LOG_ERROR("encode packed failed! fd: %d, seq: %llu, status: %d",
                   fd(), id(), (int)status);
         return status;
     }
@@ -253,7 +290,7 @@ Codec::STATUS Connection::conn_write(const HttpMsg& msg, SocketBuffer** buf) {
 
     Codec::STATUS status = codec->encode(msg, *buf);
     if (status != Codec::STATUS::OK) {
-        LOG_DEBUG("encode http packed failed! fd: %d, seq: %llu, status: %d",
+        LOG_ERROR("encode http packed failed! fd: %d, seq: %llu, status: %d",
                   fd(), id(), (int)status);
         return status;
     }

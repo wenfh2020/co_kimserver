@@ -2,10 +2,11 @@
 #define __KIM_MANAGER_H__
 
 #include "network.h"
+#include "timer.h"
 
 namespace kim {
 
-class Manager {
+class Manager : CoTimer {
    public:
     Manager();
     virtual ~Manager();
@@ -26,7 +27,7 @@ class Manager {
 
     std::string worker_name(int index);
 
-    static void* co_handle_timer(void* arg);
+    virtual void on_repeat_timer() override;
 
    private:
     Log* m_logger = nullptr;  /* logger. */
@@ -34,8 +35,6 @@ class Manager {
 
     node_info m_node_info;          /* cluster node. */
     CJsonObject m_conf, m_old_conf; /* config. */
-
-    stCoRoutine_t* m_co_timer = nullptr;
 };
 
 }  // namespace kim

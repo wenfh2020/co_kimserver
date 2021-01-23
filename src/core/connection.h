@@ -64,6 +64,7 @@ class Connection : Logger {
     Codec::STATUS conn_read(MsgHead& head, MsgBody& body);
     Codec::STATUS fetch_data(MsgHead& head, MsgBody& body);
     Codec::STATUS conn_write(const MsgHead& head, const MsgBody& body);
+    Codec::STATUS conn_append_message(const MsgHead& head, const MsgBody& body);
     Codec::STATUS conn_write_waiting(const MsgHead& head, const MsgBody& body);
     Codec::STATUS conn_write();
 
