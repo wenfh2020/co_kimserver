@@ -12,7 +12,7 @@ enum E_CMD {
     CMD_REQ_TELL_WORKER = 23,
     CMD_RSP_TELL_WORKER = 24,
 
-    /* Parent and children process communicate. */
+    /* manager and workers communicate. */
 
     /* zookeeper notice. */
     CMD_REQ_ADD_ZK_NODE = 41,
@@ -25,6 +25,8 @@ enum E_CMD {
     CMD_RSP_REGISTER_NODE = 48,
     CMD_REQ_UPDATE_PAYLOAD = 49,
     CMD_RSP_UPDATE_PAYLOAD = 50,
+
+    CMD_SYS_END = 999,
 };
 
 #endif  //__KIM_PROTOCOL_H__

@@ -24,12 +24,13 @@ class WorkerDataMgr : public Logger {
    public:
     bool add_worker_info(int index, int pid, int ctrl_fd, int data_fd);
     bool del_worker_info(int pid);
-    int get_next_worker_data_fd();
-    bool get_worker_chanel(int pid, int* chs);
-    int get_worker_index(int pid);
-    int get_worker_data_fd(int worker_index);
     worker_info_t* get_worker_info(int index);
     const std::unordered_map<int, worker_info_t*>& get_infos() const { return m_workers; }
+
+    int get_next_worker_data_fd();
+    bool get_worker_channel(int pid, int* chs);
+    int get_worker_index(int pid);
+    int get_worker_data_fd(int worker_index);
 
    private:
     /* key: pid. */

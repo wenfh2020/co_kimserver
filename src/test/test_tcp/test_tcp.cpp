@@ -6,7 +6,7 @@
 
 #include "protobuf/proto/msg.pb.h"
 
-#define SEND_PACKETS 10
+#define SEND_PACKETS 1
 #define PROTO_MSG_HEAD_LEN 15
 
 enum {
@@ -54,8 +54,8 @@ int test_server(int argc, char** argv) {
         /* send. */
         body.set_data("hello world!");
         head.set_seq(123);
-        // head.set_cmd(KP_REQ_TEST_AUTO_SEND);
-        head.set_cmd(KP_REQ_TEST_HELLO);
+        head.set_cmd(KP_REQ_TEST_AUTO_SEND);
+        // head.set_cmd(KP_REQ_TEST_HELLO);
         head.set_len(body.ByteSizeLong());
 
         memcpy(buf, head.SerializeAsString().c_str(), head.ByteSizeLong());

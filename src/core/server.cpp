@@ -7,6 +7,8 @@
 #include "util/set_proc_title.h"
 #include "util/util.h"
 
+// #define DAEMONSIZE
+
 void init_server(int argc, char** argv) {
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);

@@ -66,8 +66,10 @@ Codec::STATUS Connection::conn_read() {
     }
 
     int read_len = m_recv_buf->read_fd(fd(), m_errno);
-    LOG_TRACE("read from fd: %d, data len: %d, readed data len: %d",
-              fd(), read_len, m_recv_buf->readable_len());
+    if (read_len >= 0) {
+        LOG_TRACE("read from fd: %d, data len: %d, readed data len: %d",
+                  fd(), read_len, m_recv_buf->readable_len());
+    }
 
     if (read_len == 0) {
         LOG_TRACE("connection is closed! fd: %d!", fd());

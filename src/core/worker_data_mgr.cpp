@@ -67,7 +67,7 @@ bool WorkerDataMgr::del_worker_info(int pid) {
     return true;
 }
 
-bool WorkerDataMgr::get_worker_chanel(int pid, int* chs) {
+bool WorkerDataMgr::get_worker_channel(int pid, int* chs) {
     if (chs == nullptr) {
         return false;
     }

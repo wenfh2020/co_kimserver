@@ -165,6 +165,7 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     task->co = GetCurrThreadCo();
     task->cmd = cmd;
 
+    /* push task into the handling queue. */
     std::vector<rds_co_data_t*>& datas = itr->second;
     co_data = datas[rand() % datas.size()];
     co_data->tasks.push(task);

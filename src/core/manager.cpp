@@ -144,7 +144,7 @@ bool Manager::create_worker(int worker_index) {
 
     if (socketpair(PF_UNIX, SOCK_STREAM, 0, data_fds) < 0) {
         LOG_ERROR("create socket pair failed! %d: %s", errno, strerror(errno));
-        m_net->close_chanel(ctrl_fds);
+        m_net->close_channel(ctrl_fds);
         return false;
     }
 
@@ -168,7 +168,7 @@ bool Manager::create_worker(int worker_index) {
         close(data_fds[1]);
 
         if (!m_net->init_manager_channel(ctrl_fds[0], data_fds[0])) {
-            LOG_CRIT("chanel fd add event failed! kill child: %d", pid);
+            LOG_CRIT("channel fd add event failed! kill child: %d", pid);
             kill(pid, SIGKILL);
             return false;
         }
@@ -179,8 +179,8 @@ bool Manager::create_worker(int worker_index) {
 
         return true;
     } else {
-        m_net->close_chanel(data_fds);
-        m_net->close_chanel(ctrl_fds);
+        m_net->close_channel(data_fds);
+        m_net->close_channel(ctrl_fds);
         LOG_ERROR("error: %d, %s", errno, strerror(errno));
     }
 

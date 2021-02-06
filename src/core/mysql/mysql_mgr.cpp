@@ -157,7 +157,7 @@ int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is
     auto it_node = m_dbs.find(node);
     if (it_node == m_dbs.end()) {
         LOG_ERROR("can not find node: %s.", node.c_str());
-        return ERR_DB_CAT_NOT_FIND_NODE;
+        return ERR_DB_CAN_NOT_FIND_NODE;
     }
 
     int err;
