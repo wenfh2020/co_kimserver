@@ -23,6 +23,9 @@ class Module : public Base, public So {
     virtual int handle_request(const Request* req) {
         return ERR_UNKOWN_CMD;
     }
+    virtual int filter_request(const Request* req) {
+        return ERR_UNKOWN_CMD;
+    }
 };
 
 #define REGISTER_HANDLER(class_name)                                                  \
@@ -35,7 +38,7 @@ class Module : public Base, public So {
     virtual int handle_request(const Request* req) {                                  \
         auto it = m_cmd_funcs.find(req->msg_head()->cmd());                           \
         if (it == m_cmd_funcs.end()) {                                                \
-            return ERR_UNKOWN_CMD;                                                    \
+            return filter_request(req);                                               \
         }                                                                             \
         return (this->*(it->second))(req);                                            \
     }                                                                                 \

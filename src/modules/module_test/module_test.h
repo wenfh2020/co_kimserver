@@ -14,9 +14,12 @@ class MoudleTest : public Module {
         HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::test_hello);
     }
 
+    virtual int filter_request(const Request* req);
+
    private:
     // protobuf.
     int test_hello(const Request* req);
+    int test_auto_send(const Request* req);
 };
 
 }  // namespace kim
