@@ -1,7 +1,7 @@
 #include "zk_client.h"
 
 #include "protobuf/sys/nodes.pb.h"
-// #include "sys_cmd.h"
+#include "sys_cmd.h"
 #include "util/util.h"
 
 namespace kim {
@@ -511,7 +511,7 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
         LOG_INFO("add zk node done! path: %s", json_nodes[i]("path").c_str());
     }
 
-    // m_net->sys_cmd()->send_children_reg_zk_node(rn);
+    m_net->sys_cmd()->send_reg_zk_node_to_worker(rn);
     m_net->nodes()->print_debug_nodes_info();
     LOG_INFO("on zk register done! path: %s", task->path.c_str());
 }
@@ -519,7 +519,7 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
 void ZkClient::on_zk_node_deleted(const kim::zk_task_t* task) {
     LOG_INFO("zk node: %s deleted!", task->path.c_str());
     if (m_net->nodes()->del_zk_node(task->path)) {
-        // m_net->sys_cmd()->send_children_del_zk_node(task->path);
+        m_net->sys_cmd()->send_del_zk_node_to_worker(task->path);
     }
 }
 
@@ -541,7 +541,7 @@ void ZkClient::on_zk_get_data(const kim::zk_task_t* task) {
 
     if (m_net->nodes()->add_zk_node(node)) {
         m_net->nodes()->print_debug_nodes_info();
-        // m_net->sys_cmd()->send_children_add_zk_node(node);
+        m_net->sys_cmd()->send_add_zk_node_to_worker(node);
     }
 }
 
@@ -572,7 +572,7 @@ void ZkClient::on_zk_data_change(const kim::zk_task_t* task) {
 
     if (m_net->nodes()->add_zk_node(node)) {
         m_net->nodes()->print_debug_nodes_info();
-        // m_net->sys_cmd()->send_children_add_zk_node(node);
+        m_net->sys_cmd()->send_add_zk_node_to_worker(node);
     }
 }
 
@@ -609,11 +609,9 @@ void ZkClient::on_zk_child_change(const kim::zk_task_t* task) {
     }
 
     /* delete paths. */
-    if (del_paths.size() > 0) {
-        for (size_t i = 0; i < del_paths.size(); i++) {
-            if (m_net->nodes()->del_zk_node(del_paths[i])) {
-                // m_net->sys_cmd()->send_children_del_zk_node(del_paths[i]);
-            }
+    for (size_t i = 0; i < del_paths.size(); i++) {
+        if (m_net->nodes()->del_zk_node(del_paths[i])) {
+            m_net->sys_cmd()->send_del_zk_node_to_worker(del_paths[i]);
         }
     }
 

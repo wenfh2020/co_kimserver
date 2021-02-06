@@ -1,5 +1,17 @@
 #include "network.h"
 
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include "request.h"
 
 namespace kim {
@@ -57,7 +69,13 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
             return false;
         }
 
-        /* 启动集群内部 accept 协程。 */
+        task = m_coroutines->create_co_task(c, co_handle_accept_nodes_conn);
+        if (task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            return false;
+        }
+        co_resume(task->co);
     }
 
     /* gate listen. */
@@ -209,20 +227,15 @@ int Network::listen_to_port(const char* host, int port) {
     return fd;
 }
 
-void* Network::co_handle_accept_nodes_conn(void*) {
-    co_enable_hook_sys();
-    return 0;
-}
-
 void Network::on_repeat_timer() {
     if (is_manager()) {
         if (m_zk_cli != nullptr) {
             m_zk_cli->on_repeat_timer();
         }
-        report_payload_to_zookeeper();
+        // report_payload_to_zookeeper();
     } else {
         /* send payload info to manager. */
-        report_payload_to_manager();
+        // report_payload_to_manager();
     }
 }
 
@@ -313,6 +326,52 @@ bool Network::report_payload_to_manager() {
     return true;
 }
 
+void* Network::co_handle_accept_nodes_conn(void* d) {
+    co_enable_hook_sys();
+    co_task_t* task = (co_task_t*)d;
+    Connection* c = task->c;
+    Network* net = (Network*)c->privdata();
+    return net->handle_accept_nodes_conn(d);
+}
+
+void* Network::handle_accept_nodes_conn(void*) {
+    Connection* c;
+    char ip[NET_IP_STR_LEN];
+    int fd, port, family, max = MAX_ACCEPTS_PER_CALL;
+
+    while (max--) {
+        fd = anet_tcp_accept(m_errstr, m_node_host_fd, ip, sizeof(ip), &port, &family);
+        if (fd == ANET_ERR) {
+            if (errno != EWOULDBLOCK) {
+                LOG_ERROR("accepting client connection failed: fd: %d, errstr %s",
+                          m_node_host_fd, m_errstr);
+            }
+            m_coroutines->co_sleep(1000, m_node_host_fd, POLLIN);
+            continue;
+        }
+
+        LOG_INFO("accepted server %s:%d, fd: %d", ip, port, fd);
+
+        c = create_conn(fd, Codec::TYPE::PROTOBUF);
+        if (c == nullptr) {
+            LOG_ERROR("add data fd read event failed, fd: %d", fd);
+            close_conn(fd);
+            continue;
+        }
+
+        c->set_system(true);
+
+        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
+        if (co_task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            continue;
+        }
+        co_resume(co_task->co);
+    }
+    return 0;
+}
+
 void* Network::co_handle_accept_gate_conn(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
@@ -348,17 +407,17 @@ void* Network::handle_accept_gate_conn(void* d) {
         LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
 
         /* manager transfers client fd to worker. */
+        ch = {fd, family, static_cast<int>(m_gate_codec), 0};
+
         for (;;) {
-            ch = {fd, family, static_cast<int>(m_gate_codec), 0};
             err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
             if (err == ERR_OK) {
                 break;
+            } else if (err == EAGAIN) {
+                LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
+                m_coroutines->co_sleep(1000, channel_fd, POLLOUT);
+                continue;
             } else {
-                if (err == EAGAIN) {
-                    LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
-                    m_coroutines->co_sleep(1000, channel_fd, POLLOUT);
-                    continue;
-                }
                 LOG_ERROR("write channel failed! errno: %d", err);
                 break;
             }
@@ -396,7 +455,7 @@ void* Network::handle_read_transfer_fd(void* d) {
         err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
         if (err != 0) {
             if (err == EAGAIN) {
-                LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
+                // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
                 m_coroutines->co_sleep(1000, data_fd, POLLIN);
                 continue;
             } else {
@@ -501,7 +560,7 @@ bool Network::process_msg(Connection* c) {
 }
 
 bool Network::process_tcp_msg(Connection* c) {
-    LOG_TRACE("handle tcp msg, fd: %d", c->fd());
+    // LOG_TRACE("handle tcp msg, fd: %d", c->fd());
 
     int fd, res;
     Request* req;
@@ -511,7 +570,7 @@ bool Network::process_tcp_msg(Connection* c) {
     uint32_t old_cnt, old_bytes;
 
     fd = c->fd();
-    res = ERR_OK;
+    res = ERR_UNKOWN_CMD;
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
@@ -524,36 +583,42 @@ bool Network::process_tcp_msg(Connection* c) {
     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
 
-    LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
 
     while (codec_res == Codec::STATUS::OK) {
         if (c->is_system()) {
             res = m_sys_cmd->handle_msg(req);
-            if (res != ERR_OK) {
+            if (res != ERR_OK && res != ERR_UNKOWN_CMD) {
                 LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
                 break;
             }
-        } else {
-            res = m_module_mgr->handle_request(req);
+        }
+
+        if (res == ERR_UNKOWN_CMD) {
+            res = is_request(head->cmd())
+                      ? m_module_mgr->handle_request(req)
+                      : m_module_mgr->handle_request(req);
             if (res != ERR_OK) {
-                LOG_WARN("find cmd handler failed! fd: %d, cmd: %d",
-                         fd, head->cmd());
+                LOG_WARN("find cmd handler failed! ret: %d, fd: %d, cmd: %d",
+                         res, fd, head->cmd());
                 break;
             }
         }
 
         head->Clear();
         body->Clear();
+        res = ERR_UNKOWN_CMD;
 
         /* continue to decode the recv buffer. */
         codec_res = c->fetch_data(*head, *body);
         LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
     }
 
-    if (res != ERR_OK ||
+    if ((res != ERR_OK && res != ERR_UNKOWN_CMD) ||
         codec_res == Codec::STATUS::ERR ||
         codec_res == Codec::STATUS::CLOSED) {
-        LOG_DEBUG("conn read failed. fd: %d", fd);
+        LOG_DEBUG("conn read failed. res: %d, codec res: %d, fd: %d, cmd: %d",
+                  res, codec_res, fd, head->cmd());
         SAFE_DELETE(req);
         return false;
     }
@@ -865,7 +930,7 @@ int Network::send_to_worker(int cmd, uint64_t seq, const std::string& data) {
         }
 
         if (!send_req(it->second, cmd, seq, data)) {
-            LOG_ALERT("send to child failed! fd: %d", v.second->ctrl_fd);
+            LOG_ALERT("send to worker failed! fd: %d", v.second->ctrl_fd);
             continue;
         }
     }
@@ -953,6 +1018,262 @@ bool Network::set_gate_codec(const std::string& codec_type) {
         return true;
     }
     return false;
+}
+
+bool Network::update_conn_state(int fd, Connection::STATE state) {
+    auto it = m_conns.find(fd);
+    if (it == m_conns.end()) {
+        return false;
+    }
+    it->second->set_state(state);
+    return true;
+}
+
+bool Network::add_client_conn(const std::string& node_id, const fd_t& f) {
+    Connection* c = get_conn(f);
+    if (c == nullptr) {
+        return false;
+    }
+    m_node_conns[node_id] = c;
+    return true;
+}
+
+int Network::send_to_node(const std::string& node_type, const std::string& obj,
+                          const MsgHead& head, const MsgBody& body) {
+    if (!is_worker()) {
+        LOG_ERROR("send_to_node only for worker!");
+        return ERR_INVALID_PROCESS_TYPE;
+    }
+
+    LOG_DEBUG("send to node, type: %s, obj: %s", node_type.c_str(), obj.c_str());
+
+    int ret;
+    node_t* node;
+    Connection* c;
+    std::string node_id;
+
+    node = m_nodes->get_node_in_hash(node_type, obj);
+    if (node == nullptr) {
+        LOG_ERROR("can not find node type: %s", node_type.c_str());
+        return ERR_CAN_NOT_FIND_NODE;
+    }
+
+    c = get_node_conn(node->host, node->port, node->worker_index);
+    if (c == nullptr) {
+        LOG_ERROR("can not find node, node type: %s, host: %s, port: %d, worker index: %d",
+                  node_type.c_str(), node->host.c_str(), node->port, node->worker_index);
+        return ERR_NODE_CONNECT_FAILED;
+    }
+
+    /* wait for return. */
+    ret = send_to(c, head, body);
+    if (ret != ERR_OK) {
+        return ret;
+    }
+
+    m_coroutines->co_sleep(1000);
+    return ERR_OK;
+}
+
+Connection* Network::get_node_conn(const std::string& host, int port, int worker_index) {
+    Connection* c;
+    co_task_t* task;
+    std::string node_id;
+    bool try_connect = false;
+
+    node_id = format_nodes_id(host, port, worker_index);
+    auto it = m_node_conns.find(node_id);
+    if (it != m_node_conns.end()) {
+        c = it->second;
+    } else {
+        c = auto_connect(host, port, worker_index);
+    }
+
+    if (c->is_connected()) {
+        return c;
+    }
+
+    /* doc: https://wenfh2020.com/2020/10/23/kimserver-node-contact/ */
+    if (c->is_try_connect()) {
+        /* create a new coroutines. */
+        task = m_coroutines->create_co_task(c, co_handle_requests);
+        if (task == nullptr) {
+            LOG_ERROR("create new corotines failed!");
+            close_conn(c);
+            return nullptr;
+        }
+        co_resume(task->co);
+
+        /* A1 contact with B1. */
+        if (m_sys_cmd->send_connect_req_to_worker(c) != ERR_OK) {
+            LOG_ERROR("send CMD_REQ_CONNECT_TO_WORKER failed! fd: %d", c->fd());
+            close_conn(c);
+            return nullptr;
+        }
+
+        try_connect = true;
+    }
+
+    LOG_DEBUG("check connect status......");
+
+    if (c->is_connecting() || c->is_try_connect()) {
+        /* wait connect result. */
+        for (int i = 0; i < 15; i++) {
+            m_coroutines->co_sleep(100);
+            /* find conn again, maybe it was changed in sleep time. */
+            auto it = m_node_conns.find(node_id);
+            if (it == m_node_conns.end()) {
+                LOG_ERROR("connect node failed!, host: %s, port: %d, index: %d",
+                          host.c_str(), port, worker_index);
+                return nullptr;
+            }
+            c = it->second;
+            if (c->is_invalid()) {
+                LOG_ERROR("connect node failed!, host: %s, port: %d, index: %d",
+                          host.c_str(), port, worker_index);
+                return nullptr;
+            }
+            if (c->is_connected()) {
+                return c;
+            }
+        }
+    }
+
+    if (try_connect) {
+        close_conn(c);
+    }
+
+    LOG_ERROR("connect node failed!, host: %s, port: %d, index: %d",
+              host.c_str(), port, worker_index);
+
+    return nullptr;
+}
+
+Connection* Network::auto_connect(const std::string& host, int port, int worker_index) {
+    int fd;
+    Connection* c;
+    std::string node_id;
+
+    /* auto connect. */
+    int rv, ret;
+    char portstr[6];
+    struct addrinfo hints, *servinfo, *p;
+    sockaddr saddr;
+    size_t saddrlen;
+    bool completed = false;
+
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    LOG_DEBUG("get addr info, host: %s", host.c_str());
+
+    if ((rv = getaddrinfo(host.c_str(), portstr, &hints, &servinfo)) != 0) {
+        LOG_ERROR("get addr info failed! host: %s, err: %s",
+                  host.c_str(), gai_strerror(rv));
+        return nullptr;
+    }
+
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        /* Try to create the socket and to connect it.
+             * If we fail in the socket() call, or on connect(), we retry with
+             * the next entry in servinfo. */
+        fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (fd != -1) {
+            break;
+        }
+    }
+
+    if (fd == -1) {
+        LOG_ERROR("create socket failed! host: %s", host.c_str());
+        freeaddrinfo(servinfo);
+        return nullptr;
+    }
+
+    saddrlen = p->ai_addrlen;
+    memcpy(&saddr, p->ai_addr, p->ai_addrlen);
+    freeaddrinfo(servinfo);
+
+    c = create_conn(fd);
+    if (c == nullptr) {
+        LOG_ERROR("create conn failed! fd: %d", fd);
+        close_fd(fd);
+        return nullptr;
+    }
+
+    if (anet_no_block(m_errstr, fd) != ANET_OK) {
+        LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
+        goto error;
+    }
+
+    if (anet_keep_alive(m_errstr, fd, 100) != ANET_OK) {
+        LOG_ERROR("set socket keep alive failed! fd: %d, errstr: %s", fd, m_errstr);
+        goto error;
+    }
+
+    if (anet_set_tcp_no_delay(m_errstr, fd, 1) != ANET_OK) {
+        LOG_ERROR("set socket no delay failed! fd: %d, errstr: %s", fd, m_errstr);
+        goto error;
+    }
+
+    c->init(Codec::TYPE::PROTOBUF);
+    c->set_privdata(this);
+    c->set_active_time(now());
+    c->set_system(true);
+    c->set_state(Connection::STATE::TRY_CONNECT);
+
+    /* A1 connect to B1, and save B1's connection. */
+    node_id = format_nodes_id(host, port, worker_index);
+    m_node_conns[node_id] = c;
+    c->set_node_id(node_id);
+
+    /* create corotines to handle_msg. */
+    /* check connect. */
+    for (int i = 0; i < 3; i++) {
+        ret = anet_check_connect_done(fd, &saddr, saddrlen, completed);
+        if (ret == ANET_ERR) {
+            LOG_ERROR("connect failed! host: %s, port: %d", host.c_str(), port);
+            goto error;
+        }
+        if (completed) {
+            LOG_DEBUG("connect node done! %s:%d", host.c_str(), port);
+            return c;
+        }
+        m_coroutines->co_sleep(1000, fd, POLLOUT);
+    }
+
+    if (!completed) {
+        LOG_ERROR("set socket no delay failed! fd: %d, errstr: %s", fd, m_errstr);
+        goto error;
+    }
+
+    return c;
+
+error:
+    close_conn(fd);
+    return nullptr;
+}
+
+bool Network::add_wait_info(wait_info_t* d) {
+    return true;
+}
+
+wait_info_t* Network::get_wait_info(uint64_t id) {
+    auto it = m_wait_infos.find(id);
+    if (it == m_wait_infos.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+bool Network::del_wait_info(uint64_t id) {
+    auto it = m_wait_infos.find(id);
+    if (it == m_wait_infos.end()) {
+        return false;
+    }
+    m_wait_infos.erase(it);
+    return true;
 }
 
 }  // namespace kim

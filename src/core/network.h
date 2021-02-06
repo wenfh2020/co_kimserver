@@ -16,6 +16,13 @@
 
 namespace kim {
 
+typedef struct wait_info_s {
+    uint64_t id = 0;
+    stCoRoutine_t* co = nullptr;
+    bool is_ok = false;
+    Request* ack = nullptr;
+} wait_info_t;
+
 class Network : public INet {
    public:
     enum class TYPE {
@@ -61,6 +68,7 @@ class Network : public INet {
     virtual int worker_index() override { return m_worker_index; }
 
     virtual Nodes* nodes() override { return m_nodes; }
+    virtual SysCmd* sys_cmd() override { return m_sys_cmd; }
     virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
     virtual WorkerDataMgr* worker_data_mgr() override { return m_worker_data_mgr; }
 
@@ -70,9 +78,16 @@ class Network : public INet {
     virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) override;
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) override;
 
+    // virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) override;
+    virtual int send_to_node(const std::string& node_type, const std::string& obj, const MsgHead& head, const MsgBody& body) override;
+
     /* channel. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) override;
     virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) override;
+
+    /* connection. */
+    virtual bool update_conn_state(int fd, Connection::STATE state) override;
+    virtual bool add_client_conn(const std::string& node_id, const fd_t& f) override;
 
     /* connection. */
     void close_fds(); /* use in fork. */
@@ -80,6 +95,7 @@ class Network : public INet {
     void close_channel(int* fds); /* close socketpair. */
     Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
     Connection* get_conn(const fd_t& f);
+    Connection* get_node_conn(const std::string& host, int port, int worker_index);
 
     void clear_routines();
     void on_repeat_timer(); /* call by parent, 10 times/s on Linux. */
@@ -87,6 +103,10 @@ class Network : public INet {
     /* payload. */
     bool report_payload_to_manager();
     bool report_payload_to_zookeeper();
+
+    bool add_wait_info(wait_info_t* d);
+    wait_info_t* get_wait_info(uint64_t id);
+    bool del_wait_info(uint64_t id);
 
    private:
     bool load_config(const CJsonObject& config);
@@ -101,6 +121,7 @@ class Network : public INet {
     void close_fd(int fd);
     bool close_conn(Connection* c);
     Connection* create_conn(int fd);
+    Connection* auto_connect(const std::string& host, int port, int worker_index);
 
     bool process_msg(Connection* c);
     bool process_tcp_msg(Connection* c);
@@ -108,6 +129,7 @@ class Network : public INet {
 
     /* coroutines. */
     static void* co_handle_accept_nodes_conn(void*);
+    void* handle_accept_nodes_conn(void*);
     static void* co_handle_accept_gate_conn(void*);
     void* handle_accept_gate_conn(void*);
     static void* co_handle_read_transfer_fd(void*);
@@ -121,6 +143,7 @@ class Network : public INet {
     Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
     std::unordered_map<int, Connection*> m_conns;              /* key: fd, value: connection. */
     std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
+    std::unordered_map<uint64_t, wait_info_t*> m_wait_infos;
 
     uint64_t m_seq = 0;          /* incremental serial number. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */

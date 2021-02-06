@@ -13,6 +13,7 @@ namespace kim {
 
 class Nodes;
 class WorkerDataMgr;
+class SysCmd;
 
 class INet {
    public:
@@ -24,6 +25,7 @@ class INet {
     virtual CJsonObject* config() { return nullptr; }
     virtual MysqlMgr* mysql_mgr() { return nullptr; }
     virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
+    virtual SysCmd* sys_cmd() { return nullptr; }
 
     /* for cluster. */
     virtual Nodes* nodes() { return nullptr; }
@@ -44,8 +46,18 @@ class INet {
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
     virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
 
+    /* send to other node. */
+    virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) { return false; }
+    /* only for worker. */
+    virtual int send_to_node(const std::string& node_type, const std::string& obj, const MsgHead& head, const MsgBody& body) { return false; }
     /* only for worker. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
+    /* only for manager. */
+    virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
+
+    /* connection. */
+    virtual bool update_conn_state(int fd, Connection::STATE state) { return false; }
+    virtual bool add_client_conn(const std::string& node_id, const fd_t& f) { return false; }
 };
 
 }  // namespace kim

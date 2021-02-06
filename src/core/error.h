@@ -17,6 +17,10 @@ enum E_ERROR {
     ERR_INVALID_PROCESS_TYPE = 9,
     ERR_INVALID_PROTOBUF_PACKET = 10,
     ERR_INVALID_RESPONSE = 11,
+    ERR_TRANSFER_FD_FAILED = 12,
+    ERR_TRANSFER_FD_DONE = 13, /* manager needs to close the fd, after trainsfering to worker. */
+    ERR_NODE_CONNECT_FAILED = 14,
+    ERR_CAN_NOT_FIND_NODE = 15,
 
     ERR_EXEC_SETP = 101,
     ERR_EXEC_CMD_TIMEUOT = 102,
@@ -32,7 +36,7 @@ enum E_ERROR {
     ERR_DB_INVALID_QUERY_SQL = 12003,
     ERR_DB_QUERY_FAILED = 12004, /* read. */
     ERR_DB_EXEC_FAILED = 12005,  /* write. */
-    ERR_DB_CAT_NOT_FIND_NODE = 12006,
+    ERR_DB_CAN_NOT_FIND_NODE = 12006,
 };
 
 }  // namespace kim
