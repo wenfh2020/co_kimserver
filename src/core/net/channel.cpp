@@ -1,9 +1,9 @@
 // ngx_channel.c
 
-#include "chanel.h"
-
 #include <string.h>
 #include <sys/socket.h>
+
+#include "channel.h"
 
 namespace kim {
 
