@@ -186,41 +186,6 @@ void* RedisMgr::co_handle_task(void* arg) {
     return m->handle_task(arg);
 }
 
-void RedisMgr::wait_connect(rds_co_data_t* rds_co) {
-    if (rds_co->tasks.empty()) {
-        co_cond_timedwait(rds_co->cond, -1);
-    }
-
-    task_t* task = nullptr;
-
-    while (rds_co->c == nullptr) {
-        rds_co->c = connect(rds_co->rds->host.c_str(), rds_co->rds->port);
-        if (rds_co->c != nullptr) {
-            add_valid_connect(rds_co);
-            LOG_INFO("redis connect done! node: %s, host: %s, port: %d",
-                     rds_co->rds->node.c_str(),
-                     rds_co->rds->host.c_str(), rds_co->rds->port);
-            return;
-        }
-
-        del_valid_connect(rds_co);
-        LOG_ERROR("connect redis failed! node: %s, host: %s, port: %d",
-                  rds_co->rds->node.c_str(),
-                  rds_co->rds->host.c_str(), rds_co->rds->port);
-
-        /* clear tasks. */
-        while (!rds_co->tasks.empty()) {
-            task = rds_co->tasks.front();
-            rds_co->tasks.pop();
-            co_resume(task->co);
-            task = nullptr;
-        }
-
-        co_sleep(1000);
-        continue;
-    }
-}
-
 void* RedisMgr::handle_task(void* arg) {
     task_t* task;
     rds_co_data_t* rds_co = (rds_co_data_t*)arg;
@@ -293,6 +258,42 @@ void* RedisMgr::handle_task(void* arg) {
     }
 
     return 0;
+}
+
+void RedisMgr::wait_connect(rds_co_data_t* rds_co) {
+    if (rds_co->tasks.empty()) {
+        co_cond_timedwait(rds_co->cond, -1);
+    }
+
+    task_t* task = nullptr;
+
+    while (rds_co->c == nullptr) {
+        rds_co->c = connect(rds_co->rds->host.c_str(), rds_co->rds->port);
+        if (rds_co->c != nullptr) {
+            add_valid_connect(rds_co);
+            LOG_INFO("redis connect done! node: %s, host: %s, port: %d",
+                     rds_co->rds->node.c_str(),
+                     rds_co->rds->host.c_str(), rds_co->rds->port);
+            return;
+        }
+
+        /* clear conn. */
+        del_valid_connect(rds_co);
+        LOG_ERROR("connect redis failed! node: %s, host: %s, port: %d",
+                  rds_co->rds->node.c_str(),
+                  rds_co->rds->host.c_str(), rds_co->rds->port);
+
+        /* clear tasks. */
+        while (!rds_co->tasks.empty()) {
+            task = rds_co->tasks.front();
+            rds_co->tasks.pop();
+            co_resume(task->co);
+            task = nullptr;
+        }
+
+        co_sleep(1000);
+        continue;
+    }
 }
 
 bool RedisMgr::add_valid_connect(rds_co_data_t* rds_co) {

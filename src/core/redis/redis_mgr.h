@@ -33,7 +33,7 @@ class RedisMgr : Logger {
         redis_info_t* rds = nullptr; /* redis info(host,port...) */
         redisContext* c = nullptr;   /* redis conn. */
         std::queue<task_t*> tasks;   /* tasks wait to be handled. */
-        void* privdata = nullptr;
+        void* privdata = nullptr;    /* user's data. */
     } rds_co_data_t;
 
    public:
