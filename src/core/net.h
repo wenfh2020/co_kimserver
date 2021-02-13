@@ -39,6 +39,11 @@ class INet {
     virtual int node_port() { return 0; }
     virtual int worker_index() { return -1; }
 
+    virtual Connection* create_conn(int fd) { return nullptr; }
+    virtual bool close_conn(int fd) { return false; }
+    virtual bool close_conn(Connection* c) { return false; }
+    virtual void close_fd(int fd) {}
+
     /* tcp send. */
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
@@ -49,7 +54,7 @@ class INet {
     /* send to other node. */
     virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) { return false; }
     /* only for worker. */
-    virtual int send_to_node(const std::string& node_type, const std::string& obj, const MsgHead& head, const MsgBody& body) { return false; }
+    virtual int relay_to_node(const std::string& node_type, const std::string& obj, MsgHead* head, MsgBody* body, MsgHead* head_out, MsgBody* body_out) { return false; }
     /* only for worker. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
     /* only for manager. */

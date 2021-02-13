@@ -49,11 +49,11 @@ Codec::STATUS CodecProto::decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& bod
         return CodecProto::STATUS::ERR;
     }
 
-    LOG_TRACE("decode data len: %d, cur read index: %d, write index: %d",
-              sbuf->readable_len(), sbuf->read_index(), sbuf->write_index());
+    // LOG_TRACE("decode data len: %d, cur read index: %d, write index: %d",
+    //           sbuf->readable_len(), sbuf->read_index(), sbuf->write_index());
 
     if (sbuf->readable_len() < PROTO_MSG_HEAD_LEN) {
-        LOG_TRACE("wait for enough data to decode.");
+        // LOG_TRACE("wait for enough data to decode.");
         return CodecProto::STATUS::PAUSE;  // wait for more data to decode.
     }
 
@@ -83,7 +83,8 @@ Codec::STATUS CodecProto::decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& bod
     }
 
     sbuf->skip_bytes(PROTO_MSG_HEAD_LEN + head.len());
-    LOG_TRACE("sbuf readable len: %d, body size: %d", sbuf->readable_len());
+    LOG_TRACE("sbuf readable len: %d, body size: %llu, windex: %llu, rindex: %llu",
+              sbuf->readable_len(), sbuf->write_index(), sbuf->read_index());
     return CodecProto::STATUS::OK;
 }
 

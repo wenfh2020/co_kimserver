@@ -12,9 +12,8 @@ class MoudleTest : public Module {
    public:
     void register_handle_func() {
         HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::test_hello);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_AUTO_SEND, MoudleTest::test_auto_send);
     }
-
-    virtual int filter_request(const Request* req);
 
    private:
     // protobuf.

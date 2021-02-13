@@ -8,6 +8,7 @@
 #include "net.h"
 #include "net/anet.h"
 #include "net/channel.h"
+#include "node_connection.h"
 #include "nodes.h"
 #include "sys_cmd.h"
 #include "util/json/CJsonObject.hpp"
@@ -79,7 +80,7 @@ class Network : public INet {
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) override;
 
     // virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) override;
-    virtual int send_to_node(const std::string& node_type, const std::string& obj, const MsgHead& head, const MsgBody& body) override;
+    virtual int relay_to_node(const std::string& node_type, const std::string& obj, MsgHead* head, MsgBody* body, MsgHead* head_out, MsgBody* body_out) override;
 
     /* channel. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) override;
@@ -91,7 +92,12 @@ class Network : public INet {
 
     /* connection. */
     void close_fds(); /* use in fork. */
-    bool close_conn(int fd);
+
+    virtual void close_fd(int fd) override;
+    virtual bool close_conn(int fd) override;
+    virtual bool close_conn(Connection* c) override;
+    virtual Connection* create_conn(int fd) override;
+
     void close_channel(int* fds); /* close socketpair. */
     Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
     Connection* get_conn(const fd_t& f);
@@ -104,10 +110,6 @@ class Network : public INet {
     bool report_payload_to_manager();
     bool report_payload_to_zookeeper();
 
-    bool add_wait_info(wait_info_t* d);
-    wait_info_t* get_wait_info(uint64_t id);
-    bool del_wait_info(uint64_t id);
-
    private:
     bool load_config(const CJsonObject& config);
     bool load_public(const CJsonObject& config);
@@ -115,13 +117,10 @@ class Network : public INet {
     bool load_modules();
     bool load_corotines();
     bool load_zk_mgr(); /* zookeeper client. */
+    bool load_nodes_conn();
 
     /* socket & connection. */
     int listen_to_port(const char* host, int port);
-    void close_fd(int fd);
-    bool close_conn(Connection* c);
-    Connection* create_conn(int fd);
-    Connection* auto_connect(const std::string& host, int port, int worker_index);
 
     bool process_msg(Connection* c);
     bool process_tcp_msg(Connection* c);
@@ -170,6 +169,7 @@ class Network : public INet {
     int m_manager_data_fd = -1; /* transfer fd. */
 
     Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
+    NodeConn* m_nodes_conn = nullptr;
     Coroutines* m_coroutines = nullptr;
     ModuleMgr* m_module_mgr = nullptr; /* modules so. */
     MysqlMgr* m_mysql_mgr = nullptr;

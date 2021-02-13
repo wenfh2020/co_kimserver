@@ -21,6 +21,8 @@ enum E_ERROR {
     ERR_TRANSFER_FD_DONE = 13, /* manager needs to close the fd, after trainsfering to worker. */
     ERR_NODE_CONNECT_FAILED = 14,
     ERR_CAN_NOT_FIND_NODE = 15,
+    ERR_CAN_NOT_FIND_CONN = 16,
+    ERR_READ_DATA_FAILED = 17,
 
     ERR_EXEC_SETP = 101,
     ERR_EXEC_CMD_TIMEUOT = 102,

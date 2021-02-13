@@ -404,7 +404,7 @@ int SysCmd::on_req_sync_zk_nodes(const Request* req) {
 
 int SysCmd::on_req_connect_to_worker(const Request* req) {
     /* B0. */
-    LOG_DEBUG("A1 connect to B0. handle CMD_REQ_CONNECT_TO_WORKER, fd: %d", req->fd());
+    LOG_DEBUG("A1 --> B0. B0 recv CMD_REQ_CONNECT_TO_WORKER, fd: %d", req->fd());
 
     channel_t ch;
     int fd, err, ret, channel, worker_index, worker_cnt;
@@ -420,6 +420,8 @@ int SysCmd::on_req_connect_to_worker(const Request* req) {
         return ERR_INVALID_WORKER_INDEX;
     }
 
+    LOG_DEBUG("B0 --> A1. CMD_RSP_CONNECT_TO_WORKER, fd: %d", req->fd());
+
     ret = m_net->send_ack(req, ERR_OK, "ok");
     if (ret != ERR_OK) {
         LOG_ERROR("send CMD_RSP_CONNECT_TO_WORKER failed! fd: %d", fd);
@@ -432,7 +434,7 @@ int SysCmd::on_req_connect_to_worker(const Request* req) {
     for (;;) {
         err = write_channel(channel, &ch, sizeof(channel_t), m_logger);
         if (err == ERR_OK) {
-            LOG_TRACE("write channel done! fd: %d", fd);
+            LOG_TRACE("write channel done! transfer fd: %d", fd);
             return ERR_TRANSFER_FD_DONE;
         } else if (err == EAGAIN) {
             LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
@@ -450,7 +452,7 @@ int SysCmd::on_req_connect_to_worker(const Request* req) {
 
 int SysCmd::on_req_tell_worker(const Request* req) {
     /* B1 */
-    LOG_TRACE("B1 send CMD_REQ_TELL_WORKER. fd: %d", req->fd());
+    LOG_TRACE("B1 --> A1 CMD_REQ_TELL_WORKER. fd: %d", req->fd());
 
     int ret;
     target_node tn;
@@ -484,7 +486,7 @@ int SysCmd::on_req_tell_worker(const Request* req) {
 
 int SysCmd::on_rsp_tell_worker(const Request* req) {
     /* A1 */
-    LOG_TRACE("A1 receives CMD_RSP_TELL_WORKER. fd: %d", req->fd());
+    LOG_TRACE("A1 receives B1's CMD_RSP_TELL_WORKER. fd: %d", req->fd());
 
     int ret;
     target_node tn;
@@ -528,6 +530,8 @@ int SysCmd::on_rsp_connect_to_worker(const Request* req) {
     tn.set_ip(m_net->node_host());
     tn.set_port(m_net->node_port());
     tn.set_worker_index(m_net->worker_index());
+
+    LOG_TRACE("A1 --> B1: CMD_REQ_TELL_WORKER. fd: %d", req->fd());
 
     ret = m_net->send_req(req->fd_data(), CMD_REQ_TELL_WORKER, m_net->new_seq(), tn.SerializeAsString());
     if (ret != ERR_OK) {

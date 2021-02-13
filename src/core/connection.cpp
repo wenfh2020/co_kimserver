@@ -149,10 +149,20 @@ Codec::STATUS Connection::conn_write() {
 }
 
 Codec::STATUS Connection::conn_read(MsgHead& head, MsgBody& body) {
-    Codec::STATUS ret = conn_read();
+    Codec::STATUS ret = Codec::STATUS::PAUSE;
+
+    if (m_recv_buf != nullptr) {
+        ret = fetch_data(head, body);
+    }
+
+    if (ret == Codec::STATUS::PAUSE) {
+        ret = conn_read();
+    }
+
     if (ret != Codec::STATUS::OK) {
         return ret;
     }
+
     return decode_proto(head, body);
 }
 

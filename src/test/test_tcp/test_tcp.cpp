@@ -6,7 +6,7 @@
 
 #include "protobuf/proto/msg.pb.h"
 
-#define SEND_PACKETS 1
+#define SEND_PACKETS 10
 #define PROTO_MSG_HEAD_LEN 15
 
 enum {
@@ -80,10 +80,11 @@ int test_server(int argc, char** argv) {
 
         head.ParseFromArray(buf, PROTO_MSG_HEAD_LEN);
         body.ParseFromArray(buf + PROTO_MSG_HEAD_LEN, head.len());
-        printf("recv ack: %d, cmd: %d, seq: %d, len: %d, body len: %zu, %s\n",
+        printf("recv ack: %d, cmd: %d, seq: %d, len: %d, body len: %zu, %s, err: %d, errstr: %s\n",
                packets, head.cmd(), head.seq(), head.len(),
-               body.data().length(), body.data().c_str());
-        // break;
+               body.data().length(), body.data().c_str(),
+               body.mutable_rsp_result()->code(),
+               body.mutable_rsp_result()->msg().c_str());
     }
 
     close(fd);
