@@ -25,7 +25,7 @@ class NodeConn : Logger {
         MsgBody* body_out;
     } task_t;
 
-    /* coroutine's arg. */
+    /* coroutine's arg data.  */
     typedef struct co_data_s {
         std::string node_type;
         std::string host;
@@ -45,7 +45,8 @@ class NodeConn : Logger {
 
    public:
     NodeConn(INet* net, Log* log);
-    virtual ~NodeConn() {}
+    virtual ~NodeConn();
+    void destory();
 
     /**
      * @brief send data from cur node to others.
@@ -65,18 +66,17 @@ class NodeConn : Logger {
     co_data_t* get_co_data(const std::string& node, const std::string& obj);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
-
-    void co_sleep(int ms, int fd = -1, int events = 0);
     void clear_co_tasks(co_data_t* co_data);
-    Connection* auto_connect(const std::string& host, int port, int worker_index);
+    void co_sleep(int ms, int fd = -1, int events = 0);
+
     int handle_sys_message(Connection* c);
     int recv_data(Connection* c, MsgHead* head, MsgBody* body);
+    Connection* auto_connect(const std::string& host, int port, int worker_index);
     Connection* node_connect(const std::string& node_type, const std::string& host, int port, int worker_index);
 
    private:
     INet* m_net = nullptr;
-    char m_errstr[ANET_ERR_LEN];                               /* error string. */
-    std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
+    char m_errstr[ANET_ERR_LEN]; /* error string. */
     std::unordered_map<std::string, node_conn_data_t*> m_coroutines;
 };
 

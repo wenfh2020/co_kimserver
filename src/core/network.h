@@ -122,9 +122,9 @@ class Network : public INet {
     /* socket & connection. */
     int listen_to_port(const char* host, int port);
 
-    bool process_msg(Connection* c);
-    bool process_tcp_msg(Connection* c);
-    bool process_http_msg(Connection* c);
+    int process_msg(Connection* c);
+    int process_tcp_msg(Connection* c);
+    int process_http_msg(Connection* c);
 
     /* coroutines. */
     static void* co_handle_accept_nodes_conn(void*);

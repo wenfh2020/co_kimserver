@@ -1,14 +1,7 @@
 #include "node_connection.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <stdarg.h>
 #include <sys/socket.h>
-#include <unistd.h>
 
 #include "error.h"
 #include "nodes.h"
@@ -21,6 +14,23 @@ namespace kim {
 NodeConn::NodeConn(INet* net, Log* log) : Logger(log), m_net(net) {
 }
 
+NodeConn::~NodeConn() {
+    destory();
+}
+
+void NodeConn::destory() {
+    for (auto& it : m_coroutines) {
+        node_conn_data_t* d = it.second;
+        for (auto& v : d->coroutines) {
+            clear_co_tasks(v);
+            m_net->close_conn(v->c);
+            co_cond_free(v->cond);
+            co_free(v->co);
+        }
+        SAFE_DELETE(d);
+    }
+}
+
 int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj,
                             MsgHead* head_in, MsgBody* body_in, MsgHead* head_out, MsgBody* body_out) {
     if (!m_net->is_worker()) {
@@ -30,22 +40,22 @@ int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj
 
     int ret;
     task_t* task;
-    co_data_t* co_data;
+    co_data_t* cd;
 
-    co_data = get_co_data(node_type, obj);
-    if (co_data == nullptr) {
+    cd = get_co_data(node_type, obj);
+    if (cd == nullptr) {
         LOG_ERROR("can not find conn, node_type: %s", node_type.c_str());
         return ERR_CAN_NOT_FIND_CONN;
     }
 
     /* add task, then wait to handle. */
     task = new task_t{GetCurrThreadCo(), node_type, obj, head_in, body_in, ERR_OK, head_out, body_out};
-    co_data->tasks.push(task);
+    cd->tasks.push(task);
 
-    co_cond_signal(co_data->cond);
-    LOG_TRACE("signal co handler! node: %s, co: %p", node_type.c_str(), co_data->co);
+    co_cond_signal(cd->cond);
+    LOG_TRACE("signal co handler! node: %s, co: %p", node_type.c_str(), cd->co);
     co_yield_ct();
-    LOG_TRACE("signal co handler done! node: %s, co: %p", node_type.c_str(), co_data->co);
+    LOG_TRACE("signal co handler done! node: %s, co: %p", node_type.c_str(), cd->co);
 
     ret = task->ret;
     SAFE_DELETE(task);
@@ -55,7 +65,7 @@ int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj
 NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const std::string& obj) {
     int hash;
     node_t* node;
-    co_data_t* co_data;
+    co_data_t* cd;
     std::string node_id;
     node_conn_data_t* conn_data;
 
@@ -66,6 +76,7 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
     }
 
     node_id = format_nodes_id(node->host, node->port, node->worker_index);
+
     auto it = m_coroutines.find(node_id);
     if (it == m_coroutines.end()) {
         conn_data = new node_conn_data_t;
@@ -74,28 +85,27 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
         conn_data = (node_conn_data_t*)it->second;
         if (conn_data->coroutines.size() >= conn_data->max_co_cnt) {
             hash = hash_fnv1_64(obj.c_str(), obj.size());
-            co_data = conn_data->coroutines[hash % conn_data->coroutines.size()];
-            return co_data;
+            cd = conn_data->coroutines[hash % conn_data->coroutines.size()];
+            return cd;
         }
     }
 
-    LOG_INFO("create coroutines to handle new connection!");
-    /* create coroutines. */
-
     /* create co_data_t. */
-    co_data = new co_data_t;
-    co_data->node_type = node_type;
-    co_data->host = node->host;
-    co_data->port = node->port;
-    co_data->worker_index = node->worker_index;
-    co_data->c = nullptr;
-    co_data->privdata = this;
-    co_data->cond = co_cond_alloc();
+    cd = new co_data_t;
+    cd->node_type = node_type;
+    cd->host = node->host;
+    cd->port = node->port;
+    cd->worker_index = node->worker_index;
+    cd->c = nullptr;
+    cd->privdata = this;
+    cd->cond = co_cond_alloc();
 
-    conn_data->coroutines.push_back(co_data);
-    co_create(&(co_data->co), nullptr, co_handle_task, co_data);
-    co_resume(co_data->co);
-    return co_data;
+    conn_data->coroutines.push_back(cd);
+
+    /* create coroutines. */
+    co_create(&(cd->co), nullptr, co_handle_task, cd);
+    co_resume(cd->co);
+    return cd;
 }
 
 void* NodeConn::co_handle_task(void* arg) {
@@ -108,50 +118,41 @@ void* NodeConn::co_handle_task(void* arg) {
 void* NodeConn::handle_task(void* arg) {
     int ret;
     task_t* task;
-    co_data_t* co_data = (co_data_t*)arg;
+    co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
-        if (co_data->tasks.empty()) {
-            LOG_TRACE("no task, then wait! node: %s, co: %p",
-                      co_data->node_type.c_str(), co_data->co);
-            co_cond_timedwait(co_data->cond, -1);
+        if (cd->tasks.empty()) {
+            LOG_TRACE("wait for task! node: %s, co: %p", cd->node_type.c_str(), cd->co);
+            co_cond_timedwait(cd->cond, -1);
             continue;
         }
 
-        if (co_data->c == nullptr) {
+        if (cd->c == nullptr) {
             /* connect manager. (A1 --> B0)*/
-            co_data->c = node_connect(
-                co_data->node_type, co_data->host, co_data->port, co_data->worker_index);
-            if (co_data->c == nullptr) {
-                clear_co_tasks(co_data);
+            cd->c = node_connect(cd->node_type, cd->host, cd->port, cd->worker_index);
+            if (cd->c == nullptr) {
+                clear_co_tasks(cd);
                 continue;
             }
         }
 
-        task = co_data->tasks.front();
-        co_data->tasks.pop();
+        task = cd->tasks.front();
+        cd->tasks.pop();
 
-        /* send data. */
-        ret = m_net->send_to(co_data->c, *task->head_in, *task->body_in);
+        ret = m_net->send_to(cd->c, *task->head_in, *task->body_in);
         if (ret == ERR_OK) {
-            /* recv data. */
-            ret = recv_data(co_data->c, task->head_out, task->body_out);
-        }
-
-        if (ret != ERR_OK) {
-            task->ret = ret;
-            co_resume(task->co);
-            m_net->close_conn(co_data->c);
-            co_data->c = nullptr;
-            clear_co_tasks(co_data);
-            continue;
+            ret = recv_data(cd->c, task->head_out, task->body_out);
         }
 
         task->ret = ret;
         co_resume(task->co);
 
-        LOG_DEBUG("recv data done........!");
-        /* and disconnect. */
+        if (ret != ERR_OK) {
+            m_net->close_conn(cd->c);
+            cd->c = nullptr;
+            clear_co_tasks(cd);
+            continue;
+        }
     }
 
     return 0;
@@ -163,24 +164,27 @@ int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
     for (;;) {
         codec_res = c->conn_read(*head, *body);
         if (codec_res == Codec::STATUS::OK) {
-            break;
-        } else if (codec_res == Codec::STATUS::PAUSE) {
+            return ERR_OK;
+        }
+
+        if (codec_res == Codec::STATUS::PAUSE) {
+            if (m_net->now() - c->active_time() > 2000) {
+                return ERR_READ_DATA_TIMEOUT;
+            }
             co_sleep(100, c->fd(), POLLIN);
             continue;
-        } else {
-            return ERR_READ_DATA_FAILED;
         }
-    }
 
-    return ERR_OK;
+        return ERR_READ_DATA_FAILED;
+    }
 }
 
-void NodeConn::clear_co_tasks(co_data_t* co_data) {
+void NodeConn::clear_co_tasks(co_data_t* cd) {
     task_t* task;
 
-    while (!co_data->tasks.empty()) {
-        task = co_data->tasks.front();
-        co_data->tasks.pop();
+    while (!cd->tasks.empty()) {
+        task = cd->tasks.front();
+        cd->tasks.pop();
         task->ret = ERR_NODE_CONNECT_FAILED;
         co_resume(task->co);
         task = nullptr;
@@ -216,6 +220,8 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
                 LOG_ERROR("handle message failed! fd: %d, ret: %d", c->fd(), ret);
                 break;
             }
+
+            /* update connection's status in SysCmd::on_rsp_tell_worker. */
             if (c->is_connected()) {
                 LOG_INFO("node connect done! node: %s, host: %s, port: %d, index: %d",
                          node_type.c_str(), host.c_str(), port, worker_index);
@@ -234,7 +240,6 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
                       node_type.c_str(), host.c_str(), port, worker_index);
             m_net->close_conn(c);
             c = nullptr;
-            co_sleep(1000);
         }
     }
 
@@ -317,7 +322,6 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
 
     /* A1 connect to B1, and save B1's connection. */
     node_id = format_nodes_id(host, port, worker_index);
-    m_node_conns[node_id] = c;
     c->set_node_id(node_id);
 
     /* check connect. */

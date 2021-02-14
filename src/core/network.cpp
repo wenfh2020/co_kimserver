@@ -547,7 +547,7 @@ void* Network::handle_requests(void* d) {
                 }
             }
 
-            if (!process_msg(c)) {
+            if (process_msg(c) != ERR_OK) {
                 close_conn(fd);
                 task->c = nullptr;
                 break;
@@ -560,11 +560,11 @@ void* Network::handle_requests(void* d) {
     return 0;
 }
 
-bool Network::process_msg(Connection* c) {
+int Network::process_msg(Connection* c) {
     return (c->is_http()) ? process_http_msg(c) : process_tcp_msg(c);
 }
 
-bool Network::process_tcp_msg(Connection* c) {
+int Network::process_tcp_msg(Connection* c) {
     // LOG_TRACE("handle tcp msg, fd: %d", c->fd());
 
     int fd, ret;
@@ -575,7 +575,7 @@ bool Network::process_tcp_msg(Connection* c) {
     uint32_t old_cnt, old_bytes;
 
     fd = c->fd();
-    ret = ERR_UNKOWN_CMD;
+    ret = ERR_OK;
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
@@ -584,15 +584,17 @@ bool Network::process_tcp_msg(Connection* c) {
     body = req->msg_body();
 
     codec_res = c->conn_read(*head, *body);
+    LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
 
     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
 
-    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
-
     while (codec_res == Codec::STATUS::OK) {
+        ret = ERR_UNKOWN_CMD;
+
         if (c->is_system()) {
             ret = m_sys_cmd->handle_msg(req);
+
             if (ret != ERR_OK && ret != ERR_UNKOWN_CMD) {
                 if (ret != ERR_TRANSFER_FD_DONE) {
                     LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
@@ -612,26 +614,21 @@ bool Network::process_tcp_msg(Connection* c) {
 
         head->Clear();
         body->Clear();
-        ret = ERR_UNKOWN_CMD;
 
         codec_res = c->fetch_data(*head, *body);
         LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
     }
 
-    if ((ret != ERR_OK && ret != ERR_UNKOWN_CMD) ||
-        codec_res == Codec::STATUS::ERR ||
-        codec_res == Codec::STATUS::CLOSED) {
-        LOG_DEBUG("conn read failed. ret: %d, codec res: %d, fd: %d, cmd: %d",
-                  ret, codec_res, fd, head->cmd());
-        SAFE_DELETE(req);
-        return false;
+    if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+        LOG_ERROR("read data failed! fd: %d", c->fd());
+        ret = ERR_PACKET_DECODE_FAILED;
     }
 
     SAFE_DELETE(req);
-    return true;
+    return ret;
 }
 
-bool Network::process_http_msg(Connection* c) {
+int Network::process_http_msg(Connection* c) {
     // HttpMsg msg;
     // int old_cnt, old_bytes;
     // Cmd::STATUS cmd_ret;
@@ -662,7 +659,7 @@ bool Network::process_http_msg(Connection* c) {
     //     return false;
     // }
 
-    return true;
+    return ERR_OK;
 }
 
 Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {

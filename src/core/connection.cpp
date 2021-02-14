@@ -18,7 +18,6 @@ Connection::~Connection() {
     SAFE_DELETE(m_codec);
     SAFE_DELETE(m_recv_buf);
     SAFE_DELETE(m_send_buf);
-    SAFE_DELETE(m_wait_send_buf);
 }
 
 bool Connection::init(Codec::TYPE codec) {
@@ -107,12 +106,6 @@ Codec::STATUS Connection::conn_write() {
     SocketBuffer* sbuf;
 
     sbuf = m_send_buf;
-    if (is_connected()) {
-        /* pls send waiting buffer firstly, when connected. */
-        if (m_wait_send_buf != nullptr && m_wait_send_buf->readable_len() > 0) {
-            sbuf = m_wait_send_buf;
-        }
-    }
 
     if (sbuf == nullptr || !sbuf->is_readable()) {
         LOG_TRACE("no data to send! fd: %d, seq: %llu", fd(), id());
@@ -222,10 +215,6 @@ Codec::STATUS Connection::conn_write(const MsgHead& head, const MsgBody& body) {
     }
 
     return conn_write();
-}
-
-Codec::STATUS Connection::conn_write_waiting(const MsgHead& head, const MsgBody& body) {
-    return conn_write(head, body, &m_wait_send_buf, false);
 }
 
 Codec::STATUS Connection::conn_write(

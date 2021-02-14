@@ -58,14 +58,12 @@ class Connection : Logger {
 
     Codec::STATUS conn_read(HttpMsg& msg);
     Codec::STATUS conn_write(const HttpMsg& msg);
-    Codec::STATUS conn_write_waiting(HttpMsg& msg);
     Codec::STATUS fetch_data(HttpMsg& msg);
 
     Codec::STATUS conn_read(MsgHead& head, MsgBody& body);
     Codec::STATUS fetch_data(MsgHead& head, MsgBody& body);
     Codec::STATUS conn_write(const MsgHead& head, const MsgBody& body);
     Codec::STATUS conn_append_message(const MsgHead& head, const MsgBody& body);
-    Codec::STATUS conn_write_waiting(const MsgHead& head, const MsgBody& body);
     Codec::STATUS conn_write();
 
     virtual bool is_need_alive_check();
@@ -99,7 +97,6 @@ class Connection : Logger {
 
     SocketBuffer* m_recv_buf = nullptr;
     SocketBuffer* m_send_buf = nullptr;
-    SocketBuffer* m_wait_send_buf = nullptr;
 
     size_t m_saddr_len = 0;
     struct sockaddr* m_saddr = nullptr;
