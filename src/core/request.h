@@ -9,7 +9,7 @@ namespace kim {
 
 class Request {
    public:
-    Request(const fd_t& f, bool is_http);
+    Request(const fd_t& f, bool is_http = false);
     virtual ~Request();
 
     Request(const Request& req) = delete;

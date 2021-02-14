@@ -67,32 +67,34 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     node_id = format_nodes_id(node->host, node->port, node->worker_index);
     auto it = m_coroutines.find(node_id);
-    if (it != m_coroutines.end()) {
-        LOG_DEBUG("reuse coroutines!");
-        conn_data = (node_conn_data_t*)it->second;
-        hash = hash_fnv1_64(obj.c_str(), obj.size());
-        co_data = conn_data->coroutines[hash % conn_data->coroutines.size()];
-    } else {
-        LOG_INFO("create coroutines to handle new connection!");
-        /* create coroutines. */
+    if (it == m_coroutines.end()) {
         conn_data = new node_conn_data_t;
         m_coroutines[node_id] = conn_data;
-
-        /* create co_data_t. */
-        co_data = new co_data_t;
-        co_data->node_type = node_type;
-        co_data->host = node->host;
-        co_data->port = node->port;
-        co_data->worker_index = node->worker_index;
-        co_data->c = nullptr;
-        co_data->privdata = this;
-        co_data->cond = co_cond_alloc();
-
-        conn_data->coroutines.push_back(co_data);
-        co_create(&(co_data->co), nullptr, co_handle_task, co_data);
-        co_resume(co_data->co);
+    } else {
+        conn_data = (node_conn_data_t*)it->second;
+        if (conn_data->coroutines.size() >= conn_data->max_co_cnt) {
+            hash = hash_fnv1_64(obj.c_str(), obj.size());
+            co_data = conn_data->coroutines[hash % conn_data->coroutines.size()];
+            return co_data;
+        }
     }
 
+    LOG_INFO("create coroutines to handle new connection!");
+    /* create coroutines. */
+
+    /* create co_data_t. */
+    co_data = new co_data_t;
+    co_data->node_type = node_type;
+    co_data->host = node->host;
+    co_data->port = node->port;
+    co_data->worker_index = node->worker_index;
+    co_data->c = nullptr;
+    co_data->privdata = this;
+    co_data->cond = co_cond_alloc();
+
+    conn_data->coroutines.push_back(co_data);
+    co_create(&(co_data->co), nullptr, co_handle_task, co_data);
+    co_resume(co_data->co);
     return co_data;
 }
 
@@ -219,7 +221,7 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
                          node_type.c_str(), host.c_str(), port, worker_index);
                 break;
             }
-            if (m_net->now() - c->active_time() > 3000) {
+            if (m_net->now() - c->active_time() > 2000) {
                 LOG_ERROR("node connect timeout! node: %s, host: %s, port: %d, index: %d",
                           node_type.c_str(), host.c_str(), port, worker_index);
                 break;
@@ -354,38 +356,35 @@ void NodeConn::co_sleep(int ms, int fd, int events) {
 int NodeConn::handle_sys_message(Connection* c) {
     int fd, ret;
     Request* req;
-    MsgHead* head;
-    MsgBody* body;
     Codec::STATUS codec_res;
 
     fd = c->fd();
     ret = ERR_OK;
-    req = new Request(c->fd_data(), false);
-    head = req->msg_head();
-    body = req->msg_body();
+    req = new Request(c->fd_data());
 
     for (;;) {
-        codec_res = c->conn_read(*head, *body);
+        codec_res = c->conn_read(*req->msg_head(), *req->msg_body());
         if (codec_res != Codec::STATUS::OK) {
-            SAFE_DELETE(req);
             if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
                 ret = ERR_READ_DATA_FAILED;
                 LOG_ERROR("conn read failed. codec res: %d, fd: %d", codec_res, fd);
             }
-            return ret;
+            break;
         }
 
         ret = m_net->sys_cmd()->handle_msg(req);
         if (ret != ERR_OK) {
             LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
-            SAFE_DELETE(req);
-            return ret;
+            break;
         }
 
-        head->Clear();
-        body->Clear();
+        req->msg_head()->Clear();
+        req->msg_body()->Clear();
         ret = ERR_OK;
     }
+
+    SAFE_DELETE(req);
+    return ret;
 }
 
 }  // namespace kim
