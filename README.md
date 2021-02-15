@@ -96,7 +96,7 @@ err callback cnt: 0
 
 ---
 
-## 服务配置
+## 6. 服务配置
 
 ```shell
 ./bin/config.json
