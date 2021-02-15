@@ -10,6 +10,8 @@
 
 namespace kim {
 
+void* Manager::m_signal_user_data = nullptr;
+
 Manager::Manager() {
 }
 
@@ -50,6 +52,11 @@ bool Manager::init(const char* conf_path) {
         return false;
     }
 
+    if (!load_signals()) {
+        LOG_ERROR("setup signals failed!");
+        return false;
+    }
+
     create_workers();
     set_proc_title("%s", m_conf("server_name").c_str());
 
@@ -60,6 +67,8 @@ bool Manager::init(const char* conf_path) {
 
 void Manager::on_repeat_timer() {
     co_enable_hook_sys();
+
+    restart_workers();
     if (m_net != nullptr) {
         m_net->on_repeat_timer();
     }
@@ -197,6 +206,100 @@ void Manager::create_workers() {
 
 std::string Manager::worker_name(int index) {
     return format_str("%s_w_%d", m_conf("server_name").c_str(), index);
+}
+
+bool Manager::load_signals() {
+    m_signal_user_data = this;
+    int signals[] = {SIGCHLD, SIGILL, SIGBUS, SIGFPE, SIGKILL};
+    for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); i++) {
+        if (!signal_set(signals[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Manager::signal_set(int signum) {
+    int ret;
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = &signal_handler;
+
+    ret = sigaction(signum, &action, 0);
+    if (ret != 0) {
+        LOG_WARN("setup signal, signum: %d, error: %d, errstr: %s",
+                 signum, errno, strerror(errno));
+        if (signum == SIGKILL) {
+            return true;
+        }
+    }
+    return (ret == 0);
+}
+
+void Manager::signal_handler(int signum) {
+    Manager* m = (Manager*)m_signal_user_data;
+    m->signal_handler_event(signum);
+}
+
+void Manager::signal_handler_event(int signum) {
+    if (signum == SIGCHLD) {
+        int pid, status, res;
+        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (WIFEXITED(status)) {
+                res = WEXITSTATUS(status);
+            } else if (WIFSIGNALED(status)) {
+                res = WTERMSIG(status);
+            } else if (WIFSTOPPED(status)) {
+                res = WSTOPSIG(status);
+            }
+            LOG_CRIT("child terminated! pid: %d, signal %d, error %d:  res: %d!",
+                     pid, signum, status, res);
+            restart_worker(pid);
+        }
+    } else {
+        LOG_CRIT("%s terminated by signal %d!", m_conf("server_name").c_str(), signum);
+        exit(signum);
+    }
+}
+
+void Manager::restart_workers() {
+    int worker_index;
+
+    while (!m_restart_workers.empty()) {
+        worker_index = m_restart_workers.front();
+        m_restart_workers.pop();
+
+        LOG_DEBUG("restart worker, index: %d", worker_index);
+        if (create_worker(worker_index)) {
+            LOG_INFO("restart worker ok! index: %d", worker_index);
+        } else {
+            LOG_ERROR("create worker failed! index: %d", worker_index);
+        }
+    }
+}
+
+bool Manager::restart_worker(pid_t pid) {
+    int chs[2];
+    int worker_index;
+
+    // /* close (manager/worker) channels. */
+    // if (m_net->worker_data_mgr()->get_worker_channel(pid, chs)) {
+    //     m_net->close_conn(chs[0]);
+    //     m_net->close_conn(chs[1]);
+    // }
+
+    /* restart worker by worker index. */
+    worker_index = m_net->worker_data_mgr()->get_worker_index(pid);
+    if (worker_index == -1) {
+        LOG_ERROR("can not find pid: %d work info.");
+        return false;
+    }
+
+    /* work in timer. */
+    m_net->worker_data_mgr()->del_worker_info(pid);
+    m_restart_workers.push(worker_index);
+    return true;
 }
 
 }  // namespace kim

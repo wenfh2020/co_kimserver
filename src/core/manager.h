@@ -19,6 +19,7 @@ class Manager : CoTimer {
     bool load_logger();
     bool load_network();
     bool load_config(const char* path);
+    bool load_signals();
 
     void create_workers();                /* fork children. */
     bool create_worker(int worker_index); /* creates the specified index process. */
@@ -29,12 +30,19 @@ class Manager : CoTimer {
 
     virtual void on_repeat_timer() override;
 
+    /* signals. */
+    bool signal_set(int signum);
+    static void signal_handler(int signum);
+    void signal_handler_event(int signum);
+
    private:
     Log* m_logger = nullptr;  /* logger. */
     Network* m_net = nullptr; /* net work. */
+    static void* m_signal_user_data;
 
-    node_info m_node_info;          /* cluster node. */
-    CJsonObject m_conf, m_old_conf; /* config. */
+    node_info m_node_info;             /* cluster node. */
+    CJsonObject m_conf, m_old_conf;    /* config. */
+    std::queue<int> m_restart_workers; /* workers waiting to restart. restore worker's index. */
 };
 
 }  // namespace kim
