@@ -7,7 +7,7 @@
 #include "protobuf/proto/msg.pb.h"
 #include "server.h"
 
-#define MAX_CONN_CNT 1
+#define MAX_CONN_CNT 5
 
 namespace kim {
 
@@ -55,7 +55,7 @@ class NodeConn : Logger {
      * @param node_type: gate, logic, ... which fill in config.json --> "node_type"
      * @param obj: obj for hash to get the right node.
      * @param head_in: packet head, which send to obj node.
-     * @param body_in: packet data, which send to obj node.
+     * @param body_in: packet body, which send to obj node.
      * @param head_out: ack msg head, recv from obj node.
      * @param body_out: ack msg body, recv from obj node.
      * 
@@ -65,12 +65,13 @@ class NodeConn : Logger {
                       MsgHead* head_in, MsgBody* body_in, MsgHead* head_out, MsgBody* body_out);
 
    protected:
-    co_data_t* get_co_data(const std::string& node, const std::string& obj);
+    co_data_t* get_co_data(const std::string& node_type, const std::string& obj);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
     void clear_co_tasks(co_data_t* co_data);
     void co_sleep(int ms, int fd = -1, int events = 0);
 
+    /* for nodes connect. */
     int handle_sys_message(Connection* c);
     int recv_data(Connection* c, MsgHead* head, MsgBody* body);
     Connection* auto_connect(const std::string& host, int port, int worker_index);

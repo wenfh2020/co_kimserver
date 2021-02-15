@@ -9,6 +9,9 @@
 #include "util/hash.h"
 #include "util/util.h"
 
+#define HEART_BEAT_TIME 2000
+#define MAX_RECV_DATA_TIME 3000
+
 namespace kim {
 
 NodeConn::NodeConn(INet* net, Log* log) : Logger(log), m_net(net) {
@@ -125,7 +128,7 @@ void* NodeConn::handle_task(void* arg) {
     for (;;) {
         if (cd->tasks.empty()) {
             // LOG_TRACE("wait for task! node: %s, co: %p", cd->node_type.c_str(), cd->co);
-            co_cond_timedwait(cd->cond, 2000);
+            co_cond_timedwait(cd->cond, HEART_BEAT_TIME);
         }
 
         if (cd->c == nullptr) {
@@ -177,7 +180,7 @@ int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
         if (codec_res == Codec::STATUS::OK) {
             return ERR_OK;
         } else if (codec_res == Codec::STATUS::PAUSE) {
-            if (m_net->now() - c->active_time() > 2000) {
+            if (m_net->now() - c->active_time() > MAX_RECV_DATA_TIME) {
                 return ERR_READ_DATA_TIMEOUT;
             }
             co_sleep(100, c->fd(), POLLIN);
@@ -369,6 +372,7 @@ void NodeConn::co_sleep(int ms, int fd, int events) {
     poll(&pf, 1, ms);
 }
 
+/* for nodes connect. */
 int NodeConn::handle_sys_message(Connection* c) {
     int fd, ret;
     Request* req;
