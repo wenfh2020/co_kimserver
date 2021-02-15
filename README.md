@@ -8,7 +8,8 @@
 * 基于腾讯开源的轻量级协程库 [libco](https://github.com/Tencent/libco)。
 * 主要使用 C/C++11 语言开发。
 * 支持 tcp 协议。
-* 使用 protobuf 封装协议包。
+* 使用 protobuf 封装通信协议。
+* 服务节点通过 zookeeper 管理，实现分布式微服务布局。
 
 > <font color=red>【注意】</font> 项目尚未完成，请谨慎使用！
 
