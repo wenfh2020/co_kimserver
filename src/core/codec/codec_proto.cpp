@@ -60,7 +60,8 @@ Codec::STATUS CodecProto::decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& bod
     // parse msg head.
     bool ret = head.ParseFromArray(sbuf->raw_read_buffer(), PROTO_MSG_HEAD_LEN);
     if (!ret) {
-        LOG_ERROR("decode head failed");
+        LOG_ERROR("decode  head failed! data len: %d, cur read index: %d, write index: %d",
+                  sbuf->readable_len(), sbuf->read_index(), sbuf->write_index());
         return CodecProto::STATUS::ERR;
     }
 
@@ -83,8 +84,7 @@ Codec::STATUS CodecProto::decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& bod
     }
 
     sbuf->skip_bytes(PROTO_MSG_HEAD_LEN + head.len());
-    LOG_TRACE("sbuf readable len: %d, body size: %llu, windex: %llu, rindex: %llu",
-              sbuf->readable_len(), sbuf->write_index(), sbuf->read_index());
+    LOG_TRACE("sbuf left readable len: %d", sbuf->readable_len());
     return CodecProto::STATUS::OK;
 }
 

@@ -16,6 +16,7 @@ class SysCmd : Logger {
     SysCmd(Log* logger, INet* net);
     virtual ~SysCmd() {}
 
+    int send_heart_beat(Connection* c);
     int send_connect_req_to_worker(Connection* c);
 
     /* worker send data to manager. */
@@ -57,6 +58,9 @@ class SysCmd : Logger {
 
     int on_req_tell_worker(const Request* req);
     int on_rsp_tell_worker(const Request* req);
+
+    int on_req_heart_beat(const Request* req);
+    int on_rsp_heart_beat(const Request* req);
 
    private:
     int check_rsp(const Request* req);

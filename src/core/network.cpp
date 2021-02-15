@@ -584,7 +584,7 @@ int Network::process_tcp_msg(Connection* c) {
     body = req->msg_body();
 
     codec_res = c->conn_read(*head, *body);
-    LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
 
     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
@@ -620,7 +620,7 @@ int Network::process_tcp_msg(Connection* c) {
     }
 
     if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
-        LOG_ERROR("read data failed! fd: %d", c->fd());
+        LOG_DEBUG("read failed! fd: %d", c->fd());
         ret = ERR_PACKET_DECODE_FAILED;
     }
 

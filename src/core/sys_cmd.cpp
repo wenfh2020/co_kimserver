@@ -40,6 +40,17 @@ int SysCmd::handle_msg(const Request* req) {
     return (m_net->is_manager()) ? handle_manager_msg(req) : handle_worker_msg(req);
 }
 
+int SysCmd::send_heart_beat(Connection* c) {
+    LOG_TRACE("send CMD_REQ_HEART_BEAT, fd: %d", c->fd());
+
+    int ret = m_net->send_req(c, CMD_REQ_HEART_BEAT, m_net->new_seq(), "heartbeat");
+    if (ret != ERR_OK) {
+        LOG_ERROR("send CMD_REQ_HEART_BEAT failed! fd: %d", c->fd());
+        return ret;
+    }
+    return ret;
+}
+
 /* A1 contact with B1. */
 int SysCmd::send_connect_req_to_worker(Connection* c) {
     LOG_DEBUG("send CMD_REQ_CONNECT_TO_WORKER, fd: %d", c->fd());
@@ -108,6 +119,9 @@ int SysCmd::handle_worker_msg(const Request* req) {
     switch (req->msg_head()->cmd()) {
         case CMD_RSP_CONNECT_TO_WORKER: {
             return on_rsp_connect_to_worker(req);
+        }
+        case CMD_REQ_HEART_BEAT: {
+            return on_req_heart_beat(req);
         }
         case CMD_REQ_TELL_WORKER: {
             return on_req_tell_worker(req);
@@ -448,6 +462,17 @@ int SysCmd::on_req_connect_to_worker(const Request* req) {
             return ERR_TRANSFER_FD_FAILED;
         }
     }
+}
+
+int SysCmd::on_req_heart_beat(const Request* req) {
+    LOG_TRACE("recv CMD_REQ_HEART_BEAT. fd: %d", req->fd());
+
+    int ret = m_net->send_ack(req, ERR_OK);
+    if (ret != ERR_OK) {
+        LOG_ERROR("send CMD_RSP_HEART_BEAT failed! fd: %d", req->fd());
+        return ERR_REDIS_CONNECT_FAILED;
+    }
+    return ret;
 }
 
 int SysCmd::on_req_tell_worker(const Request* req) {

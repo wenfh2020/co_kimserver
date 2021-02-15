@@ -12,7 +12,8 @@ enum E_CMD {
     CMD_REQ_TELL_WORKER = 23,
     CMD_RSP_TELL_WORKER = 24,
 
-    /* manager and workers communicate. */
+    CMD_REQ_HEART_BEAT = 31,
+    CMD_RSP_HEART_BEAT = 32,
 
     /* zookeeper notice. */
     CMD_REQ_ADD_ZK_NODE = 41,

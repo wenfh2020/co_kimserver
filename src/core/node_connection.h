@@ -7,7 +7,7 @@
 #include "protobuf/proto/msg.pb.h"
 #include "server.h"
 
-#define MAX_CONN_CNT 5
+#define MAX_CONN_CNT 1
 
 namespace kim {
 
@@ -18,26 +18,27 @@ class NodeConn : Logger {
         stCoRoutine_t* co;     /* user's coroutine. */
         std::string node_type; /* dest node type. */
         std::string obj;       /* obj for node hash. */
-        MsgHead* head_in;
-        MsgBody* body_in;
-        int ret;
-        MsgHead* head_out;
-        MsgBody* body_out;
+        MsgHead* head_in;      /* request msg head. */
+        MsgBody* body_in;      /* request msg body. */
+        int ret;               /* result. */
+        MsgHead* head_out;     /* response msg head. */
+        MsgBody* body_out;     /* response msg body. */
     } task_t;
 
     /* coroutine's arg data.  */
     typedef struct co_data_s {
-        std::string node_type;
-        std::string host;
-        int port;
-        int worker_index; /* node worker index. */
-        Connection* c;
+        std::string node_type;     /* node type in system. */
+        std::string host;          /* node host. */
+        int port;                  /* node port. */
+        int worker_index;          /* node worker index. */
+        Connection* c;             /* connection. */
         stCoCond_t* cond;          /* coroutine cond. */
         stCoRoutine_t* co;         /* redis conn's coroutine. */
         std::queue<task_t*> tasks; /* tasks wait to be handled. */
         void* privdata;            /* user's data. */
     } co_data_t;
 
+    /* connections to node. */
     typedef struct node_conn_data_s {
         int max_co_cnt = MAX_CONN_CNT;
         std::vector<co_data_t*> coroutines;
@@ -55,7 +56,8 @@ class NodeConn : Logger {
      * @param obj: obj for hash to get the right node.
      * @param head_in: packet head, which send to obj node.
      * @param body_in: packet data, which send to obj node.
-     * @param body_out: data recv from obj node.
+     * @param head_out: ack msg head, recv from obj node.
+     * @param body_out: ack msg body, recv from obj node.
      * 
      * @return error.h / enum E_ERROR.
      */

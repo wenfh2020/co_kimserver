@@ -118,17 +118,17 @@ void* NodeConn::co_handle_task(void* arg) {
 void* NodeConn::handle_task(void* arg) {
     int ret;
     task_t* task;
+    MsgHead head;
+    MsgBody body;
     co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
         if (cd->tasks.empty()) {
-            LOG_TRACE("wait for task! node: %s, co: %p", cd->node_type.c_str(), cd->co);
-            co_cond_timedwait(cd->cond, -1);
-            continue;
+            // LOG_TRACE("wait for task! node: %s, co: %p", cd->node_type.c_str(), cd->co);
+            co_cond_timedwait(cd->cond, 2000);
         }
 
         if (cd->c == nullptr) {
-            /* connect manager. (A1 --> B0)*/
             cd->c = node_connect(cd->node_type, cd->host, cd->port, cd->worker_index);
             if (cd->c == nullptr) {
                 clear_co_tasks(cd);
@@ -136,18 +136,29 @@ void* NodeConn::handle_task(void* arg) {
             }
         }
 
-        task = cd->tasks.front();
-        cd->tasks.pop();
+        if (cd->tasks.empty()) {
+            ret = m_net->sys_cmd()->send_heart_beat(cd->c);
+            if (ret == ERR_OK) {
+                ret = recv_data(cd->c, &head, &body);
+                if (ret == ERR_OK) {
+                    continue;
+                }
+            }
+        } else {
+            task = cd->tasks.front();
+            cd->tasks.pop();
 
-        ret = m_net->send_to(cd->c, *task->head_in, *task->body_in);
-        if (ret == ERR_OK) {
-            ret = recv_data(cd->c, task->head_out, task->body_out);
+            ret = m_net->send_to(cd->c, *task->head_in, *task->body_in);
+            if (ret == ERR_OK) {
+                ret = recv_data(cd->c, task->head_out, task->body_out);
+            }
+
+            task->ret = ret;
+            co_resume(task->co);
         }
 
-        task->ret = ret;
-        co_resume(task->co);
-
         if (ret != ERR_OK) {
+            LOG_ERROR("conn handle failed! ret: %d, fd: %d", ret, cd->c->fd());
             m_net->close_conn(cd->c);
             cd->c = nullptr;
             clear_co_tasks(cd);
@@ -165,17 +176,17 @@ int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
         codec_res = c->conn_read(*head, *body);
         if (codec_res == Codec::STATUS::OK) {
             return ERR_OK;
-        }
-
-        if (codec_res == Codec::STATUS::PAUSE) {
+        } else if (codec_res == Codec::STATUS::PAUSE) {
             if (m_net->now() - c->active_time() > 2000) {
                 return ERR_READ_DATA_TIMEOUT;
             }
             co_sleep(100, c->fd(), POLLIN);
             continue;
+        } else if (codec_res == Codec::STATUS::CLOSED) {
+            return ERR_CONN_CLOSED;
+        } else {
+            return ERR_READ_DATA_FAILED;
         }
-
-        return ERR_READ_DATA_FAILED;
     }
 }
 
@@ -187,7 +198,6 @@ void NodeConn::clear_co_tasks(co_data_t* cd) {
         cd->tasks.pop();
         task->ret = ERR_NODE_CONNECT_FAILED;
         co_resume(task->co);
-        task = nullptr;
     }
 }
 
@@ -203,8 +213,8 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
     }
 
     /* 
-    * connect to worker (A1 --> B1). 
-    * doc: https://wenfh2020.com/2020/10/23/kimserver-node-contact/ 
+    * A1 worker connects to B0's worker (A1 --> B1). 
+    * https://wenfh2020.com/2020/10/23/kimserver-node-contact/ 
     * */
     if (c->is_try_connect()) {
         if (m_net->sys_cmd()->send_connect_req_to_worker(c) != ERR_OK) {
@@ -227,11 +237,13 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
                          node_type.c_str(), host.c_str(), port, worker_index);
                 break;
             }
+
             if (m_net->now() - c->active_time() > 2000) {
                 LOG_ERROR("node connect timeout! node: %s, host: %s, port: %d, index: %d",
                           node_type.c_str(), host.c_str(), port, worker_index);
                 break;
             }
+
             co_sleep(200, c->fd(), POLLIN);
         }
 
