@@ -9,15 +9,15 @@
     "gate_codec": "protobuf",
     "keep_alive": 30000,
     "log_path": "kimserver.log",
-    "log_level": "info",
+    "log_level": "debug",
     "modules": [
-        "module_test.so"
+        "module_gate.so"
     ],
     "redis": {
         "test": {
             "host": "127.0.0.1",
             "port": 6379,
-            "max_conn_cnt": 5
+            "max_conn_cnt": 1
         }
     },
     "database": {
