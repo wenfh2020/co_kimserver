@@ -113,12 +113,12 @@ void* MysqlMgr::handle_task(void* arg) {
     return 0;
 }
 
-bool MysqlMgr::init(CJsonObject& config) {
+bool MysqlMgr::init(CJsonObject* config) {
     db_info_t* db;
     db_co_t* db_co;
     std::vector<std::string> vec;
 
-    config.GetKeys(vec);
+    config->GetKeys(vec);
 
     /*
         bin/config.json
@@ -130,7 +130,7 @@ bool MysqlMgr::init(CJsonObject& config) {
     }
 
     for (const auto& it : vec) {
-        const CJsonObject& obj = config[it];
+        const CJsonObject& obj = (*config)[it];
         db = new db_info_t;
 
         db->host = obj("host");

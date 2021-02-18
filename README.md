@@ -17,11 +17,19 @@
 
 ---
 
-## 2. 运行环境
+## 2. 架构
 
-项目支持 Linux / MacOS 平台。
+[分布式系统-多进程框架节点通信](https://wenfh2020.com/2020/10/23/kimserver-node-contact/)
 
->【注意】MacOS 平台 Libco 不能成功 hook mysqlclient 等第三方库的阻塞接口，所以 MacOS 平台的某些同步功能不能成功被改造成异步，虽然这样，服务仍然能正常工作。
+<div align=center><img src="doc/images/2021-02-18-18-25-03.png" data-action="zoom"/></div>
+
+---
+
+## 3. 运行环境
+
+项目支持 Linux 平台。
+
+>【注意】Libco 不支持与 jemalloc 同时使用，jemalloc 容易出现死锁。
 
 源码编译前需要先安装依赖的第三方库：
 
@@ -31,11 +39,9 @@
 * cryptopp
 * zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
->【注意】Linux 环境，Libco 不支持与 jemalloc 同时使用，jemalloc 容易出现死锁。
-
 ---
 
-## 3. 编译
+## 4. 编译
 
 到 co_kimserver 根目录，执行编译脚本。
 
@@ -45,7 +51,7 @@
 
 ---
 
-## 4. 运行
+## 5. 运行
 
 编译成功后，进入 bin 目录运行启动服务。
 
@@ -56,35 +62,13 @@ cd bin
 
 ---
 
-## 5. 测试
+## 6. 测试
 
 [压测源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)。
 
 单进程（libco 共享栈）服务本地压力测试：
 
-400 个用户，每个用户发 10,000 个包。
-
----
-
-### 5.1. MacOS
-
-并发：125,006 / s。
-
-```shell
-# ./test_tcp_pressure 127.0.0.1 3355 400 10000
-spend time: 31.9985
-avg:        125006
-send cnt:         4000000
-callback cnt:     4000000
-ok callback cnt:  4000000
-err callback cnt: 0
-```
-
----
-
-### 5.2. Linux
-
-并发：184,838 / s。
+400 个用户，每个用户发 10,000 个包，并发：184,838 / s。
 
 ```shell
 # ./test_tcp_pressure 127.0.0.1 3355 400 10000
@@ -98,7 +82,7 @@ err callback cnt: 0
 
 ---
 
-## 6. 服务配置
+## 7. 服务配置
 
 ```shell
 ./bin/config.json

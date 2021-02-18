@@ -30,7 +30,7 @@ class MysqlMgr : Logger {
     MysqlMgr(Log* logger);
     virtual ~MysqlMgr();
 
-    bool init(CJsonObject& config);
+    bool init(CJsonObject* config);
     /* write. */
     int sql_write(const std::string& node, const std::string& sql);
     /* read. */

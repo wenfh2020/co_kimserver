@@ -8,12 +8,12 @@ double g_begin_time = 0.0;
 bool g_is_end = false;
 bool g_is_read = false;
 
-typedef struct co_task_s {
+typedef struct test_co_task_s {
     int id;
     stCoRoutine_t* co;
-} co_task_t;
+} test_co_task_t;
 
-std::list<co_task_t*> g_coroutines;
+std::list<test_co_task_t*> g_coroutines;
 
 void destory() {
     SAFE_FREE(m_logger);
@@ -45,12 +45,12 @@ void* co_handler_mysql(void* arg) {
 
     int i, ret;
     vec_row_t* rows;
-    // co_task_t* task;
+    // test_co_task_t* task;
     double spend;
     // double begin;
 
     rows = new vec_row_t;
-    // task = (co_task_t*)arg;
+    // task = (test_co_task_t*)arg;
     // begin = time_now();
 
     for (i = 0; i < g_co_query_cnt; i++) {
@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
     }
 
     int i;
-    co_task_t* task;
+    test_co_task_t* task;
 
     g_is_read = !strcasecmp(argv[1], "r");
     g_co_cnt = atoi(argv[2]);
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
     }
 
     for (i = 0; i < g_co_cnt; i++) {
-        task = (co_task_t*)calloc(1, sizeof(co_task_t));
+        task = (test_co_task_t*)calloc(1, sizeof(test_co_task_t));
         task->id = i;
         task->co = nullptr;
         g_coroutines.push_back(task);

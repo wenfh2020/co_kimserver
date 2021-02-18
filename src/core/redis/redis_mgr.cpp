@@ -22,7 +22,6 @@ redisReply* RedisMgr::exec_cmd(const std::string& node, const std::string& cmd) 
         LOG_ERROR("invalid params!");
         return nullptr;
     }
-
     return send_task(node, cmd);
 }
 
@@ -179,10 +178,6 @@ void RedisMgr::clear_co_tasks(rds_co_data_t* cd) {
     }
 }
 
-/* 
-config json: 
-{"redis":{"test":{"host":"127.0.0.1","port":6379,"max_conn_cnt":1}}}
-*/
 bool RedisMgr::init(CJsonObject* config) {
     if (config == nullptr) {
         LOG_ERROR("invalid params!");
