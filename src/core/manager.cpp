@@ -280,7 +280,7 @@ void Manager::restart_workers() {
 }
 
 bool Manager::restart_worker(pid_t pid) {
-    int chs[2];
+    // int chs[2];
     int worker_index;
 
     // /* close (manager/worker) channels. */

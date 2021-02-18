@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "redis/redis_mgr.h"
 #include "request.h"
 
 namespace kim {
@@ -162,6 +163,16 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
 
     if (!load_nodes_conn()) {
         LOG_ERROR("load nodes conn failed!");
+        return false;
+    }
+
+    if (!load_mysql_mgr()) {
+        LOG_ERROR("load mysql pool failed!");
+        return false;
+    }
+
+    if (!load_redis_mgr()) {
+        LOG_ERROR("load redis pool failed!");
         return false;
     }
 
@@ -594,7 +605,6 @@ int Network::process_tcp_msg(Connection* c) {
 
         if (c->is_system()) {
             ret = m_sys_cmd->handle_msg(req);
-
             if (ret != ERR_OK && ret != ERR_UNKOWN_CMD) {
                 if (ret != ERR_TRANSFER_FD_DONE) {
                     LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
@@ -629,36 +639,6 @@ int Network::process_tcp_msg(Connection* c) {
 }
 
 int Network::process_http_msg(Connection* c) {
-    // HttpMsg msg;
-    // int old_cnt, old_bytes;
-    // Cmd::STATUS cmd_ret;
-    // Codec::STATUS codec_res;
-    // Request req(c->fd_data(), true);
-
-    // old_cnt = c->read_cnt();
-    // old_bytes = c->read_bytes();
-
-    // codec_res = c->c onn_read(*req.http_msg());
-    // if (codec_res != Codec::STATUS::ERR) {
-    //     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
-    //     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
-    // }
-
-    // LOG_TRACE("connection is http, read ret: %d", (int)codec_res);
-
-    // while (codec_res == Codec::STATUS::OK) {
-    //     cmd_ret = m_module_mgr->process_req(req);
-    //     msg.Clear();
-    //     codec_res = c->fetch_data(*req.http_msg());
-    //     LOG_TRACE("cmd status: %d", cmd_ret);
-    // }
-
-    // if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
-    //     LOG_TRACE("conn read failed. fd: %d", c->fd());
-    //     close_conn(c);
-    //     return false;
-    // }
-
     return ERR_OK;
 }
 
@@ -812,6 +792,28 @@ bool Network::load_nodes_conn() {
     return true;
 }
 
+bool Network::load_mysql_mgr() {
+    m_mysql_mgr = new MysqlMgr(m_logger);
+    if (!m_mysql_mgr->init(&m_config["database"])) {
+        LOG_ERROR("load database mgr failed!");
+        return false;
+    }
+
+    LOG_INFO("load mysql pool done!");
+    return true;
+}
+
+bool Network::load_redis_mgr() {
+    m_redis_mgr = new RedisMgr(m_logger);
+    if (!m_redis_mgr->init(&m_config["redis"])) {
+        LOG_ERROR("load redis mgr failed!");
+        return false;
+    }
+
+    LOG_INFO("load redis pool done!");
+    return true;
+}
+
 int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
     if (c == nullptr) {
         return ERR_INVALID_CONN;
@@ -935,7 +937,7 @@ int Network::send_to_worker(int cmd, uint64_t seq, const std::string& data) {
             continue;
         }
 
-        if (!send_req(it->second, cmd, seq, data)) {
+        if (send_req(it->second, cmd, seq, data) != ERR_OK) {
             LOG_ALERT("send to worker failed! fd: %d", v.second->ctrl_fd);
             continue;
         }
@@ -957,6 +959,9 @@ void Network::destory() {
     SAFE_DELETE(m_module_mgr);
     SAFE_DELETE(m_mysql_mgr);
     SAFE_DELETE(m_sys_cmd);
+    SAFE_DELETE(m_redis_mgr);
+    SAFE_DELETE(m_nodes_conn);
+    SAFE_DELETE(m_coroutines);
 }
 
 void Network::close_fds() {

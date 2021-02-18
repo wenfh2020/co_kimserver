@@ -17,13 +17,6 @@
 
 namespace kim {
 
-typedef struct wait_info_s {
-    uint64_t id = 0;
-    stCoRoutine_t* co = nullptr;
-    bool is_ok = false;
-    Request* ack = nullptr;
-} wait_info_t;
-
 class Network : public INet {
    public:
     enum class TYPE {
@@ -71,6 +64,7 @@ class Network : public INet {
     virtual Nodes* nodes() override { return m_nodes; }
     virtual SysCmd* sys_cmd() override { return m_sys_cmd; }
     virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
+    virtual RedisMgr* redis_mgr() override { return m_redis_mgr; }
     virtual WorkerDataMgr* worker_data_mgr() override { return m_worker_data_mgr; }
 
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
@@ -118,6 +112,8 @@ class Network : public INet {
     bool load_corotines();
     bool load_zk_mgr(); /* zookeeper client. */
     bool load_nodes_conn();
+    bool load_mysql_mgr();
+    bool load_redis_mgr();
 
     /* socket & connection. */
     int listen_to_port(const char* host, int port);
@@ -137,12 +133,11 @@ class Network : public INet {
     void* handle_requests(void*);
 
    private:
-    Log* m_logger; /* logger. */
-    CJsonObject m_config;
+    Log* m_logger;                                             /* logger. */
+    CJsonObject m_config;                                      /* config. */
     Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
     std::unordered_map<int, Connection*> m_conns;              /* key: fd, value: connection. */
     std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
-    std::unordered_map<uint64_t, wait_info_t*> m_wait_infos;
 
     uint64_t m_seq = 0;          /* incremental serial number. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */
@@ -161,21 +156,22 @@ class Network : public INet {
     int m_gate_port = 0;
     int m_gate_host_fd = -1;
 
-    std::string m_node_type;
-    int m_worker_index = 0;
+    std::string m_node_type; /* current server node type. */
+    int m_worker_index = 0;  /* current process index number. */
 
     /* manager/workers communicate. */
-    int m_manager_ctrl_fd = -1; /* send msg. */
-    int m_manager_data_fd = -1; /* transfer fd. */
+    int m_manager_ctrl_fd = -1; /* channel for send msg. */
+    int m_manager_data_fd = -1; /* channel for transfer fd. */
 
-    Nodes* m_nodes = nullptr; /* server nodes. ketama nodes manager. */
-    NodeConn* m_nodes_conn = nullptr;
-    Coroutines* m_coroutines = nullptr;
-    ModuleMgr* m_module_mgr = nullptr; /* modules so. */
-    MysqlMgr* m_mysql_mgr = nullptr;
-    ZkClient* m_zk_cli = nullptr; /* zookeeper client. */
-    Payload m_payload;            /* pro's payload data. */
-    SysCmd* m_sys_cmd = nullptr;  /* for node communication.  */
+    Nodes* m_nodes = nullptr;           /* server nodes. ketama nodes manager. */
+    NodeConn* m_nodes_conn = nullptr;   /* node connection pool. */
+    Coroutines* m_coroutines = nullptr; /* coroutines pool. */
+    ModuleMgr* m_module_mgr = nullptr;  /* modules so. */
+    MysqlMgr* m_mysql_mgr = nullptr;    /* mysql pool. */
+    RedisMgr* m_redis_mgr = nullptr;    /* redis pool. */
+    ZkClient* m_zk_cli = nullptr;       /* zookeeper client. */
+    Payload m_payload;                  /* pro's payload data. */
+    SysCmd* m_sys_cmd = nullptr;        /* for node communication.  */
 };
 
 }  // namespace kim

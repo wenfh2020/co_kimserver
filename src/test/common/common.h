@@ -38,16 +38,18 @@ bool load_config(const std::string& path) {
 
 bool load_mysql_mgr(Log* logger, CJsonObject& config) {
     g_mysql_mgr = new MysqlMgr(logger);
-    if (!g_mysql_mgr->init(config)) {
+    if (!g_mysql_mgr->init(&config)) {
         LOG_ERROR("load db mgr failed!");
+        return false;
     }
     return true;
 }
 
 bool load_redis_mgr(Log* logger, CJsonObject& config) {
     g_redis_mgr = new RedisMgr(logger);
-    if (!g_redis_mgr->init(config)) {
+    if (!g_redis_mgr->init(&config)) {
         LOG_ERROR("load redis mgr failed!");
+        return false;
     }
     return true;
 }

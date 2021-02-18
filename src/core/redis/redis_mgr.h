@@ -4,6 +4,7 @@
 
 #include <hiredis/hiredis.h>
 
+#include "../coroutines.h"
 #include "../libco/co_routine.h"
 #include "../libco/co_routine_inner.h"
 #include "../server.h"
@@ -30,36 +31,39 @@ class RedisMgr : Logger {
     typedef struct rds_co_data_s {
         stCoCond_t* cond = nullptr;  /* coroutine cond. */
         stCoRoutine_t* co = nullptr; /* redis conn's coroutine. */
-        redis_info_t* rds = nullptr; /* redis info(host,port...) */
+        redis_info_t* ri = nullptr;  /* redis info(host,port...) */
         redisContext* c = nullptr;   /* redis conn. */
         std::queue<task_t*> tasks;   /* tasks wait to be handled. */
         void* privdata = nullptr;    /* user's data. */
     } rds_co_data_t;
 
+    typedef struct rds_co_array_data_s {
+        redis_info_t* ri = nullptr; /* redis info(host,port...) */
+        std::vector<rds_co_data_t*> coroutines;
+    } rds_co_array_data_t;
+
    public:
-    RedisMgr(Log* logger);
+    RedisMgr(Log* log);
     virtual ~RedisMgr();
 
    public:
-    bool init(CJsonObject& config);
+    bool init(CJsonObject* config);
     redisReply* exec_cmd(const std::string& node, const std::string& cmd);
 
    private:
     void destory();
-    void co_sleep(int ms);
-    void wait_connect(rds_co_data_t* rds_co);
-    bool del_valid_connect(rds_co_data_t* rds_co);
-    bool add_valid_connect(rds_co_data_t* rds_co);
     redisContext* connect(const std::string& host, int port);
 
+    void clear_co_tasks(rds_co_data_t* rds_co);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
     redisReply* send_task(const std::string& node, const std::string& cmd);
+    rds_co_data_t* get_co_data(const std::string& node, const std::string& obj);
+    void co_sleep(int ms);
 
    private:
     std::unordered_map<std::string, redis_info_t*> m_rds_infos;
-    std::unordered_map<std::string, std::vector<rds_co_data_t*>> m_valid_coroutines;
-    std::list<rds_co_data_t*> m_all_coroutines;
+    std::unordered_map<std::string, rds_co_array_data_t*> m_coroutines;
 };
 
 }  // namespace kim

@@ -14,6 +14,7 @@ namespace kim {
 class Nodes;
 class WorkerDataMgr;
 class SysCmd;
+class RedisMgr;
 
 class INet {
    public:
@@ -24,6 +25,7 @@ class INet {
     virtual uint64_t new_seq() { return 0; }
     virtual CJsonObject* config() { return nullptr; }
     virtual MysqlMgr* mysql_mgr() { return nullptr; }
+    virtual RedisMgr* redis_mgr() { return nullptr; }
     virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
     virtual SysCmd* sys_cmd() { return nullptr; }
 
@@ -48,6 +50,7 @@ class INet {
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
+    virtual int send_ack(const Request* req, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
     virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
 
