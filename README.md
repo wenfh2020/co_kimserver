@@ -108,15 +108,15 @@ err callback cnt: 0
 {
     "server_name": "kim-gate",              # 服务器名称。
     "worker_cnt": 1,                        # 子进程个数，因为服务是多进程框架，类似 nginx。
-    "node_type": "gate",                    # 节点类型。微服务，可以定义不同节点类型，不同节点间可以相互通信。
-    "node_host": "127.0.0.1",               # 服务集群内部通信 host。
-    "node_port": 3344,                      # 服务集群内部通信 端口。
+    "node_type": "gate",                    # 节点类型（gate/logic/...）。微服务，用户可以根据需要，自定义节点类型。
+    "node_host": "127.0.0.1",               # 服务集群内部节点通信 host。
+    "node_port": 3344,                      # 服务集群内部节点通信 端口。
     "gate_host": "127.0.0.1",               # 服务对外开放 host。（对外部客户端或者第三方服务。不对外服务可以删除该选项。）
     "gate_port": 3355,                      # 服务对外开放端口。（不对外服务可以删除该选项。）
     "gate_codec": "protobuf",               # 服务对外协议类型。目前暂时支持协议类型：protobuf。
     "keep_alive": 30,                       # 服务对外连接保活有效时间。
     "log_path": "kimserver.log",            # 日志文件。
-    "log_level": "info",                    # 日志等级。(trace / debug / notice / warning / err / crit 等。)
+    "log_level": "info",                    # 日志等级。(trace/debug/notice/warning/err/crit)
     "modules": [                            # 业务功能插件，动态库数组。
         "module_test.so"
     ],
