@@ -39,6 +39,8 @@ typedef struct statistics_user_data_s {
 enum {
     KP_REQ_TEST_PROTO = 1001,
     KP_RSP_TEST_PROTO = 1002,
+    KP_REQ_TEST_AUTO_SEND = 1003,
+    KP_RSP_TEST_AUTO_SEND = 1004,
 };
 
 bool check_args(int args, char** argv) {
@@ -209,7 +211,7 @@ Codec::STATUS send_packets(Connection* c) {
             stat->send_cnt++;
             LOG_DEBUG("packets info: fd: %d, packets: %d, send cnt: %d, callback cnt: %d\n",
                       c->fd(), stat->packets, stat->send_cnt, stat->callback_cnt);
-            ret = send_proto(c, KP_REQ_TEST_PROTO, format_str("%d - hello", i));
+            ret = send_proto(c, KP_REQ_TEST_AUTO_SEND, format_str("%d - hello", i));
             if (ret != Codec::STATUS::OK) {
                 return ret;
             }

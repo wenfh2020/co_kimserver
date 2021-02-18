@@ -5,24 +5,20 @@ MUDULE_CREATE(MoudleGate)
 namespace kim {
 
 int MoudleGate::filter_request(const Request* req) {
-    LOG_DEBUG("cmd: %d, seq: %u, len: %d, body data: <%s>",
-              req->msg_head()->cmd(), req->msg_head()->seq(),
-              req->msg_head()->len(), req->msg_body()->data().c_str());
-
     int ret;
     MsgHead* head_out = new MsgHead;
     MsgBody* body_out = new MsgBody;
     MsgHead* head_in = (MsgHead*)req->msg_head();
     MsgBody* body_in = (MsgBody*)req->msg_body();
-    /* send to other nodes. */
 
+    /* send to other nodes. */
     ret = net()->relay_to_node(
         "logic", req->msg_body()->data(), head_in, body_in, head_out, body_out);
 
     if (ret != ERR_OK) {
         ret = net()->send_ack(req, ret, "send to node failed!");
     } else {
-        ret = net()->send_ack(req, ERR_OK, "ok", body_out->data());
+        ret = net()->send_to(req->fd_data(), *head_out, *body_out);
     }
 
     LOG_DEBUG("req, cmd: %d, seq: %u, len: %d, body data: <%s>",

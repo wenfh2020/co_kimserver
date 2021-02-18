@@ -1,6 +1,7 @@
 #ifndef __KIM_SERVER__
 #define __KIM_SERVER__
 
+#include <hiredis/hiredis.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
