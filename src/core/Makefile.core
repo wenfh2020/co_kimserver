@@ -1,7 +1,9 @@
 CC = gcc
 CXX = $(shell command -v ccache >/dev/null 2>&1 && echo "ccache g++" || echo "g++")
 CFLAGS = -g -O0 -Wall -m64 -fPIC -pipe
-CXXFLAG = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT -DTHREADED
+CPPFLAGS = -std=c++11 -g -O0 -Wall -fPIC -pipe -Wno-unused-function -Wno-noexcept-type -m64 -D_GNU_SOURCE=1 -D_REENTRANT -DTHREADED 
+CXXFLAG = -g -Og -Wall -ggdb -m64 -rdynamic
+
 
 VPATH = .
 SUB_DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
@@ -31,9 +33,9 @@ $(SERVER_NAME): $(OBJS)
 	cp -f $@ ../../bin/
 
 %.o:%.cpp
-	$(CXX) $(CXXFLAG) $(INC) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(INC) -c -o $@ $<
 %.o:%.cc
-	$(CXX) $(CXXFLAG) $(INC) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(INC) -c -o $@ $<
 %.o:%.c
 	$(CC) $(CFLAGS) $(INC)  -c -o $@ $<
 
