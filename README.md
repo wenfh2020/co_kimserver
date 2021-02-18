@@ -1,5 +1,9 @@
 # co_kimserver
 
+> <font color=red>【注意】</font> 项目尚未完成，请谨慎使用！
+
+---
+
 ## 1. 简述
 
 `co_kimserver` 是高性能的 TCP 网络通信框架。
@@ -10,8 +14,6 @@
 * 支持 tcp 协议。
 * 使用 protobuf 封装通信协议。
 * 通过 zookeeper 管理服务节点，实现分布式微服务布局。
-
-> <font color=red>【注意】</font> 项目尚未完成，请谨慎使用！
 
 ---
 
@@ -60,7 +62,7 @@ cd bin
 
 单进程（libco 共享栈）服务本地压力测试：
 
-400 个用户，每个用户发 10,000 个包，服务并发能力。
+400 个用户，每个用户发 10,000 个包。
 
 ---
 
@@ -105,13 +107,13 @@ err callback cnt: 0
 ```shell
 {
     "server_name": "kim-gate",              # 服务器名称。
-    "worker_cnt": 1,                        # 子进程个数，因为 kimserver 是多进程框架，类似 nginx。
+    "worker_cnt": 1,                        # 子进程个数，因为服务是多进程框架，类似 nginx。
     "node_type": "gate",                    # 节点类型。微服务，可以定义不同节点类型，不同节点间可以相互通信。
     "node_host": "127.0.0.1",               # 服务集群内部通信 host。
-    "node_port": 3344,                      # 服务集群内部通信端口。
+    "node_port": 3344,                      # 服务集群内部通信 端口。
     "gate_host": "127.0.0.1",               # 服务对外开放 host。（对外部客户端或者第三方服务。不对外服务可以删除该选项。）
     "gate_port": 3355,                      # 服务对外开放端口。（不对外服务可以删除该选项。）
-    "gate_codec": "protobuf",               # 服务对外协议类型。目前暂时支持两种协议类型：protobuf。
+    "gate_codec": "protobuf",               # 服务对外协议类型。目前暂时支持协议类型：protobuf。
     "keep_alive": 30,                       # 服务对外连接保活有效时间。
     "log_path": "kimserver.log",            # 日志文件。
     "log_level": "info",                    # 日志等级。(trace / debug / notice / warning / err / crit 等。)
