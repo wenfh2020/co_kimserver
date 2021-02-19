@@ -27,7 +27,7 @@
 * cryptopp
 * zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
->【注意】Libco 兼容 jemalloc，jemalloc 容易出现死锁。
+>【注意】Libco 不兼容 jemalloc，jemalloc 容易出现死锁。
 
 ---
 
