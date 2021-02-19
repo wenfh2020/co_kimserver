@@ -13,25 +13,13 @@
 * 主要使用 C/C++11 语言开发。
 * 支持 tcp 协议。
 * 使用 protobuf 封装通信协议。
-* 通过 zookeeper 管理服务节点，实现分布式微服务布局。
+* 通过 zookeeper 管理服务节点，支持分布式微服务部署。
 
 ---
 
-## 2. 架构
+## 2. 运行环境
 
-[分布式系统-多进程框架节点通信](https://wenfh2020.com/2020/10/23/kimserver-node-contact/)
-
-<div align=center><img src="doc/images/2021-02-18-18-25-03.png" data-action="zoom"/></div>
-
----
-
-## 3. 运行环境
-
-项目支持 Linux 平台。
-
->【注意】Libco 不支持与 jemalloc 同时使用，jemalloc 容易出现死锁。
-
-源码编译前需要先安装依赖的第三方库：
+项目支持 Linux 平台。源码依赖第三方库：
 
 * mysqlclient
 * protobuf
@@ -39,21 +27,47 @@
 * cryptopp
 * zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
+>【注意】Libco 兼容 jemalloc，jemalloc 容易出现死锁。
+
+---
+
+## 3. 架构
+
+多进程架构，服务支持单节点独立运行，也支持多节点分布式部署。
+
+---
+
+### 3.1. 单节点
+
+* manager 父进程。负责子进程管理调度。
+* worker 子进程。负责客户端详细连接逻辑。
+* module 动态库，业务源码实现。(参考：[co_kimserver/src/modules/](https://github.com/wenfh2020/co_kimserver/tree/main/src/modules))
+
+<div align=center><img src="doc/images/2021-02-19-07-25-03.png" width="85%"/></div>
+
+---
+
+### 3.2. 多节点
+
+`zookeeper` 管理节点，节点相互发现建立通信。下图是多节点建立连接通信流程。
+
+<div align=center><img src="doc/images/2021-02-18-18-25-03.png"/></div>
+
 ---
 
 ## 4. 编译
 
-到 co_kimserver 根目录，执行编译脚本。
+打开 co_kimserver 根目录，执行编译脚本。
 
 ```shell
- ./run.sh compile all
+./run.sh compile all
 ```
 
 ---
 
 ## 5. 运行
 
-编译成功后，进入 bin 目录运行启动服务。
+源码编译成功后，进入 bin 目录运行启动服务。
 
 ```shell
 cd bin
