@@ -8,11 +8,16 @@ MysqlConn::MysqlConn(Log* logger) : Logger(logger) {
 }
 
 MysqlConn::~MysqlConn() {
+    if (m_conn != nullptr) {
+        mysql_close(m_conn);
+        m_conn = nullptr;
+    }
 }
 
 bool MysqlConn::connect(db_info_t* db) {
     if (m_conn != nullptr) {
         mysql_close(m_conn);
+        m_conn = nullptr;
     }
 
     char is_reconnect = 1;

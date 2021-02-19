@@ -9,47 +9,78 @@
 namespace kim {
 
 class MysqlMgr : Logger {
-    /* coroutines arg info. */
-    typedef struct db_co_s {
-        stCoRoutine_t* co = nullptr;
-        db_info_t* db = nullptr;
-        MysqlConn* c = nullptr;
-        void* privdata = nullptr;
-    } db_co_t;
-
-    typedef struct sql_task_s {
+    /* cmd task. */
+    typedef struct task_s {
         stCoRoutine_t* co = nullptr;
         bool is_read = false;
         std::string sql;
-        int err = 0;
+        int ret = 0;
         std::string errstr;
         vec_row_t* query_res_rows = nullptr;
-    } sql_task_t;
+    } task_t;
+
+    /* coroutines arg. */
+    typedef struct co_data_s {
+        stCoRoutine_t* co = nullptr;
+        stCoCond_t* cond = nullptr;
+        db_info_t* db = nullptr;
+        MysqlConn* c = nullptr;
+        void* privdata = nullptr;
+        std::queue<task_t*> tasks; /* tasks wait to be handled. */
+    } co_data_t;
+
+    typedef struct co_array_data_s {
+        db_info_t* db = nullptr;
+        std::vector<co_data_t*> coroutines;
+    } co_array_data_t;
 
    public:
     MysqlMgr(Log* logger);
     virtual ~MysqlMgr();
 
+    /**
+     * bin/config.json
+     * {"database":{"test":{"host":"127.0.0.1","port":3306,"user":"root",
+     *                      "password":"xxx","charset":"utf8mb4","max_conn_cnt":3}}}
+     */
     bool init(CJsonObject* config);
-    /* write. */
+
+    /**
+     * @brief mysql write interface.
+     * 
+     * @param node: define in config.json {"database":{"node":{...}}}
+     * @param sql: mysql commnad string.
+     * 
+     * @return error.h / enum E_ERROR.
+     */
     int sql_write(const std::string& node, const std::string& sql);
-    /* read. */
+
+    /**
+     * @brief mysql read interface.
+     * 
+     * @param node: define in config.json {"database":{"node":{...}}}
+     * @param sql: mysql commnad string.
+     * @param rows: query result.
+     * 
+     * @return error.h / enum E_ERROR.
+     */
     int sql_read(const std::string& node, const std::string& sql, vec_row_t& rows);
 
    private:
     void destory();
 
+    void clear_co_tasks(co_data_t* cd);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
-
+    co_data_t* get_co_data(const std::string& node, const std::string& obj);
     int send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);
+    void co_sleep(int ms);
 
    private:
-    stCoCond_t* m_task_cond = nullptr;
-    std::set<stCoRoutine_t*> m_coroutines;
-
+    /* key: node, valude: db info. */
     std::unordered_map<std::string, db_info_t*> m_dbs;
-    std::unordered_map<std::string, std::queue<sql_task_t*>> m_sql_tasks;
+    /* key: node, value: coroutines array data. */
+    std::unordered_map<std::string, co_array_data_t*> m_coroutines;
 };
 
 }  // namespace kim

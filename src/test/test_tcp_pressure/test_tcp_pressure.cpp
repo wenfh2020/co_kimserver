@@ -16,7 +16,7 @@ enum {
     KP_RSP_TEST_AUTO_SEND = 1004,
 };
 
-int g_test_protocol = KP_REQ_TEST_PROTO;
+int g_test_protocol = KP_REQ_TEST_AUTO_SEND;
 
 int g_packets = 0;
 int g_send_cnt = 0;
