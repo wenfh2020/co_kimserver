@@ -30,8 +30,6 @@ class Connection : Logger {
     const fd_t& fd_data() const { return m_fd_data; }
     void set_fd_data(int fd, uint64_t id) { m_fd_data = {fd, id}; }
 
-    uint64_t now();
-
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
 

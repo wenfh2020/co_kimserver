@@ -10,7 +10,7 @@ namespace kim {
 
 Connection::Connection(Log* logger, int fd, uint64_t id) : Logger(logger) {
     set_fd_data(fd, id);
-    set_active_time(now());
+    set_active_time(mstime());
 }
 
 Connection::~Connection() {
@@ -43,7 +43,7 @@ bool Connection::init(Codec::TYPE codec) {
     }
 
     if (m_codec != nullptr) {
-        set_active_time(now());
+        set_active_time(mstime());
         m_codec->set_codec(codec);
     }
 
@@ -90,7 +90,7 @@ Codec::STATUS Connection::conn_read() {
             m_recv_buf->readable_len() < m_recv_buf->capacity() / 2) {
             m_recv_buf->compact(m_recv_buf->readable_len() * 2);
         }
-        m_active_time = now();
+        m_active_time = mstime();
     }
 
     return Codec::STATUS::OK;
@@ -117,7 +117,7 @@ Codec::STATUS Connection::conn_write() {
         if (m_errno == EAGAIN) {
             return Codec::STATUS::PAUSE;
         } else {
-            LOG_ERROR(
+            LOG_WARN(
                 "send data failed! error: %d, errstr: %s, "
                 " fd: %d, seq: %llu, readable len: %d",
                 m_errno, strerror(m_errno), fd(), id(), sbuf->readable_len());
@@ -137,7 +137,7 @@ Codec::STATUS Connection::conn_write() {
         sbuf->compact(sbuf->readable_len() * 2);
     }
 
-    m_active_time = now();
+    m_active_time = mstime();
     return (sbuf->readable_len() > 0) ? Codec::STATUS::PAUSE : Codec::STATUS::OK;
 }
 
@@ -331,10 +331,6 @@ void Connection::set_addr_info(struct sockaddr* saddr, size_t saddr_len) {
 
 struct sockaddr* Connection::sockaddr() {
     return m_saddr;
-}
-
-uint64_t Connection::now() {
-    return mstime();
 }
 
 }  // namespace kim

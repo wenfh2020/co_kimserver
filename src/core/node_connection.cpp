@@ -9,6 +9,7 @@
 #include "util/hash.h"
 #include "util/util.h"
 
+#define MAX_CONN_CNT 5
 #define HEART_BEAT_TIME 2000
 #define MAX_RECV_DATA_TIME 3000
 
@@ -82,7 +83,7 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     auto it = m_coroutines.find(node_id);
     if (it == m_coroutines.end()) {
-        conn_data = new node_conn_data_t;
+        conn_data = new node_conn_data_t{MAX_CONN_CNT};
         m_coroutines[node_id] = conn_data;
     } else {
         conn_data = (node_conn_data_t*)it->second;
@@ -93,7 +94,6 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
         }
     }
 
-    /* create co_data_t. */
     cd = new co_data_t;
     cd->node_type = node_type;
     cd->host = node->host;
@@ -105,7 +105,6 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     conn_data->coroutines.push_back(cd);
 
-    /* create coroutines. */
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);
     return cd;

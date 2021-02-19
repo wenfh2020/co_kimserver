@@ -30,29 +30,29 @@ class RedisMgr : Logger {
     } task_t;
 
     /* coroutines arg. */
-    typedef struct rds_co_data_s {
-        stCoCond_t* cond = nullptr;  /* coroutine cond. */
+    typedef struct co_data_s {
         stCoRoutine_t* co = nullptr; /* redis conn's coroutine. */
+        stCoCond_t* cond = nullptr;  /* coroutine cond. */
         redis_info_t* ri = nullptr;  /* redis info(host,port...) */
         redisContext* c = nullptr;   /* redis conn. */
         std::queue<task_t*> tasks;   /* tasks wait to be handled. */
         void* privdata = nullptr;    /* user's data. */
-    } rds_co_data_t;
+    } co_data_t;
 
-    typedef struct rds_co_array_data_s {
+    typedef struct co_array_data_s {
         redis_info_t* ri = nullptr; /* redis info(host,port...) */
-        std::vector<rds_co_data_t*> coroutines;
-    } rds_co_array_data_t;
+        std::vector<co_data_t*> coroutines;
+    } co_array_data_t;
 
    public:
     RedisMgr(Log* log);
     virtual ~RedisMgr();
 
    public:
-    /* 
-        ./bin/config json: 
-        {"redis":{"test":{"host":"127.0.0.1","port":6379,"max_conn_cnt":1}}}
-    */
+    /** 
+     * ./bin/config json: 
+     * {"redis":{"test":{"host":"127.0.0.1","port":6379,"max_conn_cnt":1}}}
+     */
     bool init(CJsonObject* config);
 
     /**
@@ -69,18 +69,18 @@ class RedisMgr : Logger {
     void destory();
     redisContext* connect(const std::string& host, int port);
 
-    void clear_co_tasks(rds_co_data_t* rds_co);
+    void clear_co_tasks(co_data_t* cd);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
     redisReply* send_task(const std::string& node, const std::string& cmd);
-    rds_co_data_t* get_co_data(const std::string& node, const std::string& obj);
+    co_data_t* get_co_data(const std::string& node, const std::string& obj);
     void co_sleep(int ms);
 
    private:
     /* key: node, valude: config data. */
     std::unordered_map<std::string, redis_info_t*> m_rds_infos;
     /* key: node, value: conn array data. */
-    std::unordered_map<std::string, rds_co_array_data_t*> m_coroutines;
+    std::unordered_map<std::string, co_array_data_t*> m_coroutines;
 };
 
 }  // namespace kim

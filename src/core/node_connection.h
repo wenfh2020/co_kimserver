@@ -7,12 +7,9 @@
 #include "protobuf/proto/msg.pb.h"
 #include "server.h"
 
-#define MAX_CONN_CNT 5
-
 namespace kim {
 
 class NodeConn : Logger {
-   public:
     /* cmd task. */
     typedef struct task_s {
         stCoRoutine_t* co;     /* user's coroutine. */
@@ -40,7 +37,7 @@ class NodeConn : Logger {
 
     /* connections to node. */
     typedef struct node_conn_data_s {
-        int max_co_cnt = MAX_CONN_CNT;
+        int max_co_cnt;
         std::vector<co_data_t*> coroutines;
     } node_conn_data_t;
 

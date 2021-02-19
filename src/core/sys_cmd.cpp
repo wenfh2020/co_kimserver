@@ -10,14 +10,13 @@ SysCmd::SysCmd(Log* logger, INet* net)
     : Logger(logger), m_net(net) {
 }
 
-/* auto_send(...)
+/*
  * A1 contact with B1. (auto_send func)
  * 
  * A1: node A's worker.
  * B0: node B's manager.
  * B1: node B's worker.
  * 
- * process_sys_message(.)
  * 1. A1 connect to B0. (inner host : inner port)
  * 2. A1 send CMD_REQ_CONNECT_TO_WORKER to B0.
  * 3. B0 send CMD_RSP_CONNECT_TO_WORKER to A1.

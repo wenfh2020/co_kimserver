@@ -16,6 +16,8 @@ enum {
     KP_RSP_TEST_AUTO_SEND = 1004,
 };
 
+int g_test_protocol = KP_REQ_TEST_AUTO_SEND;
+
 int test_server(int argc, char** argv) {
     if (argc < 3) {
         std::cerr << "./test_tcp [ip] [port]" << std::endl;
@@ -54,8 +56,7 @@ int test_server(int argc, char** argv) {
         /* send. */
         body.set_data("hello world!");
         head.set_seq(123);
-        head.set_cmd(KP_REQ_TEST_AUTO_SEND);
-        // head.set_cmd(KP_REQ_TEST_HELLO);
+        head.set_cmd(g_test_protocol);
         head.set_len(body.ByteSizeLong());
 
         memcpy(buf, head.SerializeAsString().c_str(), head.ByteSizeLong());

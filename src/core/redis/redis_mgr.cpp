@@ -29,8 +29,8 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     LOG_DEBUG("send redis task, node: %s, cmd: %s.", node.c_str(), cmd.c_str());
 
     task_t* task;
+    co_data_t* cd;
     redisReply* reply;
-    rds_co_data_t* cd;
 
     cd = get_co_data(node, cmd);
     if (cd == nullptr) {
@@ -39,13 +39,12 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     }
 
     task = new task_t;
-    task->co = GetCurrThreadCo();
     task->cmd = cmd;
-
+    task->co = GetCurrThreadCo();
     cd->tasks.push(task);
 
     co_cond_signal(cd->cond);
-    LOG_TRACE("signal co handler! node: %s, co: %p", node.c_str(), cd->co);
+    LOG_TRACE("signal redis co handler! node: %s, co: %p", node.c_str(), cd->co);
     co_yield_ct();
 
     reply = task->reply;
@@ -54,20 +53,22 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
 }
 
 void* RedisMgr::co_handle_task(void* arg) {
-    rds_co_data_t* cd = (rds_co_data_t*)arg;
+    co_enable_hook_sys();
+
+    co_data_t* cd = (co_data_t*)arg;
+    cd->co = GetCurrThreadCo();
     RedisMgr* m = (RedisMgr*)cd->privdata;
     return m->handle_task(arg);
 }
 
 void* RedisMgr::handle_task(void* arg) {
-    co_enable_hook_sys();
-
     task_t* task;
-    rds_co_data_t* cd = (rds_co_data_t*)arg;
+    co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
         if (cd->tasks.empty()) {
-            LOG_TRACE("no redis task, pls wait! node: %s, co: %p", cd->ri->node.c_str(), cd->co);
+            LOG_TRACE("no redis task, pls wait! node: %s, co: %p",
+                      cd->ri->node.c_str(), cd->co);
             co_cond_timedwait(cd->cond, -1);
             continue;
         }
@@ -127,10 +128,10 @@ void* RedisMgr::handle_task(void* arg) {
     return 0;
 }
 
-RedisMgr::rds_co_data_t* RedisMgr::get_co_data(const std::string& node, const std::string& obj) {
+RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node, const std::string& obj) {
     int hash;
-    rds_co_data_t* cd;
-    rds_co_array_data_t* co_arr_data;
+    co_data_t* cd;
+    co_array_data_t* co_arr_data;
 
     auto it = m_rds_infos.find(node);
     if (it == m_rds_infos.end()) {
@@ -140,19 +141,19 @@ RedisMgr::rds_co_data_t* RedisMgr::get_co_data(const std::string& node, const st
 
     auto itr = m_coroutines.find(node);
     if (itr == m_coroutines.end()) {
-        co_arr_data = new rds_co_array_data_t;
+        co_arr_data = new co_array_data_t;
         co_arr_data->ri = it->second;
         m_coroutines[node] = co_arr_data;
     } else {
-        co_arr_data = (rds_co_array_data_t*)itr->second;
-        if (co_arr_data->coroutines.size() >= co_arr_data->ri->max_conn_cnt) {
+        co_arr_data = (co_array_data_t*)itr->second;
+        if ((int)co_arr_data->coroutines.size() >= co_arr_data->ri->max_conn_cnt) {
             hash = hash_fnv1_64(obj.c_str(), obj.size());
             cd = co_arr_data->coroutines[hash % co_arr_data->coroutines.size()];
             return cd;
         }
     }
 
-    cd = new rds_co_data_t;
+    cd = new co_data_t;
     cd->ri = it->second;
     cd->privdata = this;
     cd->cond = co_cond_alloc();
@@ -160,15 +161,14 @@ RedisMgr::rds_co_data_t* RedisMgr::get_co_data(const std::string& node, const st
     co_arr_data->coroutines.push_back(cd);
 
     LOG_INFO("node: %s, co cnt: %d, max conn cnt: %d, %d",
-             node.c_str(), (int)co_arr_data->coroutines.size(),
-             co_arr_data->ri->max_conn_cnt, it->second->max_conn_cnt);
+             node.c_str(), (int)co_arr_data->coroutines.size(), co_arr_data->ri->max_conn_cnt);
 
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);
     return cd;
 }
 
-void RedisMgr::clear_co_tasks(rds_co_data_t* cd) {
+void RedisMgr::clear_co_tasks(co_data_t* cd) {
     task_t* task;
 
     while (!cd->tasks.empty()) {
@@ -201,9 +201,6 @@ bool RedisMgr::init(CJsonObject* config) {
         ri->host = obj("host");
         ri->port = str_to_int(obj("port"));
         ri->max_conn_cnt = str_to_int(obj("max_conn_cnt"));
-
-        LOG_DEBUG("max client cnt: %d", ri->max_conn_cnt);
-
         if (ri->max_conn_cnt == 0) {
             LOG_ERROR("invalid redis max conn cnt! node: %s", v.c_str());
             goto error;
@@ -243,14 +240,12 @@ redisContext* RedisMgr::connect(const std::string& host, int port) {
         if (c != nullptr) {
             LOG_ERROR("redis conn error: %s", c->errstr);
             redisFree(c);
-        } else {
-            LOG_ERROR("redis conn error: can't allocate redis context.");
         }
+        LOG_ERROR("redis conn error: can't allocate redis context.");
         return nullptr;
     }
 
-    LOG_INFO("redis connect done! conn: %p, host: %s, port: %d",
-             c, host.c_str(), port);
+    LOG_INFO("redis connect done! conn: %p, host: %s, port: %d", c, host.c_str(), port);
     return c;
 }
 
@@ -261,7 +256,7 @@ void RedisMgr::destory() {
     m_rds_infos.clear();
 
     for (auto& it : m_coroutines) {
-        rds_co_array_data_t* d = it.second;
+        co_array_data_t* d = it.second;
         for (auto& v : d->coroutines) {
             redisFree(v->c);
             co_release(v->co);

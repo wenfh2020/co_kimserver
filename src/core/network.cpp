@@ -616,8 +616,13 @@ int Network::process_tcp_msg(Connection* c) {
         if (ret == ERR_UNKOWN_CMD) {
             ret = m_module_mgr->handle_request(req);
             if (ret != ERR_OK) {
-                LOG_WARN("find cmd handler failed! ret: %d, fd: %d, cmd: %d",
-                         ret, fd, head->cmd());
+                if (ret == ERR_UNKOWN_CMD) {
+                    LOG_WARN("can not find cmd handler! ret: %d, fd: %d, cmd: %d",
+                             ret, fd, head->cmd());
+                } else {
+                    LOG_DEBUG("handler cmd failed! ret: %d, fd: %d, cmd: %d",
+                              ret, fd, head->cmd());
+                }
                 break;
             }
         }
@@ -841,7 +846,7 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
             m_coroutines->co_sleep(100, c->fd(), POLLOUT);
             continue;
         } else {
-            LOG_ERROR("send data failed! fd: %d", c->fd());
+            LOG_WARN("send data failed! fd: %d", c->fd());
             return ERR_SEND_DATA_FAILED;
         }
     }
