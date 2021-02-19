@@ -63,8 +63,8 @@ OBJS = $(CPPOBJS) $(COBJS)
 CPPCOMPI=$(CPP) $(CFLAGS) -Wno-deprecated
 CCCOMPI=$(CC) $(CFLAGS)
 
-BUILDEXE = $(CPP) $(BFLAGS) -o $@ $^ $(LINKS) 
-CLEAN = rm -f *.o 
+BUILDEXE = $(CPP) $(BFLAGS) -o $@ $^ $(LINKS)
+CLEAN = rm -f *.o
 
 CPPCOMPILE = $(CPPCOMPI) $< $(FLAGS) $(INCLS) $(MTOOL_INCL) -o $@
 CCCOMPILE = $(CCCOMPI) $< $(FLAGS) $(INCLS) $(MTOOL_INCL) -o $@
@@ -77,7 +77,8 @@ ARSTATICLIB = $(AR) $@.tmp $^ $(AR_FLAGS); \
 BUILDSHARELIB = $(CPPSHARE) $@.tmp $^ $(BS_FLAGS); \
 				if [ $$? -ne 0 ]; then exit 1; fi; \
 				test -d $(DYNAMICLIBPATH) || mkdir -p $(DYNAMICLIBPATH); \
-				mv -f $@.tmp $(DYNAMICLIBPATH)/$@;
+				mv -f $@.tmp $(DYNAMICLIBPATH)/$@; \
+				[ -d /usr/local/lib ] && cp $(DYNAMICLIBPATH)/$@ /usr/local/lib;
 
 .cpp.o:
 	$(CPPCOMPILE)
