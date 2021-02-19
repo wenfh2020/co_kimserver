@@ -46,12 +46,12 @@ bool Log::set_level(const char* level) {
         ll = LL_TRACE;
     } else if (strcasecmp(level, "DEBUG") == 0) {
         ll = LL_DEBUG;
+    } else if (strcasecmp(level, "WARN") == 0) {
+        ll = LL_WARNING;
     } else if (strcasecmp(level, "INFO") == 0) {
         ll = LL_INFO;
     } else if (strcasecmp(level, "NOTICE") == 0) {
         ll = LL_NOTICE;
-    } else if (strcasecmp(level, "WARN") == 0) {
-        ll = LL_WARNING;
     } else if (strcasecmp(level, "ERR") == 0) {
         ll = LL_ERR;
     } else if (strcasecmp(level, "CRIT") == 0) {
@@ -95,7 +95,7 @@ bool Log::log_raw(const char* file_name, int file_line,
     int off;
     char buf[64] = {0};
     struct timeval tv;
-    char levels[][10] = {"EMRG", "ALRT", "CRIT", "ERRO", "WARN", "NOTI", "INFO", "DBUG", "TRAC"};
+    char levels[][10] = {"EMRG", "ALRT", "CRIT", "ERRO", "NOTI", "INFO", "WARN", "DBUG", "TRAC"};
 
     time_t t = time(NULL);
     struct tm* tm = localtime(&t);

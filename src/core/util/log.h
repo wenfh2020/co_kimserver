@@ -15,9 +15,9 @@ class Log {
         LL_ALERT,     /* action must be taken immediately */
         LL_CRIT,      /* critical conditions */
         LL_ERR,       /* error conditions */
-        LL_WARNING,   /* warning conditions */
         LL_NOTICE,    /* normal but significant condition */
         LL_INFO,      /* informational */
+        LL_WARNING,   /* warning conditions */
         LL_DEBUG,     /* debug-level messages */
         LL_TRACE,     /* trace-level messages */
         LL_COUNT
