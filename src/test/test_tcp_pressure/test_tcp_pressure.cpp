@@ -7,7 +7,16 @@
 
 using namespace kim;
 
-#define MAX_SEND_PACKETS_ONCE 300
+#define MAX_SEND_PACKETS_ONCE 100
+
+enum {
+    KP_REQ_TEST_PROTO = 1001,
+    KP_RSP_TEST_PROTO = 1002,
+    KP_REQ_TEST_AUTO_SEND = 1003,
+    KP_RSP_TEST_AUTO_SEND = 1004,
+};
+
+int g_test_protocol = KP_REQ_TEST_PROTO;
 
 int g_packets = 0;
 int g_send_cnt = 0;
@@ -35,13 +44,6 @@ typedef struct statistics_user_data_s {
     int send_cnt = 0;
     int callback_cnt = 0;
 } statistics_user_data_t;
-
-enum {
-    KP_REQ_TEST_PROTO = 1001,
-    KP_RSP_TEST_PROTO = 1002,
-    KP_REQ_TEST_AUTO_SEND = 1003,
-    KP_RSP_TEST_AUTO_SEND = 1004,
-};
 
 bool check_args(int args, char** argv) {
     if (args < 4 ||
@@ -211,7 +213,7 @@ Codec::STATUS send_packets(Connection* c) {
             stat->send_cnt++;
             LOG_DEBUG("packets info: fd: %d, packets: %d, send cnt: %d, callback cnt: %d\n",
                       c->fd(), stat->packets, stat->send_cnt, stat->callback_cnt);
-            ret = send_proto(c, KP_REQ_TEST_AUTO_SEND, format_str("%d - hello", i));
+            ret = send_proto(c, g_test_protocol, format_str("%d - hello", i));
             if (ret != Codec::STATUS::OK) {
                 return ret;
             }
@@ -279,8 +281,9 @@ void* readwrite_routine(void* arg) {
     }
 
     for (;;) {
+        /* there may be delays connecting to the server. */
         if (!check_connect(c)) {
-            co_sleep(1000, fd, POLLIN);
+            co_sleep(1000);
             continue;
         }
 
@@ -331,7 +334,7 @@ void* readwrite_routine(void* arg) {
             continue;
         }
 
-        co_sleep(100, fd, POLLIN);
+        co_sleep(1000, fd, POLLIN);
         continue;
     }
 
