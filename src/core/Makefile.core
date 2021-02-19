@@ -14,7 +14,6 @@ INC := $(INC) \
         -I ./libco
 
 LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
-        -L ./libco/lib \
         -L /usr/local/lib \
         -lcolib -lmysqlclient -lpthread -ldl \
         -lcryptopp -lprotobuf -lhiredis -lzookeeper_mt
