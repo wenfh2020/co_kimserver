@@ -11,7 +11,7 @@ int MoudleGate::filter_request(const Request* req) {
     MsgHead* head_in = (MsgHead*)req->msg_head();
     MsgBody* body_in = (MsgBody*)req->msg_body();
 
-    /* send to other nodes. */
+    /* send to other nodes ("logic"). */
     ret = net()->relay_to_node(
         "logic", req->msg_body()->data(), head_in, body_in, head_out, body_out);
 

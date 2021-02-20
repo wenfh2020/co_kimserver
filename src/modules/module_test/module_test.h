@@ -12,13 +12,15 @@ class MoudleTest : public Module {
    public:
     void register_handle_func() {
         HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::test_hello);
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_AUTO_SEND, MoudleTest::test_auto_send);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_MYSQL, MoudleTest::test_mysql);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_REDIS, MoudleTest::test_redis);
     }
 
    private:
     // protobuf.
     int test_hello(const Request* req);
-    int test_auto_send(const Request* req);
+    int test_mysql(const Request* req);
+    int test_redis(const Request* req);
 };
 
 }  // namespace kim

@@ -57,7 +57,7 @@ void* co_handler_mysql(void* arg) {
         char sql[1024];
 
         if (g_is_read) {
-            snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = 1;");
+            snprintf(sql, sizeof(sql), "select value from mytest.test_async_mysql where id = %d;", i);
             ret = g_mysql_mgr->sql_read("test", sql, *rows);
             show_mysql_res(*rows);
         } else {

@@ -10,13 +10,15 @@ using namespace kim;
 #define MAX_SEND_PACKETS_ONCE 100
 
 enum {
-    KP_REQ_TEST_PROTO = 1001,
-    KP_RSP_TEST_PROTO = 1002,
-    KP_REQ_TEST_AUTO_SEND = 1003,
-    KP_RSP_TEST_AUTO_SEND = 1004,
+    KP_REQ_TEST_HELLO = 1001,
+    KP_RSP_TEST_HELLO = 1002,
+    KP_REQ_TEST_MYSQL = 1003,
+    KP_RSP_TEST_MYSQL = 1004,
+    KP_REQ_TEST_REDIS = 1005,
+    KP_RSP_TEST_REDIS = 1006,
 };
 
-int g_test_protocol = KP_REQ_TEST_AUTO_SEND;
+int g_rest_request = KP_REQ_TEST_MYSQL;
 
 int g_packets = 0;
 int g_send_cnt = 0;
@@ -213,7 +215,7 @@ Codec::STATUS send_packets(Connection* c) {
             stat->send_cnt++;
             LOG_DEBUG("packets info: fd: %d, packets: %d, send cnt: %d, callback cnt: %d\n",
                       c->fd(), stat->packets, stat->send_cnt, stat->callback_cnt);
-            ret = send_proto(c, g_test_protocol, format_str("%d - hello", i));
+            ret = send_proto(c, g_rest_request, format_str("%d - hello", i));
             if (ret != Codec::STATUS::OK) {
                 return ret;
             }
