@@ -12,8 +12,8 @@ class Log {
    public:
     enum {
         LL_EMERG = 0, /* system is unusable */
-        LL_ALERT,     /* action must be taken immediately */
         LL_CRIT,      /* critical conditions */
+        LL_ALERT,     /* action must be taken immediately */
         LL_ERR,       /* error conditions */
         LL_NOTICE,    /* normal but significant condition */
         LL_INFO,      /* informational */

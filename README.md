@@ -8,7 +8,7 @@
 
 `co_kimserver` 是高性能的 TCP 网络通信框架。
 
-* 多进程框架（manager/workers）。
+* 多进程工作模式（manager/workers）。
 * 基于腾讯开源的轻量级协程库 [libco](https://github.com/Tencent/libco)。
 * 主要使用 C/C++11 语言开发。
 * 支持 tcp 协议。
@@ -119,7 +119,7 @@ err callback cnt: 0
     "gate_codec": "protobuf",               # 服务对外协议类型。目前暂时支持协议类型：protobuf。
     "keep_alive": 30,                       # 服务对外连接保活有效时间。
     "log_path": "kimserver.log",            # 日志文件。
-    "log_level": "info",                    # 日志等级。(trace/debug/notice/warning/err/crit)
+    "log_level": "info",                    # 日志等级。(trace/debug/warn/info/notice/error/alert/crit)
     "modules": [                            # 业务功能插件，动态库数组。
         "module_test.so"
     ],
