@@ -280,8 +280,10 @@ void Manager::signal_handler_event(int sig) {
         }
     } else {
         LOG_CRIT("%s terminated by signal %d!", m_config("server_name").c_str(), sig);
-        m_net->zk_client()->close_my_node();
-        usleep(100 * 1000);
+        if (m_net != nullptr) {
+            m_net->zk_client()->close_my_node();
+            usleep(100 * 1000);
+        }
         exit(sig);
     }
 }
