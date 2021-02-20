@@ -3,7 +3,6 @@
 #include <stdarg.h>
 
 #include "error.h"
-#include "util/hash.h"
 
 #define DEF_CONN_CNT 5
 #define MAX_CONN_CNT 30
@@ -32,7 +31,7 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     co_data_t* cd;
     redisReply* reply;
 
-    cd = get_co_data(node, cmd);
+    cd = get_co_data(node);
     if (cd == nullptr) {
         LOG_ERROR("can not find conn, node: %s", node.c_str());
         return nullptr;
@@ -128,10 +127,9 @@ void* RedisMgr::handle_task(void* arg) {
     return 0;
 }
 
-RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node, const std::string& obj) {
-    int hash;
+RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     co_data_t* cd;
-    co_array_data_t* co_arr_data;
+    co_array_data_t* arr;
 
     auto it = m_rds_infos.find(node);
     if (it == m_rds_infos.end()) {
@@ -141,14 +139,16 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node, const std::s
 
     auto itr = m_coroutines.find(node);
     if (itr == m_coroutines.end()) {
-        co_arr_data = new co_array_data_t;
-        co_arr_data->ri = it->second;
-        m_coroutines[node] = co_arr_data;
+        arr = new co_array_data_t;
+        arr->ri = it->second;
+        m_coroutines[node] = arr;
     } else {
-        co_arr_data = (co_array_data_t*)itr->second;
-        if ((int)co_arr_data->coroutines.size() >= co_arr_data->ri->max_conn_cnt) {
-            hash = hash_fnv1_64(obj.c_str(), obj.size());
-            cd = co_arr_data->coroutines[hash % co_arr_data->coroutines.size()];
+        arr = (co_array_data_t*)itr->second;
+        if ((int)arr->coroutines.size() >= arr->ri->max_conn_cnt) {
+            cd = arr->coroutines[arr->cur_index % arr->coroutines.size()];
+            if (++arr->cur_index == arr->coroutines.size()) {
+                arr->cur_index = 0;
+            }
             return cd;
         }
     }
@@ -158,10 +158,10 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node, const std::s
     cd->privdata = this;
     cd->cond = co_cond_alloc();
 
-    co_arr_data->coroutines.push_back(cd);
+    arr->coroutines.push_back(cd);
 
     LOG_INFO("node: %s, co cnt: %d, max conn cnt: %d, %d",
-             node.c_str(), (int)co_arr_data->coroutines.size(), co_arr_data->ri->max_conn_cnt);
+             node.c_str(), (int)arr->coroutines.size(), arr->ri->max_conn_cnt);
 
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);

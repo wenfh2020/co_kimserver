@@ -31,6 +31,7 @@ class MysqlMgr : Logger {
 
     typedef struct co_array_data_s {
         db_info_t* db = nullptr;
+        int cur_index = 0;
         std::vector<co_data_t*> coroutines;
     } co_array_data_t;
 
@@ -72,7 +73,7 @@ class MysqlMgr : Logger {
     void clear_co_tasks(co_data_t* cd);
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
-    co_data_t* get_co_data(const std::string& node, const std::string& obj);
+    co_data_t* get_co_data(const std::string& node);
     int send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);
     void co_sleep(int ms);
 

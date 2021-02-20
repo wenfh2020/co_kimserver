@@ -41,6 +41,7 @@ class RedisMgr : Logger {
 
     typedef struct co_array_data_s {
         redis_info_t* ri = nullptr; /* redis info(host,port...) */
+        int cur_index = 0;
         std::vector<co_data_t*> coroutines;
     } co_array_data_t;
 
@@ -73,7 +74,7 @@ class RedisMgr : Logger {
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
     redisReply* send_task(const std::string& node, const std::string& cmd);
-    co_data_t* get_co_data(const std::string& node, const std::string& obj);
+    co_data_t* get_co_data(const std::string& node);
     void co_sleep(int ms);
 
    private:
