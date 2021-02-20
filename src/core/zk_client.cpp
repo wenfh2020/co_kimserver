@@ -6,34 +6,6 @@
 
 namespace kim {
 
-static const char* cmd_to_string(zk_task_t::CMD cmd) {
-    if (cmd == zk_task_t::CMD::UNKNOWN) {
-        return "unknwon";
-    } else if (cmd == zk_task_t::CMD::REGISTER) {
-        return "register";
-    } else if (cmd == zk_task_t::CMD::GET) {
-        return "get";
-    } else if (cmd == zk_task_t::CMD::SET_DATA) {
-        return "set payload data";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_SESSION_CONNECTD) {
-        return "session connected";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_SESSION_CONNECTING) {
-        return "session connecting";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_SESSION_EXPIRED) {
-        return "session expired";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_NODE_CREATED) {
-        return "node created";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_NODE_DELETED) {
-        return "node deleted";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_NODE_DATA_CAHNGED) {
-        return "data change";
-    } else if (cmd == zk_task_t::CMD::NOTIFY_NODE_CHILD_CAHNGED) {
-        return "child change";
-    } else {
-        return "invalid cmd";
-    }
-}
-
 ZkClient::ZkClient(Log* logger, INet* net)
     : Bio(logger), m_net(net), m_zk(nullptr) {
 }
@@ -127,12 +99,16 @@ void ZkClient::set_zk_log(const std::string& path, utility::zoo_log_lvl level) {
 /* bio thread handle. */
 void ZkClient::bio_process_cmd(zk_task_t* task) {
     LOG_TRACE("process task, path: %s, cmd: %d, cmd str: %s",
-              task->path.c_str(), task->cmd, cmd_to_string(task->cmd));
+              task->path.c_str(), task->cmd, zk_cmd_to_string(task->cmd));
     utility::zoo_rc ret = utility::zoo_rc::z_system_error;
 
     switch (task->cmd) {
         case zk_task_t::CMD::REGISTER: {
             ret = bio_register_node(task);
+            break;
+        }
+        case zk_task_t::CMD::DELETE: {
+            ret = m_zk->delete_node(task->path.c_str(), -1);
             break;
         }
         case zk_task_t::CMD::NOTIFY_SESSION_CONNECTD:
@@ -625,6 +601,15 @@ bool ZkClient::set_payload_data(const std::string& data) {
     }
     LOG_TRACE("set payload data: %s", data.c_str());
     return add_cmd_task(m_payload_node_path, zk_task_t::CMD::SET_DATA, data);
+}
+
+void ZkClient::close_my_node() {
+    if (m_zk != nullptr) {
+        std::string node = m_net->nodes()->get_my_zk_node_path();
+        if (!node.empty()) {
+            add_cmd_task(node, zk_task_t::CMD::DELETE);
+        }
+    }
 }
 
 }  // namespace kim

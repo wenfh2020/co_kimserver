@@ -475,7 +475,6 @@ void* Network::handle_read_transfer_fd(void* d) {
                 m_coroutines->co_sleep(1000, data_fd, POLLIN);
                 continue;
             } else {
-                destory();
                 LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
                 exit(EXIT_FD_TRANSFER);
             }
@@ -966,7 +965,6 @@ void Network::destory() {
     SAFE_DELETE(m_sys_cmd);
     SAFE_DELETE(m_redis_mgr);
     SAFE_DELETE(m_nodes_conn);
-    SAFE_DELETE(m_coroutines);
 }
 
 void Network::close_fds() {

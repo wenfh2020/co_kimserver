@@ -15,6 +15,8 @@ class Nodes;
 class WorkerDataMgr;
 class SysCmd;
 class RedisMgr;
+class ZkClient;
+class Coroutines;
 
 class INet {
    public:
@@ -28,6 +30,7 @@ class INet {
     virtual RedisMgr* redis_mgr() { return nullptr; }
     virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
     virtual SysCmd* sys_cmd() { return nullptr; }
+    virtual ZkClient* zk_client() { return nullptr; }
 
     /* for cluster. */
     virtual Nodes* nodes() { return nullptr; }

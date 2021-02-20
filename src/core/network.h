@@ -66,6 +66,7 @@ class Network : public INet {
     virtual MysqlMgr* mysql_mgr() override { return m_mysql_mgr; }
     virtual RedisMgr* redis_mgr() override { return m_redis_mgr; }
     virtual WorkerDataMgr* worker_data_mgr() override { return m_worker_data_mgr; }
+    virtual ZkClient* zk_client() override { return m_zk_cli; }
 
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
     virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;

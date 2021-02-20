@@ -52,13 +52,10 @@ bool Manager::init(const char* conf_path) {
         return false;
     }
 
-    if (!load_signals()) {
-        LOG_ERROR("setup signals failed!");
-        return false;
-    }
+    load_signals();
 
     create_workers();
-    set_proc_title("%s", m_conf("server_name").c_str());
+    set_proc_title("%s", m_config("server_name").c_str());
 
     init_timer();
     LOG_INFO("init manager done!");
@@ -77,7 +74,7 @@ void Manager::on_repeat_timer() {
 bool Manager::load_logger() {
     char path[MAX_PATH];
     snprintf(path, sizeof(path), "%s/%s",
-             m_node_info.work_path().c_str(), m_conf("log_path").c_str());
+             m_node_info.work_path().c_str(), m_config("log_path").c_str());
 
     m_logger = new Log;
     if (m_logger == nullptr) {
@@ -90,7 +87,7 @@ bool Manager::load_logger() {
         return false;
     }
 
-    if (!m_logger->set_level(m_conf("log_level").c_str())) {
+    if (!m_logger->set_level(m_config("log_level").c_str())) {
         LOG_ERROR("invalid log level!");
         return false;
     }
@@ -108,7 +105,7 @@ bool Manager::load_network() {
         return false;
     }
 
-    if (!m_net->create_m(m_node_info.mutable_addr_info(), m_conf)) {
+    if (!m_net->create_m(m_node_info.mutable_addr_info(), m_config)) {
         LOG_ERROR("init network failed!");
         SAFE_DELETE(m_net);
         return false;
@@ -119,24 +116,24 @@ bool Manager::load_network() {
 }
 
 bool Manager::load_config(const char* path) {
-    CJsonObject conf;
-    if (!conf.Load(path)) {
+    CJsonObject config;
+    if (!config.Load(path)) {
         LOG_ERROR("load json config failed! %s", path);
         return false;
     }
 
-    m_old_conf = m_conf;
-    m_conf = conf;
+    m_old_config = m_config;
+    m_config = config;
     m_node_info.set_conf_path(path);
 
-    if (m_old_conf.ToString() != m_conf.ToString()) {
-        if (m_old_conf.ToString().empty()) {
-            m_node_info.set_worker_cnt(str_to_int(m_conf("worker_cnt")));
-            m_node_info.set_node_type(m_conf("node_type"));
-            m_node_info.mutable_addr_info()->set_node_host(m_conf("node_host"));
-            m_node_info.mutable_addr_info()->set_node_port(str_to_int(m_conf("node_port")));
-            m_node_info.mutable_addr_info()->set_gate_host(m_conf("gate_host"));
-            m_node_info.mutable_addr_info()->set_gate_port(str_to_int(m_conf("gate_port")));
+    if (m_old_config.ToString() != m_config.ToString()) {
+        if (m_old_config.ToString().empty()) {
+            m_node_info.set_worker_cnt(str_to_int(m_config("worker_cnt")));
+            m_node_info.set_node_type(m_config("node_type"));
+            m_node_info.mutable_addr_info()->set_node_host(m_config("node_host"));
+            m_node_info.mutable_addr_info()->set_node_port(str_to_int(m_config("node_port")));
+            m_node_info.mutable_addr_info()->set_gate_host(m_config("gate_host"));
+            m_node_info.mutable_addr_info()->set_gate_port(str_to_int(m_config("gate_port")));
         }
     }
 
@@ -166,7 +163,7 @@ bool Manager::create_worker(int worker_index) {
 
         worker_info_t info{0, worker_index, ctrl_fds[1], data_fds[1], m_node_info.work_path()};
         Worker worker(worker_name(worker_index));
-        if (!worker.init(&info, m_conf)) {
+        if (!worker.init(&info, m_config)) {
             exit(EXIT_CHILD_INIT_FAIL);
         }
         worker.run();
@@ -205,62 +202,7 @@ void Manager::create_workers() {
 }
 
 std::string Manager::worker_name(int index) {
-    return format_str("%s_w_%d", m_conf("server_name").c_str(), index);
-}
-
-bool Manager::load_signals() {
-    m_signal_user_data = this;
-    int signals[] = {SIGCHLD, SIGILL, SIGBUS, SIGFPE, SIGKILL};
-    for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); i++) {
-        if (!signal_set(signals[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool Manager::signal_set(int signum) {
-    int ret;
-    struct sigaction action;
-
-    memset(&action, 0, sizeof(action));
-    action.sa_handler = &signal_handler;
-
-    ret = sigaction(signum, &action, 0);
-    if (ret != 0) {
-        LOG_WARN("setup signal, signum: %d, error: %d, errstr: %s",
-                 signum, errno, strerror(errno));
-        if (signum == SIGKILL) {
-            return true;
-        }
-    }
-    return (ret == 0);
-}
-
-void Manager::signal_handler(int signum) {
-    Manager* m = (Manager*)m_signal_user_data;
-    m->signal_handler_event(signum);
-}
-
-void Manager::signal_handler_event(int signum) {
-    if (signum == SIGCHLD) {
-        int pid, status, res;
-        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-            if (WIFEXITED(status)) {
-                res = WEXITSTATUS(status);
-            } else if (WIFSIGNALED(status)) {
-                res = WTERMSIG(status);
-            } else if (WIFSTOPPED(status)) {
-                res = WSTOPSIG(status);
-            }
-            LOG_CRIT("child terminated! pid: %d, signal %d, error %d:  res: %d!",
-                     pid, signum, status, res);
-            restart_worker(pid);
-        }
-    } else {
-        LOG_CRIT("%s terminated by signal %d!", m_conf("server_name").c_str(), signum);
-        exit(signum);
-    }
+    return format_str("%s_w_%d", m_config("server_name").c_str(), index);
 }
 
 void Manager::restart_workers() {
@@ -300,6 +242,48 @@ bool Manager::restart_worker(pid_t pid) {
     m_net->worker_data_mgr()->del_worker_info(pid);
     m_restart_workers.push(worker_index);
     return true;
+}
+
+void Manager::load_signals() {
+    struct sigaction act;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    act.sa_handler = &signal_handler;
+
+    int signals[] = {SIGCHLD, SIGINT, SIGTERM, SIGSEGV, SIGILL, SIGBUS, SIGFPE, SIGKILL};
+    for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); i++) {
+        sigaction(signals[i], &act, 0);
+    }
+
+    m_signal_user_data = this;
+}
+
+void Manager::signal_handler(int sig) {
+    Manager* m = (Manager*)m_signal_user_data;
+    m->signal_handler_event(sig);
+}
+
+void Manager::signal_handler_event(int sig) {
+    if (sig == SIGCHLD) {
+        int pid, status, ret;
+        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (WIFEXITED(status)) {
+                ret = WEXITSTATUS(status);
+            } else if (WIFSIGNALED(status)) {
+                ret = WTERMSIG(status);
+            } else if (WIFSTOPPED(status)) {
+                ret = WSTOPSIG(status);
+            }
+            LOG_CRIT("child terminated! pid: %d, signal %d, error: %d, ret: %d!",
+                     pid, sig, status, ret);
+            restart_worker(pid);
+        }
+    } else {
+        LOG_CRIT("%s terminated by signal %d!", m_config("server_name").c_str(), sig);
+        m_net->zk_client()->close_my_node();
+        usleep(100 * 1000);
+        exit(sig);
+    }
 }
 
 }  // namespace kim

@@ -36,6 +36,7 @@ class ZkClient : public Bio {
 
     /* payload data. */
     bool set_payload_data(const std::string& data);
+    void close_my_node();
 
     /* callback by zookeeper-client-c. */
     static void on_zookeeper_watch_events(zhandle_t* zh, int type, int state, const char* path, void* privdata);
