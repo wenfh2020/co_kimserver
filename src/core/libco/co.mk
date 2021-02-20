@@ -74,10 +74,10 @@ ARSTATICLIB = $(AR) $@.tmp $^ $(AR_FLAGS); \
 			  test -d $(STATICLIBPATH) || mkdir -p $(STATICLIBPATH); \
 			  mv -f $@.tmp $(STATICLIBPATH)/$@;
 
-BUILDSHARELIB = $(CPPSHARE) $@.tmp $^ $(BS_FLAGS); \
+BUILDSHARELIB = $(CPPSHARE) $@ $^ $(BS_FLAGS); \
 				if [ $$? -ne 0 ]; then exit 1; fi; \
 				test -d $(DYNAMICLIBPATH) || mkdir -p $(DYNAMICLIBPATH); \
-				mv -f $@.tmp $(DYNAMICLIBPATH)/$@; \
+				mv -f $@ $(DYNAMICLIBPATH)/$@; \
 				[ -d /usr/local/lib ] && cp $(DYNAMICLIBPATH)/$@ /usr/local/lib;
 
 .cpp.o:
