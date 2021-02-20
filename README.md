@@ -57,20 +57,25 @@
 
 ## 4. 编译
 
-打开 co_kimserver 根目录，执行编译脚本。
-
 ```shell
-./run.sh compile all
+# 执行脚本生成 protobuf 源码。
+cd ./co_kimserver/src/core/protobuf
+chmod +x gen_proto.sh
+./gen_proto.sh
+
+# 编译整个源码文件。
+cd ./co_kimserver/src
+make clean; make
 ```
 
 ---
 
 ## 5. 运行
 
-源码编译成功后，进入 bin 目录运行启动服务。
+源码编译成功后，进入 bin 目录启动服务。
 
 ```shell
-cd bin
+cd ./co_kimserver/bin
 ./co_kimserver config.json
 ```
 
