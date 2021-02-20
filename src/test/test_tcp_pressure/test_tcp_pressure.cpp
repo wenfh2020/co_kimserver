@@ -18,7 +18,7 @@ enum {
     KP_RSP_TEST_REDIS = 1006,
 };
 
-int g_rest_request = KP_REQ_TEST_MYSQL;
+int g_rest_request = KP_REQ_TEST_HELLO;
 
 int g_packets = 0;
 int g_send_cnt = 0;

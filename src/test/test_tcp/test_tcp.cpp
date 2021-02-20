@@ -12,11 +12,9 @@
 enum {
     KP_REQ_TEST_HELLO = 1001,
     KP_RSP_TEST_HELLO = 1002,
-    KP_REQ_TEST_AUTO_SEND = 1003,
-    KP_RSP_TEST_AUTO_SEND = 1004,
 };
 
-int g_test_protocol = KP_REQ_TEST_AUTO_SEND;
+int g_test_request = KP_REQ_TEST_HELLO;
 
 int test_server(int argc, char** argv) {
     if (argc < 3) {
@@ -56,7 +54,7 @@ int test_server(int argc, char** argv) {
         /* send. */
         body.set_data("hello world!");
         head.set_seq(123);
-        head.set_cmd(g_test_protocol);
+        head.set_cmd(g_test_request);
         head.set_len(body.ByteSizeLong());
 
         memcpy(buf, head.SerializeAsString().c_str(), head.ByteSizeLong());
