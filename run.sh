@@ -13,7 +13,8 @@ core_proto_path=$core_path/protobuf
 kill_process() {
     echo '<------------------'
     name=$1
-    local processes=$(ps -ef | grep $name | grep -v 'grep\|\.log\|vim' | awk '{if ($2 > 1) print $2;}')
+    # _w_ --> subprocess, kill parent will ok!
+    local processes=$(ps -ef | grep $name | grep -v 'grep\|\.log\|vim\|_w_' | awk '{if ($2 > 1) print $2;}')
     for p in $processes; do
         echo "kill pid: $p."
         kill $p
@@ -30,19 +31,15 @@ cat_process() {
 compile_core() {
     cd $core_path
     [ $1x == 'all'x ] && make clean
-    make -j8
+    make
     [ $? -ne 0 ] && exit 1
 }
 
 compile_so() {
     cd $so_path
-    local modules_dirs=$(find . -name 'module*' -type d)
-    for dir in $modules_dirs; do
-        cd $dir
-        [ $1x == 'all'x ] && make clean
-        make -j8
-        [ $? -ne 0 ] && exit 1
-    done
+    [ $1x == 'all'x ] && make clean
+    make
+    [ $? -ne 0 ] && exit 1
 }
 
 gen_proto() {
@@ -63,6 +60,7 @@ run() {
 if [ $1x == 'help'x ]; then
     echo './run.sh'
     echo './run.sh all'
+    echo './run.sh kill'
     echo './run.sh compile'
     echo './run.sh compile so'
     echo './run.sh compile so all'
@@ -97,7 +95,7 @@ else
     compile_so
 fi
 
-kill_process $server
-
+kill_process 'kim-'
+sleep 1
 run
 cat_process $server
