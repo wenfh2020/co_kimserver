@@ -36,10 +36,10 @@ class NodeConn : Logger {
     } co_data_t;
 
     /* connections to node. */
-    typedef struct node_conn_data_s {
+    typedef struct co_array_data_s {
         int max_co_cnt;
         std::vector<co_data_t*> coroutines;
-    } node_conn_data_t;
+    } co_array_data_t;
 
    public:
     NodeConn(INet* net, Log* log);
@@ -77,7 +77,7 @@ class NodeConn : Logger {
    private:
     INet* m_net = nullptr;
     char m_errstr[ANET_ERR_LEN]; /* error string. */
-    std::unordered_map<std::string, node_conn_data_t*> m_coroutines;
+    std::unordered_map<std::string, co_array_data_t*> m_coroutines;
 };
 
 }  // namespace kim

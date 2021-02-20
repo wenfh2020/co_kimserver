@@ -129,7 +129,7 @@ void* RedisMgr::handle_task(void* arg) {
 
 RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     co_data_t* cd;
-    co_array_data_t* arr;
+    co_array_data_t* ad;
 
     auto it = m_rds_infos.find(node);
     if (it == m_rds_infos.end()) {
@@ -139,15 +139,15 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
 
     auto itr = m_coroutines.find(node);
     if (itr == m_coroutines.end()) {
-        arr = new co_array_data_t;
-        arr->ri = it->second;
-        m_coroutines[node] = arr;
+        ad = new co_array_data_t;
+        ad->ri = it->second;
+        m_coroutines[node] = ad;
     } else {
-        arr = (co_array_data_t*)itr->second;
-        if ((int)arr->coroutines.size() >= arr->ri->max_conn_cnt) {
-            cd = arr->coroutines[arr->cur_index % arr->coroutines.size()];
-            if (++arr->cur_index == arr->coroutines.size()) {
-                arr->cur_index = 0;
+        ad = (co_array_data_t*)itr->second;
+        if ((int)ad->coroutines.size() >= ad->ri->max_conn_cnt) {
+            cd = ad->coroutines[ad->cur_index % ad->coroutines.size()];
+            if (++ad->cur_index == (int)ad->coroutines.size()) {
+                ad->cur_index = 0;
             }
             return cd;
         }
@@ -158,10 +158,10 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     cd->privdata = this;
     cd->cond = co_cond_alloc();
 
-    arr->coroutines.push_back(cd);
+    ad->coroutines.push_back(cd);
 
     LOG_INFO("node: %s, co cnt: %d, max conn cnt: %d, %d",
-             node.c_str(), (int)arr->coroutines.size(), arr->ri->max_conn_cnt);
+             node.c_str(), (int)ad->coroutines.size(), ad->ri->max_conn_cnt);
 
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);

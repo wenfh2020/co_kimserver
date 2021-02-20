@@ -17,7 +17,7 @@ class MoudleTest : public Module {
     }
 
    private:
-    // protobuf.
+    /* cmd handler. */
     int test_hello(const Request* req);
     int test_mysql(const Request* req);
     int test_redis(const Request* req);

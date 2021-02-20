@@ -24,14 +24,14 @@ NodeConn::~NodeConn() {
 
 void NodeConn::destory() {
     for (auto& it : m_coroutines) {
-        node_conn_data_t* d = it.second;
-        for (auto& v : d->coroutines) {
+        co_array_data_t* ad = it.second;
+        for (auto& v : ad->coroutines) {
             clear_co_tasks(v);
             m_net->close_conn(v->c);
             co_cond_free(v->cond);
             co_free(v->co);
         }
-        SAFE_DELETE(d);
+        SAFE_DELETE(ad);
     }
 }
 
@@ -71,7 +71,7 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
     node_t* node;
     co_data_t* cd;
     std::string node_id;
-    node_conn_data_t* conn_data;
+    co_array_data_t* ad;
 
     node = m_net->nodes()->get_node_in_hash(node_type, obj);
     if (node == nullptr) {
@@ -83,13 +83,13 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     auto it = m_coroutines.find(node_id);
     if (it == m_coroutines.end()) {
-        conn_data = new node_conn_data_t{MAX_CONN_CNT};
-        m_coroutines[node_id] = conn_data;
+        ad = new co_array_data_t{MAX_CONN_CNT};
+        m_coroutines[node_id] = ad;
     } else {
-        conn_data = (node_conn_data_t*)it->second;
-        if (conn_data->coroutines.size() >= conn_data->max_co_cnt) {
+        ad = (co_array_data_t*)it->second;
+        if ((int)ad->coroutines.size() >= ad->max_co_cnt) {
             hash = hash_fnv1_64(obj.c_str(), obj.size());
-            cd = conn_data->coroutines[hash % conn_data->coroutines.size()];
+            cd = ad->coroutines[hash % ad->coroutines.size()];
             return cd;
         }
     }
@@ -103,7 +103,7 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
     cd->privdata = this;
     cd->cond = co_cond_alloc();
 
-    conn_data->coroutines.push_back(cd);
+    ad->coroutines.push_back(cd);
 
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);
@@ -112,8 +112,9 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
 void* NodeConn::co_handle_task(void* arg) {
     co_enable_hook_sys();
-    co_data_t* rds_co = (co_data_t*)arg;
-    NodeConn* m = (NodeConn*)rds_co->privdata;
+    co_data_t* cd = (co_data_t*)arg;
+    cd->co = GetCurrThreadCo();
+    NodeConn* m = (NodeConn*)cd->privdata;
     return m->handle_task(arg);
 }
 
