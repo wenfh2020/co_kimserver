@@ -17,7 +17,7 @@
         "test": {
             "host": "127.0.0.1",
             "port": 6379,
-            "max_conn_cnt": 1
+            "max_conn_cnt": 5
         }
     },
     "database": {
@@ -33,15 +33,11 @@
     "zookeeper": {
         "servers": "127.0.0.1:2181",
         "log_path": "zk.log",
-        "nodes": {
-            "root": "/kimserver/nodes",
-            "subscribe_node_type": [
-                "gate",
-                "logic"
-            ]
-        },
-        "payload": {
-            "root": "/kimserver/payload"
-        }
+        "log_level": "info",
+        "root": "/kimserver",
+        "watch_node_type": [
+            "gate",
+            "logic"
+        ]
     }
 }

@@ -25,7 +25,7 @@ class ZkClient : public Bio {
     /* when notify expired, reconnect to zookeeper. */
     bool reconnect();
     /* set zk log before connect. */
-    void set_zk_log(const std::string& path, utility::zoo_log_lvl level = utility::zoo_log_lvl_info);
+    bool set_zk_log(const std::string& path, const std::string& ll);
 
     /* (sync) call by bio thread. */
     virtual void bio_process_cmd(zk_task_t* task) override;

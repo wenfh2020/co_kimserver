@@ -13,6 +13,7 @@
 * 主要使用 C/C++11 语言开发。
 * 支持 tcp 协议。
 * 使用 protobuf 封装通信协议。
+* 支持访问 mysql, redis (client: hiredis)。
 * 通过 zookeeper 管理服务节点，支持分布式微服务部署。
 
 ---
@@ -27,7 +28,7 @@
 * cryptopp
 * zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
->【注意】Libco 不兼容 jemalloc，jemalloc 容易出现死锁。
+>【注意】libco 不兼容 jemalloc，jemalloc 容易出现死锁。
 
 ---
 
@@ -39,9 +40,9 @@
 
 ### 3.1. 单节点
 
-* manager 父进程。负责子进程管理调度。
-* worker 子进程。负责客户端详细连接逻辑。
-* module 动态库，业务源码实现。(参考：[co_kimserver/src/modules/](https://github.com/wenfh2020/co_kimserver/tree/main/src/modules))
+* manager 父进程：负责子进程管理调度，外部连接初始接入。
+* worker 子进程：负责客户端详细连接逻辑。
+* module 动态库：业务源码实现。(参考：[co_kimserver/src/modules/](https://github.com/wenfh2020/co_kimserver/tree/main/src/modules))
 
 <div align=center><img src="doc/images/2021-02-19-07-25-03.png" width="85%"/></div>
 
@@ -49,13 +50,25 @@
 
 ### 3.2. 多节点
 
-`zookeeper` 管理节点，节点相互发现建立通信。下图是多节点建立连接通信流程。
+服务节点通过 `zookeeper` 发现其它节点。（下图是客户端与服务端多节点建立通信流程。）
 
 <div align=center><img src="doc/images/2021-02-18-18-25-03.png"/></div>
 
 ---
 
 ## 4. 编译
+
+### 4.1. 方法一
+
+```shell
+cd ./co_kimserver
+chmod +x run.sh
+run.sh compile all
+```
+
+---
+
+### 4.2. 方法二
 
 ```shell
 # 执行脚本生成 protobuf 源码。
@@ -87,7 +100,7 @@ cd ./co_kimserver/bin
 
 单进程（libco 共享栈）服务本地压力测试：
 
-400 个用户，每个用户发 10,000 个包，并发：184,838 / s。
+400 个用户，每个用户发 10,000 个（helloworld）包，并发：184,838 / s。
 
 ```shell
 # ./test_tcp_pressure 127.0.0.1 3355 400 10000
@@ -126,7 +139,8 @@ err callback cnt: 0
     "redis": {                              # redis 连接池配置，支持配置多个。
         "test": {                           # redis 配置节点，支持配置多个。
             "host": "127.0.0.1",            # redis 连接 host。
-            "port": 6379                    # redis 连接 port。
+            "port": 6379,                   # redis 连接 port。
+            "max_conn_cnt": 5               # redis 连接池最大连接数。
         }
     },
     "database": {                           # mysql 数据库连接池配置。
@@ -139,19 +153,15 @@ err callback cnt: 0
             "max_conn_cnt": 5               # mysql 连接池最大连接数。
         }
     },
-    "zookeeper": {                          # zookeeper 中心节点管理配置。用于节点发现，节点负载等功能。
+    "zookeeper": {                          # zookeeper 中心节点管理配置，用于节点发现，节点负载等功能。
         "servers": "127.0.0.1:2181",        # redis 服务连接信息。
         "log_path": "zk.log",               # zookeeper-client-c 日志。
-        "nodes": {                          # 节点发现配置。
-            "root": "/kimserver/nodes",     # 节点发现根目录，保存了各个节点信息，每个节点启动需要往这个目录注册节点信息。
-            "subscribe_node_type": [        # 当前节点关注的其它节点类型数组。用于集群里，节点之间相互通信。填充信息可以根据上面 node_type 配置。
-                "gate",                     # 接入节点类型。
-                "logic"                     # 逻辑节点类型。
-            ]
-        },
-        "payload": {                        # zookeeper 节点负载信息。节点会定时刷新（1次/s），同步当前节点负载。
-            "root": "/kimserver/payload"    # 节点发现根目录。
-        }
+        "log_level": "debug",               # zookeeper-client-c 日志等级。(debug/warn/info/error)
+        "root": "/kimserver",               # 节点发现根目录，保存了各个节点信息，每个节点启动需要往这个目录注册节点信息。
+        "watch_node_type": [                # 当前节点关注其它节点类型（"node_type"），用于节点相互通信。
+            "gate",                         # 接入节点类型。
+            "logic"                         # 逻辑节点类型。
+        ]
     }
 }
 ```

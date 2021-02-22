@@ -248,10 +248,10 @@ void Network::on_repeat_timer() {
         if (m_zk_cli != nullptr) {
             m_zk_cli->on_repeat_timer();
         }
-        // report_payload_to_zookeeper();
+        report_payload_to_zookeeper();
     } else {
         /* send payload info to manager. */
-        // report_payload_to_manager();
+        report_payload_to_manager();
     }
 }
 
