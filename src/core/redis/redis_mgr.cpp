@@ -53,9 +53,7 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
 
 void* RedisMgr::co_handle_task(void* arg) {
     co_enable_hook_sys();
-
     co_data_t* cd = (co_data_t*)arg;
-    cd->co = GetCurrThreadCo();
     RedisMgr* m = (RedisMgr*)cd->privdata;
     return m->handle_task(arg);
 }

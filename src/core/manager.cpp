@@ -94,6 +94,7 @@ bool Manager::load_logger() {
 
     m_logger->set_worker_index(0);
     m_logger->set_process_type(true);
+
     LOG_INFO("init logger done!");
     return true;
 }
@@ -213,6 +214,7 @@ void Manager::restart_workers() {
         m_restart_workers.pop();
 
         LOG_DEBUG("restart worker, index: %d", worker_index);
+
         if (create_worker(worker_index)) {
             LOG_INFO("restart worker ok! index: %d", worker_index);
         } else {

@@ -113,7 +113,6 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 void* NodeConn::co_handle_task(void* arg) {
     co_enable_hook_sys();
     co_data_t* cd = (co_data_t*)arg;
-    cd->co = GetCurrThreadCo();
     NodeConn* m = (NodeConn*)cd->privdata;
     return m->handle_task(arg);
 }

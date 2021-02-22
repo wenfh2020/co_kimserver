@@ -37,8 +37,7 @@ int MoudleTest::test_mysql(const Request* req) {
     rows = new vec_row_t;
 
     /* read mysql. */
-    snprintf(cmd, sizeof(cmd),
-             "select value from mytest.test_async_mysql where id = %d;", id);
+    snprintf(cmd, sizeof(cmd), "select value from mytest.test_async_mysql where id = %d;", id);
     ret = net()->mysql_mgr()->sql_read(node, cmd, *rows);
     if (ret != ERR_OK) {
         SAFE_DELETE(rows);

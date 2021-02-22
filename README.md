@@ -154,7 +154,7 @@ err callback cnt: 0
         }
     },
     "zookeeper": {                          # zookeeper 中心节点管理配置，用于节点发现，节点负载等功能。
-        "servers": "127.0.0.1:2181",        # redis 服务连接信息。
+        "servers": "127.0.0.1:2181",        # zookeeper 服务配置。
         "log_path": "zk.log",               # zookeeper-client-c 日志。
         "log_level": "debug",               # zookeeper-client-c 日志等级。(debug/warn/info/error)
         "root": "/kimserver",               # 节点发现根目录，保存了各个节点信息，每个节点启动需要往这个目录注册节点信息。

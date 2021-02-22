@@ -161,7 +161,7 @@ class Network : public INet {
     int m_worker_index = 0;  /* current process index number. */
 
     /* manager/workers communicate. */
-    int m_manager_ctrl_fd = -1; /* channel for send msg. */
+    int m_manager_ctrl_fd = -1; /* channel for send message. */
     int m_manager_data_fd = -1; /* channel for transfer fd. */
 
     Nodes* m_nodes = nullptr;           /* server nodes. ketama nodes manager. */

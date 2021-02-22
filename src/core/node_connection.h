@@ -18,8 +18,8 @@ class NodeConn : Logger {
         MsgHead* head_in;      /* request msg head. */
         MsgBody* body_in;      /* request msg body. */
         int ret;               /* result. */
-        MsgHead* head_out;     /* response msg head. */
-        MsgBody* body_out;     /* response msg body. */
+        MsgHead* head_out;     /* ack msg head. */
+        MsgBody* body_out;     /* ack msg body. */
     } task_t;
 
     /* coroutine's arg data.  */
