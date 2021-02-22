@@ -6,7 +6,7 @@
 
 ## 1. 简述
 
-`co_kimserver` 是高性能的 TCP 网络通信框架。
+`co_kimserver` 是高性能 TCP 网络通信框架。
 
 * 多进程工作模式（manager/workers）。
 * 基于腾讯开源的轻量级协程库 [libco](https://github.com/Tencent/libco)。
@@ -34,7 +34,7 @@
 
 ## 3. 架构
 
-多进程架构，服务支持单节点独立运行，也支持多节点分布式部署。
+单节点多进程工作模式，支持多节点分布式部署。
 
 ---
 
@@ -63,7 +63,7 @@
 ```shell
 cd ./co_kimserver
 chmod +x run.sh
-run.sh compile all
+./run.sh compile all
 ```
 
 ---
@@ -159,8 +159,8 @@ err callback cnt: 0
         "log_level": "debug",               # zookeeper-client-c 日志等级。(debug/warn/info/error)
         "root": "/kimserver",               # 节点发现根目录，保存了各个节点信息，每个节点启动需要往这个目录注册节点信息。
         "watch_node_type": [                # 当前节点关注其它节点类型（"node_type"），用于节点相互通信。
-            "gate",                         # 接入节点类型。
-            "logic"                         # 逻辑节点类型。
+            "gate",                         # 接入节点类型。（用户可在配置自定义 "node_type"）
+            "logic"                         # 逻辑节点类型。（用户可在配置自定义 "node_type"）
         ]
     }
 }
