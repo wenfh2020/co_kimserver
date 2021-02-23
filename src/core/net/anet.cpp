@@ -279,9 +279,11 @@ error:
     }
 
 end:
-    if (saddr && saddrlen) {
-        *saddrlen = p->ai_addrlen;
-        memcpy(saddr, p->ai_addr, p->ai_addrlen);
+    if (saddr && saddrlen && s != ANET_ERR) {
+        if (p != NULL) {
+            *saddrlen = p->ai_addrlen;
+            memcpy(saddr, p->ai_addr, p->ai_addrlen);
+        }
     }
     freeaddrinfo(servinfo);
     return s;
