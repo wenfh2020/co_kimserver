@@ -23,9 +23,9 @@
 项目支持 Linux 平台。源码依赖第三方库：
 
 * mysqlclient
-* protobuf
+* protobuf3
 * hiredis
-* cryptopp
+* crypto++
 * zookeeper_mt ([安装 zookeeper-client-c](https://wenfh2020.com/2020/10/17/zookeeper-c-client/))
 
 >【注意】libco 不兼容 jemalloc，jemalloc 容易出现死锁。
@@ -58,17 +58,7 @@
 
 ## 4. 编译
 
-### 4.1. 方法一
-
-```shell
-cd ./co_kimserver
-chmod +x run.sh
-./run.sh compile all
-```
-
----
-
-### 4.2. 方法二
+* 方法一
 
 ```shell
 # 执行脚本生成 protobuf 源码。
@@ -83,9 +73,21 @@ make clean; make
 
 ---
 
+* 方法二
+
+```shell
+cd ./co_kimserver
+chmod +x run.sh
+./run.sh compile all
+```
+
+---
+
 ## 5. 运行
 
 源码编译成功后，进入 bin 目录启动服务。
+
+* 方法一
 
 ```shell
 cd ./co_kimserver/bin
@@ -94,23 +96,32 @@ cd ./co_kimserver/bin
 
 ---
 
-## 6. 测试
-
-[压测源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)。
-
-单进程（libco 共享栈）服务本地压力测试：
-
-400 个用户，每个用户发 10,000 个（helloworld）包，并发：184,838 / s。
+* 方法二
 
 ```shell
-# ./test_tcp_pressure 127.0.0.1 3355 400 10000
-spend time: 21.6406
-avg:        184838
-send cnt:         4000000
-callback cnt:     4000000
-ok callback cnt:  4000000
-err callback cnt: 0
+cd ./co_kimserver
+./run.sh
 ```
+
+---
+
+## 6. 测试
+
+单进程服务，本地压力测试 100w 条数据（10000 个用户，每个用户发 100 个包）。
+
+* 压测命令（[压测源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)）。
+
+```shell
+./test_tcp_pressure [host] [port] [protocol(1001/1003/1005)] [users] [user_packets]
+```
+
+* 测试数据。
+
+| 测试功能                | 数据量 | 并发                 |
+| :---------------------- | :----- | :------------------- |
+| 普通协议（hello world） | 100w   | 119,479 / s          |
+| 读写 mysql              | 100w   | 5133 * 2 =   10266/s |
+| 读写 redis              | 100w   | 9655 * 2 = 19310/s   |
 
 ---
 
@@ -123,8 +134,8 @@ err callback cnt: 0
 ```shell
 {
     "server_name": "kim-gate",              # 服务器名称。
-    "worker_cnt": 1,                        # 子进程个数，因为服务是多进程框架，类似 nginx。
-    "node_type": "gate",                    # 节点类型（gate/logic/...）。微服务，用户可以根据需要，自定义节点类型。
+    "worker_cnt": 1,                        # 子进程个数。（服务是多进程工作模式，类似 nginx。）
+    "node_type": "gate",                    # 节点类型（gate/logic/...）。用户可以根据需要，自定义节点类型。
     "node_host": "127.0.0.1",               # 服务集群内部节点通信 host。
     "node_port": 3344,                      # 服务集群内部节点通信 端口。
     "gate_host": "127.0.0.1",               # 服务对外开放 host。（对外部客户端或者第三方服务。不对外服务可以删除该选项。）

@@ -49,18 +49,21 @@ typedef struct statistics_user_data_s {
 } statistics_user_data_t;
 
 bool check_args(int args, char** argv) {
-    if (args < 4 ||
+    if (args < 5 ||
         argv[2] == nullptr || !isdigit(argv[2][0]) || atoi(argv[2]) == 0 ||
         argv[3] == nullptr || !isdigit(argv[3][0]) || atoi(argv[3]) == 0 ||
-        argv[4] == nullptr || !isdigit(argv[4][0]) || atoi(argv[4]) == 0) {
-        std::cerr << "./test_tcp_pressure [host] [port] [users] [user_packets]" << std::endl;
+        argv[4] == nullptr || !isdigit(argv[4][0]) || atoi(argv[4]) == 0 ||
+        argv[5] == nullptr || !isdigit(argv[5][0]) || atoi(argv[5]) == 0) {
+        std::cerr << "./test_tcp_pressure [host] [port] [protocol(1001/1003/1005)] [users] [user_packets]"
+                  << std::endl;
         return false;
     }
 
     g_server_host = argv[1];
     g_server_port = atoi(argv[2]);
-    g_test_users = atoi(argv[3]);
-    g_test_user_packets = atoi(argv[4]);
+    g_rest_request = atoi(argv[3]);
+    g_test_users = atoi(argv[4]);
+    g_test_user_packets = atoi(argv[5]);
     g_send_cnt = g_test_users * g_test_user_packets;
     return true;
 }
