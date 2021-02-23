@@ -25,6 +25,7 @@ int g_send_cnt = 0;
 int g_callback_cnt = 0;
 int g_ok_callback_cnt = 0;
 int g_err_callback_cnt = 0;
+int g_connected_cnt = 0;
 
 int g_test_users = 0;
 int g_test_user_packets = 0;
@@ -269,7 +270,9 @@ void* readwrite_routine(void* arg) {
     co_enable_hook_sys();
 
     int fd = -1;
-    Connection* c;
+    Connection* c = nullptr;
+    bool is_connected = false;
+
     MsgHead head;
     MsgBody body;
     Codec::STATUS ret;
@@ -287,6 +290,21 @@ void* readwrite_routine(void* arg) {
         if (!check_connect(c)) {
             co_sleep(1000);
             continue;
+        }
+
+        if (!is_connected) {
+            is_connected = true;
+            g_connected_cnt++;
+        }
+
+        /* wait all client connected, then test. */
+        if (g_connected_cnt != g_test_users) {
+            co_sleep(1000);
+            continue;
+        }
+
+        if (g_begin_time == 0.0) {
+            g_begin_time = time_now();
         }
 
         fd = c->fd();
