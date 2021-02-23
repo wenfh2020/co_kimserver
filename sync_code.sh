@@ -1,8 +1,14 @@
 #!/bin/sh
 # copy src from mac to linux.
+SRC=~/src/other/coroutine/co_kimserver/
+LAN_DST=root@192.168.0.200:/root/src/other/coroutine/co_kimserver/
+REMOTE_DST=root@wenfh2020_sgx.com:/home/other/coroutine/co_kimserver/
+DST=$LAN_DST
 
 work_path=$(dirname $0)
 cd $work_path
+
+[ $1x == 'remote'x ] && DST=$REMOTE_DST
 
 rsync -avz --exclude="*.o" \
     --exclude=".git" \
@@ -23,4 +29,4 @@ rsync -avz --exclude="*.o" \
     --exclude="test/test_tcp/test_tcp" \
     --exclude="test/test_tcp_pressure/test_tcp_pressure" \
     --exclude="test/test_timer/test_timer" \
-    ~/src/other/coroutine/co_kimserver/ root@wenfh2020_sgx.com:/home/other/coroutine/co_kimserver/
+    $SRC $DST
