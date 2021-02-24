@@ -5,6 +5,7 @@
 
 #include "net.h"
 #include "nodes.h"
+#include "timer.h"
 #include "util/json/CJsonObject.hpp"
 #include "util/log.h"
 #include "zookeeper/zk.h"
@@ -12,7 +13,7 @@
 
 namespace kim {
 
-class ZkClient : public Bio {
+class ZkClient : public Bio, public TimerCron {
    public:
     ZkClient(Log* logger, INet* net);
     virtual ~ZkClient();
@@ -71,8 +72,6 @@ class ZkClient : public Bio {
     bool m_is_connected = false;
     bool m_is_registered = false;
     bool m_is_expired = false;
-    /* for reconnect. */
-    int m_register_index = 0;
 
     std::string m_payload_node_path;
 };

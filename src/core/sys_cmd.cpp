@@ -259,13 +259,14 @@ int SysCmd::check_rsp(const Request* req) {
 }
 
 void SysCmd::on_repeat_timer() {
-    // if (m_net->is_worker()) {
-    //     /* every 5 minutes. */
-    //     if (++m_timer_index % (5 * 10 * 60) == 2) {
-    //         /* keep data consistent between manager and worker. */
-    //         send_zk_nodes_version_to_manager(m_net->nodes()->version());
-    //     }
-    // }
+    if (m_net->is_worker()) {
+        /* every 5 minutes. */
+        run_with_period(5 * 60 * 1000) {
+            /* keep data consistent between manager and worker. */
+            send_zk_nodes_version_to_manager(m_net->nodes()->version());
+        }
+        m_cronloops++;
+    }
 }
 
 int SysCmd::on_req_add_zk_node(const Request* req) {

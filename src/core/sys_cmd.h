@@ -8,10 +8,11 @@
 #include "protobuf/sys/payload.pb.h"
 #include "request.h"
 #include "server.h"
+#include "timer.h"
 
 namespace kim {
 
-class SysCmd : Logger {
+class SysCmd : Logger, public TimerCron {
    public:
     SysCmd(Log* logger, INet* net);
     virtual ~SysCmd() {}
@@ -67,7 +68,6 @@ class SysCmd : Logger {
 
    protected:
     INet* m_net = nullptr;
-    int m_timer_index = 0;
 };
 
 }  // namespace kim

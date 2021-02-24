@@ -17,7 +17,7 @@
 
 namespace kim {
 
-class Network : public INet {
+class Network : public INet, public TimerCron {
    public:
     enum class TYPE {
         UNKNOWN = 0,

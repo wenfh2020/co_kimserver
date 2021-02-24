@@ -248,11 +248,16 @@ void Network::on_repeat_timer() {
         if (m_zk_cli != nullptr) {
             m_zk_cli->on_repeat_timer();
         }
-        report_payload_to_zookeeper();
+        run_with_period(1000) {
+            report_payload_to_zookeeper();
+        }
     } else {
-        /* send payload info to manager. */
-        report_payload_to_manager();
+        run_with_period(1000) {
+            /* send payload info to manager. */
+            report_payload_to_manager();
+        }
     }
+    m_cronloops++;
 }
 
 bool Network::report_payload_to_zookeeper() {
@@ -336,8 +341,6 @@ bool Network::report_payload_to_manager() {
         return false;
     }
 
-    /* recv. */
-
     m_payload.Clear();
     return true;
 }
@@ -385,6 +388,7 @@ void* Network::handle_accept_nodes_conn(void*) {
         }
         co_resume(co_task->co);
     }
+
     return 0;
 }
 
@@ -440,7 +444,6 @@ void* Network::handle_accept_gate_conn(void* d) {
         }
 
         close_fd(fd);
-        continue;
     }
 
     return 0;

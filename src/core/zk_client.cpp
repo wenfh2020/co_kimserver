@@ -172,9 +172,11 @@ void ZkClient::bio_process_cmd(zk_task_t* task) {
 
 void ZkClient::on_repeat_timer() {
     if (m_is_connected || m_is_expired) {
-        if (!m_is_registered && ++m_register_index > 9) {
-            reconnect();
-            m_register_index = 0;
+        if (!m_is_registered) {
+            run_with_period(1000) {
+                reconnect();
+            }
+            m_cronloops++;
         }
     }
     Bio::on_repeat_timer();
@@ -486,7 +488,6 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
         return;
     }
 
-    m_register_index = 0;
     m_is_registered = true;
 
     /* set new. */
