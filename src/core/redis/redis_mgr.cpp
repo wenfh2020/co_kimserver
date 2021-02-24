@@ -269,10 +269,4 @@ void RedisMgr::destory() {
     m_coroutines.clear();
 }
 
-void RedisMgr::co_sleep(int ms) {
-    struct pollfd pf = {0};
-    pf.fd = -1;
-    poll(&pf, 1, ms);
-}
-
 }  // namespace kim

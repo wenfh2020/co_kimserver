@@ -106,9 +106,7 @@ void* co_handler_mysql_query(void* arg) {
         if (mysql_real_query(task->mysql, sql, strlen(sql))) {
             /* mysql_real_query will reconnect if MYSQL_OPT_RECONNECT set. */
             show_mysql_error(task->mysql);
-            struct pollfd pf = {0};
-            pf.fd = -1;
-            poll(&pf, 1, 1000);
+            co_sleep(1000);
             continue;
         }
 

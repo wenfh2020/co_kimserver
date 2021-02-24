@@ -262,13 +262,6 @@ void show_statics_result(bool force = false) {
     }
 }
 
-void co_sleep(int ms, int fd = -1, int events = 0) {
-    struct pollfd pf = {0};
-    pf.fd = fd;
-    pf.events = events | POLLERR | POLLHUP;
-    poll(&pf, 1, ms);
-}
-
 void* readwrite_routine(void* arg) {
     co_enable_hook_sys();
 

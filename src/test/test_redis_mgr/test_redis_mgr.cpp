@@ -36,12 +36,6 @@ void show_result(redisReply* r) {
     printf("reply data, type: %d, str: %s\n", r->type, r->str);
 }
 
-void co_sleep(int ms) {
-    struct pollfd pf = {0};
-    pf.fd = -1;
-    poll(&pf, 1, ms);
-}
-
 void* co_handler(void* arg) {
     co_enable_hook_sys();
 

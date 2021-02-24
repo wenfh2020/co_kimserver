@@ -75,7 +75,6 @@ class RedisMgr : Logger {
     void* handle_task(void* arg);
     redisReply* send_task(const std::string& node, const std::string& cmd);
     co_data_t* get_co_data(const std::string& node);
-    void co_sleep(int ms);
 
    private:
     /* key: node, valude: config data. */

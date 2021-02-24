@@ -221,12 +221,6 @@ void MysqlMgr::destory() {
     m_coroutines.clear();
 }
 
-void MysqlMgr::co_sleep(int ms) {
-    struct pollfd pf = {0};
-    pf.fd = -1;
-    poll(&pf, 1, ms);
-}
-
 void MysqlMgr::clear_co_tasks(co_data_t* cd) {
     task_t* task;
 

@@ -75,7 +75,6 @@ class MysqlMgr : Logger {
     void* handle_task(void* arg);
     co_data_t* get_co_data(const std::string& node);
     int send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);
-    void co_sleep(int ms);
 
    private:
     /* key: node, valude: db info. */

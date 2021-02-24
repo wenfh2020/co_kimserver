@@ -518,6 +518,13 @@ void co_reset(stCoRoutine_t *co) {
         co->stack_mem->occupy_co = NULL;
 }
 
+int co_sleep(int ms, int fd, int events) {
+    struct pollfd pf = {0};
+    pf.fd = fd;
+    pf.events = events | POLLERR | POLLHUP;
+    return poll(&pf, 1, ms);
+}
+
 void co_yield_env(stCoRoutineEnv_t *env) {
     stCoRoutine_t *last = env->pCallStack[env->iCallStackSize - 2];
     stCoRoutine_t *curr = env->pCallStack[env->iCallStackSize - 1];

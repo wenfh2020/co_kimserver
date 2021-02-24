@@ -24,10 +24,7 @@ void* co_handle_timer(void* arg) {
     co_enable_hook_sys();
 
     for (;;) {
-        printf("timer.....\n");
-        struct pollfd pf = {0};
-        pf.fd = -1;
-        poll(&pf, 1, 1);
+        co_sleep(1000);
     }
 
     return 0;

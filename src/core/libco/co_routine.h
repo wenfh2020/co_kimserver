@@ -49,6 +49,7 @@ void co_yield(stCoRoutine_t *co);
 void co_yield_ct();  //ct = current thread
 void co_release(stCoRoutine_t *co);
 void co_reset(stCoRoutine_t *co);
+int co_sleep(int ms, int fd = -1, int events = 0);  // wenfh2020 2021-02-24
 
 stCoRoutine_t *co_self();
 
