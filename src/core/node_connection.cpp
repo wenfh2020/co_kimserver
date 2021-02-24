@@ -364,13 +364,6 @@ error:
     return nullptr;
 }
 
-void NodeConn::co_sleep(int ms, int fd, int events) {
-    struct pollfd pf = {0};
-    pf.fd = fd;
-    pf.events = events | POLLERR | POLLHUP;
-    poll(&pf, 1, ms);
-}
-
 /* for nodes connect. */
 int NodeConn::handle_sys_message(Connection* c) {
     int fd, ret;

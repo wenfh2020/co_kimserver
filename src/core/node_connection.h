@@ -66,7 +66,6 @@ class NodeConn : Logger {
     static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
     void clear_co_tasks(co_data_t* co_data);
-    void co_sleep(int ms, int fd = -1, int events = 0);
 
     /* for nodes connect. */
     int handle_sys_message(Connection* c);
