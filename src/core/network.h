@@ -115,6 +115,7 @@ class Network : public INet, public TimerCron {
     bool load_nodes_conn();
     bool load_mysql_mgr();
     bool load_redis_mgr();
+    bool ensure_files_limit();
 
     /* socket & connection. */
     int listen_to_port(const char* host, int port);
@@ -151,6 +152,8 @@ class Network : public INet, public TimerCron {
     std::string m_node_host;
     int m_node_port = 0;
     int m_node_host_fd = -1;
+
+    int m_max_clients = 1024 - CONFIG_MIN_RESERVED_FDS;
 
     /* gate for client. */
     std::string m_gate_host;

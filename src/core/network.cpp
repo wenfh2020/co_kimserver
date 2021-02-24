@@ -176,6 +176,11 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
         return false;
     }
 
+    if (!ensure_files_limit()) {
+        LOG_ERROR("ensure files limit failed! limit: %d", m_max_clients);
+        return false;
+    }
+
     co_task_t* task;
     Connection *conn_ctrl, *conn_data;
 
@@ -214,6 +219,31 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
         return false;
     }
     co_resume(task->co);
+    return true;
+}
+
+bool Network::ensure_files_limit() {
+    int error = 0;
+    int max_clients = 0;
+
+    max_clients = str_to_int(m_config("max_clients"));
+    if (max_clients > 0) {
+        m_max_clients = max_clients;
+    }
+
+    max_clients = adjust_files_limit(m_max_clients, CONFIG_MIN_RESERVED_FDS, error);
+    if (max_clients < 0) {
+        LOG_ERROR("set files limit failed!");
+        return false;
+    } else if (max_clients < m_max_clients) {
+        LOG_WARN("set files not hit, cur limit: %d, ensure hit: %d, error: %d.",
+                 max_clients, m_max_clients, error);
+        m_max_clients = max_clients;
+    } else {
+        m_max_clients = max_clients;
+    }
+
+    LOG_INFO("set max clients: %d done!", m_max_clients);
     return true;
 }
 
@@ -482,6 +512,15 @@ void* Network::handle_read_transfer_fd(void* d) {
                 exit(EXIT_FD_TRANSFER);
             }
         }
+
+        if ((int)m_conns.size() >= m_max_clients) {
+            LOG_WARN("max number of clients reached! %d", m_max_clients);
+            close_fd(ch.fd);
+            co_sleep(10);
+            continue;
+        }
+
+        LOG_INFO("conns cnt: %u, %d", m_conns.size(), m_max_clients);
 
         codec = static_cast<Codec::TYPE>(ch.codec);
         c = create_conn(ch.fd, codec);

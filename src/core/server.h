@@ -42,16 +42,20 @@ typedef struct fd_s {
 } fd_t;
 
 // time out info.
-#define CMD_MAX_TIMEOUT_CNT 3      // default max cmd time out count.
-#define SESSION_MAX_TIMEOUT_CNT 3  // default max session time out count.
-#define IO_TIMEOUT_VAL 15000       // connection time out value.
-#define CMD_TIMEOUT_VAL 3000       // cmd time out value.
-#define REPEAT_TIMEOUT_VAL 1000    // repeat time out value.
+#define CMD_MAX_TIMEOUT_CNT 3     /* default max cmd time out count. */
+#define SESSION_MAX_TIMEOUT_CNT 3 /* default max session time out count. */
+#define IO_TIMEOUT_VAL 15000      /* connection time out value. */
+#define CMD_TIMEOUT_VAL 3000      /* cmd time out value. */
+#define REPEAT_TIMEOUT_VAL 1000   /* repeat time out value. */
 
 #define MAX_PATH 256
 #define TCP_BACK_LOG 511
 #define NET_IP_STR_LEN 46 /* INET6_ADDRSTRLEN is 46, but we need to be sure */
 #define MAX_ACCEPTS_PER_CALL 1000
+
+/* file descriptors: listen, log, channel(socketpair), mysql, 
+ * redis, nodes connections... */
+#define CONFIG_MIN_RESERVED_FDS 128
 
 // logger macro.
 #define LOG_FORMAT(level, args...)                                           \

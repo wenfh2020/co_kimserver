@@ -21,7 +21,6 @@
 #include <sstream>
 
 #define MAX_PATH 256
-#define CONFIG_MIN_RESERVED_FDS 32
 
 int str_to_int(const std::string& d) {
     return d.empty() ? 0 : std::stoi(d);
@@ -135,21 +134,30 @@ void daemonize(void) {
     }
 }
 
-bool adjust_files_limit(int& max_clients) {
-    rlim_t maxfiles = max_clients + CONFIG_MIN_RESERVED_FDS;
+/* This function will try to raise the max number of open files accordingly to
+ * the max number of clients. It also reserves a number of file
+ * descriptors (extra_cnt) for extra operations of
+ * persistence, listening sockets, log files and so forth.
+ *
+ * If it will not be possible to set the limit accordingly to the
+ * max number of clients, the function will do the reverse setting
+ * maxclients to the value that we can actually handle. */
+
+int adjust_files_limit(int max_clients, int extra_cnt, int& error) {
+    rlim_t maxfiles = max_clients + extra_cnt;
     struct rlimit limit;
 
     if (getrlimit(RLIMIT_NOFILE, &limit) == -1) {
-        return false;
+        error = errno;
+        return 1024 - extra_cnt;
     }
 
     rlim_t oldlimit = limit.rlim_cur;
-    if (oldlimit >= maxfiles) {
-        return true;
+    if (maxfiles <= oldlimit) {
+        return max_clients;
     }
 
     rlim_t bestlimit;
-    // int setrlimit_error = 0;
 
     /* Try to set the file limit to match 'maxfiles' or at least
      * to the higher value supported less than maxfiles. */
@@ -162,7 +170,7 @@ bool adjust_files_limit(int& max_clients) {
         if (setrlimit(RLIMIT_NOFILE, &limit) != -1) {
             break;
         }
-        // setrlimit_error = errno;
+        error = errno;
 
         /* We failed to set file limit to 'bestlimit'. Try with a
          * smaller limit decrementing by a few FDs per iteration. */
@@ -179,17 +187,16 @@ bool adjust_files_limit(int& max_clients) {
     }
 
     if (bestlimit < maxfiles) {
-        // unsigned int old_maxclients = max_clients;
-        max_clients = bestlimit - CONFIG_MIN_RESERVED_FDS;
+        max_clients = bestlimit - extra_cnt;
         /* maxclients is unsigned so may overflow: in order
                  * to check if maxclients is now logically less than 1
                  * we test indirectly via bestlimit. */
-        if (bestlimit <= CONFIG_MIN_RESERVED_FDS) {
-            return false;
+        if (bestlimit <= (rlim_t)extra_cnt) {
+            return -1;
         }
-        return false;
     }
-    return true;
+
+    return bestlimit;
 }
 
 const char* to_lower(char* s, int len) {

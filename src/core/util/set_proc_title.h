@@ -1,5 +1,5 @@
-#ifndef __SET_PROC_TITLE_H__
-#define __SET_PROC_TITLE_H__
+#ifndef __KIM_SET_PROC_TITLE_H__
+#define __KIM_SET_PROC_TITLE_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,4 +12,4 @@ void set_proc_title(const char *fmt, ...);
 }
 #endif
 
-#endif
+#endif  //__KIM_SET_PROC_TITLE_H__
