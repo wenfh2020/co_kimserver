@@ -122,6 +122,9 @@ int SysCmd::handle_worker_msg(const Request* req) {
         case CMD_REQ_HEART_BEAT: {
             return on_req_heart_beat(req);
         }
+        case CMD_RSP_HEART_BEAT: {
+            return on_rsp_heart_beat(req);
+        }
         case CMD_REQ_TELL_WORKER: {
             return on_req_tell_worker(req);
         }
@@ -451,11 +454,8 @@ int SysCmd::on_req_connect_to_worker(const Request* req) {
             LOG_TRACE("write channel done! transfer fd: %d", fd);
             return ERR_TRANSFER_FD_DONE;
         } else if (err == EAGAIN) {
-            LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
-            struct pollfd pf = {0};
-            pf.fd = channel;
-            pf.events = POLLOUT | POLLERR | POLLHUP;
-            poll(&pf, 1, 1000);
+            // LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
+            co_sleep(1000, channel, POLLOUT);
             continue;
         } else {
             LOG_ERROR("transfer fd failed! ch fd: %d, fd: %d, errno: %d", channel, fd, err);
@@ -473,6 +473,11 @@ int SysCmd::on_req_heart_beat(const Request* req) {
         return ERR_REDIS_CONNECT_FAILED;
     }
     return ret;
+}
+
+int SysCmd::on_rsp_heart_beat(const Request* req) {
+    LOG_TRACE("recv CMD_RSP_HEART_BEAT. fd: %d", req->fd());
+    return ERR_OK;
 }
 
 int SysCmd::on_req_tell_worker(const Request* req) {
