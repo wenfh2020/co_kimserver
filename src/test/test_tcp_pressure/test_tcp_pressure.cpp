@@ -253,7 +253,7 @@ void show_statics_result(bool force = false) {
     if (g_send_cnt == g_callback_cnt || force) {
         std::cout << "------" << std::endl
                   << "spend time: " << time_now() - g_begin_time << std::endl
-                  << "avg:        " << g_send_cnt / (time_now() - g_begin_time) << std::endl;
+                  << "avg:        " << g_callback_cnt / (time_now() - g_begin_time) << std::endl;
 
         std::cout << "send cnt:         " << g_send_cnt << std::endl
                   << "callback cnt:     " << g_callback_cnt << std::endl
