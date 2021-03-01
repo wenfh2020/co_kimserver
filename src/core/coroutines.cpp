@@ -60,11 +60,20 @@ bool Coroutines::add_free_co_task(co_task_t* task) {
     return it.second;
 }
 
-void Coroutines::co_sleep(int ms, int fd, int events) {
-    struct pollfd pf = {0};
-    pf.fd = fd;
-    pf.events = events | POLLERR | POLLHUP;
-    poll(&pf, 1, ms);
+void Coroutines::on_repeat_timer() {
+    int i = 0;
+    co_task_t* task;
+    run_with_period(1000) {
+        /* release free coroutines in timer. */
+        while (!m_co_free.empty() && i++ < 10) {
+            auto it = m_co_free.begin();
+            task = *it;
+            co_release(task->co);
+            m_co_free.erase(it);
+            m_coroutines.erase(task);
+        }
+    }
+    m_cronloops++;
 }
 
 }  // namespace kim

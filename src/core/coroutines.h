@@ -4,6 +4,7 @@
 #include "connection.h"
 #include "libco/co_routine.h"
 #include "server.h"
+#include "timer.h"
 #include "util/log.h"
 
 #define MAX_CO_CNT 100000
@@ -15,20 +16,19 @@ typedef struct co_task_s {
     stCoRoutine_t* co;
 } co_task_t;
 
-class Coroutines {
+class Coroutines : public TimerCron {
    public:
     Coroutines(Log* logger);
     virtual ~Coroutines();
 
     void clear_tasks();
     void run();
+    void on_repeat_timer();
 
     int get_max_co_cnt() { return m_max_co_cnt; }
     void set_max_co_cnt(int cnt) { m_max_co_cnt = cnt; }
     co_task_t* create_co_task(Connection* c, pfn_co_routine_t fn);
     bool add_free_co_task(co_task_t* task);
-
-    void co_sleep(int ms, int fd = -1, int events = 0);
 
    private:
     Log* m_logger = nullptr;

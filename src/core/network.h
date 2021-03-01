@@ -144,8 +144,8 @@ class Network : public INet, public TimerCron {
     uint64_t m_seq = 0;          /* incremental serial number. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */
 
-    uint64_t m_now_time = 0;
     int m_time_index = 0;
+    uint64_t m_now_time = 0;
 
     TYPE m_type = TYPE::UNKNOWN;                /* owner type. */
     uint64_t m_keep_alive = IO_TIMEOUT_VAL;     /* io timeout. */

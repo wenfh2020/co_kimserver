@@ -275,21 +275,27 @@ int Network::listen_to_port(const char* host, int port) {
 }
 
 void Network::on_repeat_timer() {
+    m_now_time = mstime();
+
     if (is_manager()) {
         if (m_zk_cli != nullptr) {
             m_zk_cli->on_repeat_timer();
         }
         run_with_period(1000) {
-            report_payload_to_zookeeper();
+            // report_payload_to_zookeeper();
         }
     } else {
         run_with_period(1000) {
             /* send payload info to manager. */
-            report_payload_to_manager();
+            // report_payload_to_manager();
         }
     }
+
+    if (m_coroutines != nullptr) {
+        m_coroutines->on_repeat_timer();
+    }
+
     m_cronloops++;
-    m_now_time = mstime();
 }
 
 bool Network::report_payload_to_zookeeper() {
@@ -397,7 +403,7 @@ void* Network::handle_accept_nodes_conn(void*) {
                 LOG_ERROR("accepting client connection failed: fd: %d, errstr %s",
                           m_node_host_fd, m_errstr);
             }
-            m_coroutines->co_sleep(1000, m_node_host_fd, POLLIN);
+            co_sleep(1000, m_node_host_fd, POLLIN);
             continue;
         }
 
@@ -443,7 +449,7 @@ void* Network::handle_accept_gate_conn(void* d) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            m_coroutines->co_sleep(1000, m_gate_host_fd, POLLIN);
+            co_sleep(1000, m_gate_host_fd, POLLIN);
             continue;
         }
 
@@ -467,7 +473,7 @@ void* Network::handle_accept_gate_conn(void* d) {
                 break;
             } else if (err == EAGAIN) {
                 LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
-                m_coroutines->co_sleep(1000, channel_fd, POLLOUT);
+                co_sleep(1000, channel_fd, POLLOUT);
                 continue;
             } else {
                 LOG_ERROR("write channel failed! errno: %d", err);
@@ -507,7 +513,7 @@ void* Network::handle_read_transfer_fd(void* d) {
         if (err != 0) {
             if (err == EAGAIN) {
                 // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                m_coroutines->co_sleep(1000, data_fd, POLLIN);
+                co_sleep(1000, data_fd, POLLIN);
                 continue;
             } else {
                 LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
@@ -605,7 +611,7 @@ void* Network::handle_requests(void* d) {
                 break;
             }
 
-            m_coroutines->co_sleep(1000, fd, POLLIN);
+            co_sleep(1000, fd, POLLIN);
         }
     }
 
@@ -885,7 +891,7 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
         if (ret == Codec::STATUS::OK) {
             return ERR_OK;
         } else if (ret == Codec::STATUS::PAUSE) {
-            m_coroutines->co_sleep(100, c->fd(), POLLOUT);
+            co_sleep(100, c->fd(), POLLOUT);
             continue;
         } else {
             LOG_WARN("send data failed! fd: %d", c->fd());
@@ -1008,6 +1014,8 @@ void Network::destory() {
     SAFE_DELETE(m_sys_cmd);
     SAFE_DELETE(m_redis_mgr);
     SAFE_DELETE(m_nodes_conn);
+    SAFE_DELETE(m_worker_data_mgr);
+    SAFE_DELETE(m_nodes);
 }
 
 void Network::close_fds() {
