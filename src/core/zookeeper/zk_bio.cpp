@@ -16,6 +16,8 @@ namespace kim {
 #define REDIS_THREAD_STACK_SIZE (1024 * 1024 * 4)
 
 Bio::Bio(Log* logger) : m_logger(logger) {
+    pthread_cond_init(&m_cond, NULL);
+    pthread_mutex_init(&m_mutex, NULL);
 }
 
 Bio::~Bio() {
@@ -32,8 +34,6 @@ bool Bio::bio_init() {
     pthread_t thread;
     size_t stacksize;
 
-    pthread_mutex_init(&m_mutex, NULL);
-    pthread_cond_init(&m_cond, NULL);
     /* Set the stack size as by default it may be small in some system */
     pthread_attr_init(&attr);
     pthread_attr_getstacksize(&attr, &stacksize);
@@ -49,6 +49,7 @@ bool Bio::bio_init() {
         return false;
     }
     m_thread = thread;
+    m_stop_thread = false;
     return true;
 }
 

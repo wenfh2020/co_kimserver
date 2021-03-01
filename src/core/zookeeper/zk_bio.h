@@ -49,7 +49,7 @@ class Bio {
     pthread_cond_t m_cond;
     pthread_mutex_t m_mutex;
 
-    volatile bool m_stop_thread = false;
+    volatile bool m_stop_thread = true;
     std::list<zk_task_t*> m_req_tasks;
     std::list<zk_task_t*> m_ack_tasks;
 };
