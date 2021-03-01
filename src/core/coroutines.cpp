@@ -49,7 +49,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         task->c = c;
         task->co->pfn = fn;
         m_co_free.erase(it);
-        LOG_DEBUG("use free co: %p", task->co);
+        // LOG_DEBUG("use free co: %p", task->co);
     }
 
     return task;

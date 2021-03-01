@@ -10,7 +10,7 @@ namespace kim {
 
 Connection::Connection(Log* logger, int fd, uint64_t id) : Logger(logger) {
     set_fd_data(fd, id);
-    set_active_time(mstime());
+    set_active_time(now());
 }
 
 Connection::~Connection() {
@@ -43,7 +43,7 @@ bool Connection::init(Codec::TYPE codec) {
     }
 
     if (m_codec != nullptr) {
-        set_active_time(mstime());
+        set_active_time(now());
         m_codec->set_codec(codec);
     }
 
@@ -90,7 +90,7 @@ Codec::STATUS Connection::conn_read() {
             m_recv_buf->readable_len() < m_recv_buf->capacity() / 2) {
             m_recv_buf->compact(m_recv_buf->readable_len() * 2);
         }
-        m_active_time = mstime();
+        m_active_time = now();
     }
 
     return Codec::STATUS::OK;
@@ -137,7 +137,7 @@ Codec::STATUS Connection::conn_write() {
         sbuf->compact(sbuf->readable_len() * 2);
     }
 
-    m_active_time = mstime();
+    m_active_time = now();
     return (sbuf->readable_len() > 0) ? Codec::STATUS::PAUSE : Codec::STATUS::OK;
 }
 

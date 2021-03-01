@@ -2,6 +2,7 @@
 #define __KIM_CONNECTION_H__
 
 #include "codec/codec.h"
+#include "net.h"
 #include "server.h"
 #include "util/log.h"
 #include "util/socket_buffer.h"
@@ -32,6 +33,9 @@ class Connection : Logger {
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
+
+    void set_net(INet* net) { m_net = net; }
+    long long now() { return (m_net != nullptr) ? m_net->now() : mstime(); }
 
     void set_state(STATE state) { m_state = state; }
     STATE state() const { return m_state; }
@@ -108,6 +112,8 @@ class Connection : Logger {
 
     uint64_t m_active_time = 0;  // connection last active (read/write) time.
     uint64_t m_keep_alive = 0;
+
+    INet* m_net = nullptr;
 };
 
 }  // namespace kim

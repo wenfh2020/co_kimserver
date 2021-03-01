@@ -18,6 +18,7 @@
 namespace kim {
 
 Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
+    m_now_time = mstime();
 }
 
 Network::~Network() {
@@ -288,6 +289,7 @@ void Network::on_repeat_timer() {
         }
     }
     m_cronloops++;
+    m_now_time = mstime();
 }
 
 bool Network::report_payload_to_zookeeper() {
@@ -520,8 +522,6 @@ void* Network::handle_read_transfer_fd(void* d) {
             continue;
         }
 
-        LOG_INFO("conns cnt: %u, %d", m_conns.size(), m_max_clients);
-
         codec = static_cast<Codec::TYPE>(ch.codec);
         c = create_conn(ch.fd, codec);
         if (c == nullptr) {
@@ -623,7 +623,7 @@ int Network::process_tcp_msg(Connection* c) {
     Request* req;
     MsgHead* head;
     MsgBody* body;
-    Codec::STATUS codec_res;
+    Codec::STATUS stat;
     uint32_t old_cnt, old_bytes;
 
     fd = c->fd();
@@ -631,17 +631,17 @@ int Network::process_tcp_msg(Connection* c) {
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
-    req = new Request(c->fd_data(), false);
+    req = new Request(c->fd_data());
     head = req->msg_head();
     body = req->msg_body();
 
-    codec_res = c->conn_read(*head, *body);
-    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+    stat = c->conn_read(*head, *body);
+    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
 
     m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
     m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
 
-    while (codec_res == Codec::STATUS::OK) {
+    while (stat == Codec::STATUS::OK) {
         ret = ERR_UNKOWN_CMD;
 
         if (c->is_system()) {
@@ -671,11 +671,11 @@ int Network::process_tcp_msg(Connection* c) {
         head->Clear();
         body->Clear();
 
-        codec_res = c->fetch_data(*head, *body);
-        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)codec_res);
+        stat = c->fetch_data(*head, *body);
+        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
     }
 
-    if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+    if (stat == Codec::STATUS::ERR || stat == Codec::STATUS::CLOSED) {
         LOG_DEBUG("read failed! fd: %d", c->fd());
         ret = ERR_PACKET_DECODE_FAILED;
     }
@@ -742,6 +742,7 @@ Connection* Network::create_conn(int fd) {
     }
 
     m_conns[fd] = c;
+    c->set_net(this);
     c->set_keep_alive(m_keep_alive);
     LOG_DEBUG("create connection fd: %d, seq: %llu", fd, seq);
     return c;
@@ -1076,12 +1077,12 @@ bool Network::set_gate_codec(const std::string& codec_type) {
     return false;
 }
 
-bool Network::update_conn_state(int fd, Connection::STATE state) {
+bool Network::update_conn_state(int fd, int state) {
     auto it = m_conns.find(fd);
     if (it == m_conns.end()) {
         return false;
     }
-    it->second->set_state(state);
+    it->second->set_state((Connection::STATE)state);
     return true;
 }
 
@@ -1104,6 +1105,14 @@ int Network::relay_to_node(const std::string& node_type, const std::string& obj,
     LOG_DEBUG("relay to node, type: %s, obj: %s", node_type.c_str(), obj.c_str());
 
     return m_nodes_conn->relay_to_node(node_type, obj, head, body, head_out, body_out);
+}
+
+uint64_t Network::now() {
+    if ((++m_time_index % 10) == 0) {
+        /* mstime waste too much cpu, so set it at intervals and in timer. */
+        m_now_time = mstime();
+    }
+    return m_now_time;
 }
 
 }  // namespace kim

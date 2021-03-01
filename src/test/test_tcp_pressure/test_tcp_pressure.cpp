@@ -380,7 +380,7 @@ int main(int args, char** argv) {
     LOG_INFO("start pressure, host: %s, port: %d, users: %d, packets: %d",
              g_server_host.c_str(), g_server_port, g_test_users, g_test_user_packets);
 
-    g_begin_time = time_now();
+    // g_begin_time = time_now();
 
     stCoRoutine_t* co;
     for (int i = 0; i < g_test_users; i++) {

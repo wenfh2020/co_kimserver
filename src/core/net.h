@@ -5,7 +5,6 @@
 #include "mysql/mysql_mgr.h"
 #include "protobuf/proto/http.pb.h"
 #include "protobuf/proto/msg.pb.h"
-#include "request.h"
 #include "server.h"
 #include "util/util.h"
 
@@ -17,6 +16,8 @@ class SysCmd;
 class RedisMgr;
 class ZkClient;
 class Coroutines;
+class Request;
+class Connection;
 
 class INet {
    public:
@@ -67,7 +68,7 @@ class INet {
     virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
 
     /* connection. */
-    virtual bool update_conn_state(int fd, Connection::STATE state) { return false; }
+    virtual bool update_conn_state(int fd, int state) { return false; }
     virtual bool add_client_conn(const std::string& node_id, const fd_t& f) { return false; }
 };
 

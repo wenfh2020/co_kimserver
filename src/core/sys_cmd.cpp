@@ -509,7 +509,7 @@ int SysCmd::on_req_tell_worker(const Request* req) {
 
     /* B1 connect A1 ok. */
     node_id = format_nodes_id(tn.ip(), tn.port(), tn.worker_index());
-    m_net->update_conn_state(req->fd(), Connection::STATE::CONNECTED);
+    m_net->update_conn_state(req->fd(), (int)Connection::STATE::CONNECTED);
     m_net->add_client_conn(node_id, req->fd_data());
     return ERR_OK;
 }
@@ -535,7 +535,7 @@ int SysCmd::on_rsp_tell_worker(const Request* req) {
     }
 
     node_id = format_nodes_id(tn.ip(), tn.port(), tn.worker_index());
-    m_net->update_conn_state(req->fd(), Connection::STATE::CONNECTED);
+    m_net->update_conn_state(req->fd(), (int)Connection::STATE::CONNECTED);
     m_net->add_client_conn(node_id, req->fd_data());
 
     /* A1 begin to send waiting buffer. */

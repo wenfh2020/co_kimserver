@@ -127,7 +127,7 @@ void* NodeConn::handle_task(void* arg) {
     for (;;) {
         if (cd->tasks.empty()) {
             // LOG_TRACE("wait for task! node: %s, co: %p", cd->node_type.c_str(), cd->co);
-            co_cond_timedwait(cd->cond, HEART_BEAT_TIME);
+            co_cond_timedwait(cd->cond, 1000);
         }
 
         if (cd->c == nullptr) {
@@ -139,6 +139,9 @@ void* NodeConn::handle_task(void* arg) {
         }
 
         if (cd->tasks.empty()) {
+            if (m_net->now() - cd->c->active_time() < HEART_BEAT_TIME) {
+                continue;
+            }
             ret = m_net->sys_cmd()->send_heart_beat(cd->c);
             if (ret == ERR_OK) {
                 ret = recv_data(cd->c, &head, &body);
@@ -182,7 +185,7 @@ int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
             if (m_net->now() - c->active_time() > MAX_RECV_DATA_TIME) {
                 return ERR_READ_DATA_TIMEOUT;
             }
-            co_sleep(100, c->fd(), POLLIN);
+            co_sleep(500, c->fd(), POLLIN);
             continue;
         } else if (codec_res == Codec::STATUS::CLOSED) {
             return ERR_CONN_CLOSED;
@@ -330,7 +333,7 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
 
     c->init(Codec::TYPE::PROTOBUF);
     c->set_privdata(this);
-    c->set_active_time(mstime());
+    c->set_active_time(m_net->now());
     c->set_system(true);
     c->set_state(Connection::STATE::TRY_CONNECT);
 

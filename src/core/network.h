@@ -49,7 +49,7 @@ class Network : public INet, public TimerCron {
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
     virtual CJsonObject* config() override { return &m_config; }
-    virtual uint64_t now() override { return mstime(); }
+    virtual uint64_t now() override;
     virtual uint64_t new_seq() override { return ++m_seq; }
 
     /* pro's type. */
@@ -82,7 +82,7 @@ class Network : public INet, public TimerCron {
     virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) override;
 
     /* connection. */
-    virtual bool update_conn_state(int fd, Connection::STATE state) override;
+    virtual bool update_conn_state(int fd, int state) override;
     virtual bool add_client_conn(const std::string& node_id, const fd_t& f) override;
 
     /* connection. */
@@ -143,6 +143,9 @@ class Network : public INet, public TimerCron {
 
     uint64_t m_seq = 0;          /* incremental serial number. */
     char m_errstr[ANET_ERR_LEN]; /* error string. */
+
+    uint64_t m_now_time = 0;
+    int m_time_index = 0;
 
     TYPE m_type = TYPE::UNKNOWN;                /* owner type. */
     uint64_t m_keep_alive = IO_TIMEOUT_VAL;     /* io timeout. */
