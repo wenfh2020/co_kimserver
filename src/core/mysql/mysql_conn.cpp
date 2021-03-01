@@ -32,7 +32,8 @@ bool MysqlConn::connect(db_info_t* db) {
     /* https://dev.mysql.com/doc/c-api/8.0/en/c-api-auto-reconnect.html */
     mysql_options(m_conn, MYSQL_OPT_RECONNECT, &is_reconnect);
     mysql_set_character_set(m_conn, db->charset.c_str());
-    mysql_options(m_conn, MYSQL_OPT_COMPRESS, NULL);
+    /* MYSQL_OPT_COMPRESS --> Cost performance. */
+    // mysql_options(m_conn, MYSQL_OPT_COMPRESS, NULL);
     mysql_options(m_conn, MYSQL_OPT_LOCAL_INFILE, NULL);
 
     if (!mysql_real_connect(m_conn, db->host.c_str(), db->user.c_str(),
