@@ -193,17 +193,17 @@ int SysCmd::on_rsp_update_payload(const Request* req) {
 
 int SysCmd::send_add_zk_node_to_worker(const zk_node& node) {
     LOG_TRACE("send CMD_REQ_ADD_ZK_NODE");
-    return m_net->send_to_worker(CMD_REQ_ADD_ZK_NODE, m_net->new_seq(), node.SerializeAsString());
+    return m_net->send_to_workers(CMD_REQ_ADD_ZK_NODE, m_net->new_seq(), node.SerializeAsString());
 }
 
 int SysCmd::send_del_zk_node_to_worker(const std::string& zk_path) {
     LOG_TRACE("send CMD_REQ_DEL_ZK_NODE, path: %d", zk_path.c_str());
-    return m_net->send_to_worker(CMD_REQ_DEL_ZK_NODE, m_net->new_seq(), zk_path);
+    return m_net->send_to_workers(CMD_REQ_DEL_ZK_NODE, m_net->new_seq(), zk_path);
 }
 
 int SysCmd::send_reg_zk_node_to_worker(const register_node& rn) {
     LOG_TRACE("send CMD_REQ_REGISTER_NODE, path: %s", rn.my_zk_path().c_str());
-    return m_net->send_to_worker(CMD_REQ_REGISTER_NODE, m_net->new_seq(), rn.SerializeAsString());
+    return m_net->send_to_workers(CMD_REQ_REGISTER_NODE, m_net->new_seq(), rn.SerializeAsString());
 }
 
 int SysCmd::send_zk_nodes_version_to_manager(int version) {

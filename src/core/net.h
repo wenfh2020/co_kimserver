@@ -65,7 +65,7 @@ class INet {
     /* only for worker. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
     /* only for manager. */
-    virtual int send_to_worker(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
+    virtual int send_to_workers(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
 
     /* connection. */
     virtual bool update_conn_state(int fd, int state) { return false; }

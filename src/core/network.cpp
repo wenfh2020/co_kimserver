@@ -956,7 +956,7 @@ int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
     return ret;
 }
 
-int Network::send_to_worker(int cmd, uint64_t seq, const std::string& data) {
+int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
     LOG_TRACE("send to children, cmd: %d, seq: %llu", cmd, seq);
 
     if (!is_manager()) {
