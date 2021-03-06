@@ -211,7 +211,6 @@ void MysqlMgr::destory() {
             SAFE_DELETE(v->c);
             co_release(v->co);
             co_cond_free(v->cond);
-            SAFE_DELETE(v->db);
             while (!v->tasks.empty()) {
                 SAFE_DELETE(v->tasks.front());
                 v->tasks.pop();

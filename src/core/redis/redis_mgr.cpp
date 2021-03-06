@@ -259,7 +259,6 @@ void RedisMgr::destory() {
             redisFree(v->c);
             co_release(v->co);
             co_cond_free(v->cond);
-            SAFE_DELETE(v->ri);
             while (!v->tasks.empty()) {
                 SAFE_DELETE(v->tasks.front());
                 v->tasks.pop();

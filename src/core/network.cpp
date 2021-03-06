@@ -990,9 +990,6 @@ void Network::clear_routines() {
 }
 
 void Network::destory() {
-    close_fds();
-    clear_routines();
-
     SAFE_DELETE(m_zk_cli);
     SAFE_DELETE(m_module_mgr);
     SAFE_DELETE(m_mysql_mgr);
@@ -1001,6 +998,8 @@ void Network::destory() {
     SAFE_DELETE(m_nodes_conn);
     SAFE_DELETE(m_worker_data_mgr);
     SAFE_DELETE(m_nodes);
+    close_fds();
+    clear_routines();
 }
 
 void Network::close_fds() {
@@ -1012,6 +1011,7 @@ void Network::close_fds() {
         }
     }
     m_conns.clear();
+    m_node_conns.clear();
 }
 
 void Network::close_channel(int* fds) {
