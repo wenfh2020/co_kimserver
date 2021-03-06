@@ -92,6 +92,7 @@ class Network : public INet, public TimerCron {
     virtual bool close_conn(int fd) override;
     virtual bool close_conn(Connection* c) override;
     virtual Connection* create_conn(int fd) override;
+    bool is_valid_conn(Connection* c);
 
     void close_channel(int* fds); /* close socketpair. */
     Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);

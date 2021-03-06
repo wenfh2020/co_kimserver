@@ -517,7 +517,7 @@ void* Network::handle_read_transfer_fd(void* d) {
                 continue;
             } else {
                 LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
-                exit(EXIT_FD_TRANSFER);
+                _exit(EXIT_FD_TRANSFER);
             }
         }
 
@@ -566,55 +566,40 @@ void* Network::handle_requests(void* d) {
     int fd;
     Connection* c;
     co_task_t* task;
+
     task = (co_task_t*)d;
+    c = (Connection*)task->c;
+
+    if (!is_valid_conn(c)) {
+        LOG_ERROR("invalid conn: %p", c);
+        goto end;
+    }
+
+    fd = c->fd();
 
     for (;;) {
-        if (task->c == nullptr) {
-            m_coroutines->add_free_co_task(task);
-            co_yield_ct();
-            continue;
-        }
-
-        c = (Connection*)task->c;
-        fd = c->fd();
-
-        auto it = m_conns.find(fd);
-        if (it == m_conns.end() || it->second == nullptr) {
-            LOG_WARN("find connection failed, fd: %d", fd);
-            close_conn(fd);
-            task->c = nullptr;
-            continue;
-        }
-
-        if (c->is_invalid()) {
-            LOG_ERROR("invalid socket, fd: %d", fd);
-            close_conn(fd);
-            task->c = nullptr;
-            continue;
-        }
-
-        for (;;) {
-            if (!c->is_system()) {
-                /* check connection alive. */
-                if (now() - c->active_time() > m_keep_alive) {
-                    close_conn(fd);
-                    task->c = nullptr;
-                    LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
-                              fd, now(), c->active_time(), m_keep_alive);
-                    break;
-                }
-            }
-
-            if (process_msg(c) != ERR_OK) {
-                close_conn(fd);
-                task->c = nullptr;
+        if (!c->is_system()) {
+            /* check alive. */
+            if (now() - c->active_time() > m_keep_alive) {
+                LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
+                          fd, now(), c->active_time(), m_keep_alive);
                 break;
             }
+        }
 
+        if (process_msg(c) != ERR_OK) {
+            break;
+        } else {
             co_sleep(1000, fd, POLLIN);
         }
     }
 
+end:
+    if (c != nullptr) {
+        close_conn(c);
+        task->c = nullptr;
+    }
+    m_coroutines->add_free_co_task(task);
     return 0;
 }
 
@@ -1066,6 +1051,15 @@ bool Network::close_conn(int fd) {
     SAFE_DELETE(c);
     m_conns.erase(it);
     return true;
+}
+
+bool Network::is_valid_conn(Connection* c) {
+    if (c != nullptr) {
+        if (!c->is_invalid()) {
+            return m_conns.find(c->fd()) != m_conns.end();
+        }
+    }
+    return false;
 }
 
 void Network::close_fd(int fd) {
