@@ -464,18 +464,22 @@ int co_create(stCoRoutine_t **ppco, const stCoRoutineAttr_t *attr, pfn_co_routin
 }
 
 void co_free(stCoRoutine_t *co) {
+    if (co == NULL) {
+        return;
+    }
+
     if (!co->cIsShareStack) {
         free(co->stack_mem->stack_buffer);
         free(co->stack_mem);
-    }
-    //walkerdu fix at 2018-01-20
-    //存在内存泄漏
-    else {
-        if (co->save_buffer)
+    } else {
+        stCoRoutineEnv_t *env = co->env;
+        if (env->occupy_co == co) env->occupy_co = NULL;
+        if (co->stack_mem->occupy_co == co) co->stack_mem->occupy_co = NULL;
+        if (co->save_buffer != NULL) {
             free(co->save_buffer);
-
-        if (co->stack_mem->occupy_co == co)
-            co->stack_mem->occupy_co = NULL;
+            co->save_buffer = NULL;
+            co->save_size = 0;
+        }
     }
 
     free(co);
@@ -501,7 +505,7 @@ void co_resume(stCoRoutine_t *co) {
 // walkerdu 2018-01-14
 // 用于reset超时无法重复使用的协程
 void co_reset(stCoRoutine_t *co) {
-    if (!co->cStart || co->cIsMain)
+    if (co == NULL || !co->cStart || co->cIsMain)
         return;
 
     co->cStart = 0;
@@ -514,9 +518,15 @@ void co_reset(stCoRoutine_t *co) {
         co->save_size = 0;
     }
 
+    stCoRoutineEnv_t *env = co->env;
+    if (env->occupy_co == co) {
+        env->occupy_co = NULL;
+    }
+
     // 如果共享栈被当前协程占用，要释放占用标志，否则被切换，会执行save_stack_buffer()
-    if (co->stack_mem->occupy_co == co)
+    if (co->stack_mem->occupy_co == co) {
         co->stack_mem->occupy_co = NULL;
+    }
 }
 
 int co_sleep(int ms, int fd, int events) {
@@ -547,10 +557,12 @@ void save_stack_buffer(stCoRoutine_t *occupy_co) {
     int len = stack_mem->stack_bp - occupy_co->stack_sp;
 
     if (occupy_co->save_buffer) {
-        free(occupy_co->save_buffer), occupy_co->save_buffer = NULL;
+        free(occupy_co->save_buffer);
+        occupy_co->save_buffer = NULL;
+        occupy_co->save_size = 0;
     }
 
-    occupy_co->save_buffer = (char *)malloc(len);  //malloc buf;
+    occupy_co->save_buffer = (char *)malloc(len);
     occupy_co->save_size = len;
     memcpy(occupy_co->save_buffer, occupy_co->stack_sp, len);
 }
@@ -586,7 +598,7 @@ void co_swap(stCoRoutine_t *curr, stCoRoutine_t *pending_co) {
     stCoRoutine_t *update_occupy_co = curr_env->occupy_co;
     stCoRoutine_t *update_pending_co = curr_env->pending_co;
 
-    if (update_occupy_co && update_pending_co && update_occupy_co != update_pending_co) {
+    if (update_pending_co && update_occupy_co != update_pending_co) {
         // resume stack buffer
         if (update_pending_co->save_buffer && update_pending_co->save_size > 0) {
             memcpy(update_pending_co->stack_sp, update_pending_co->save_buffer, update_pending_co->save_size);
