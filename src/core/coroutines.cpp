@@ -2,22 +2,28 @@
 
 #include "libco/co_routine_inner.h"
 
+#define FREE_CO_CNT 100
+
 namespace kim {
 
 Coroutines::Coroutines(Log* logger) : m_logger(logger) {
     m_co_attr.share_stack = co_alloc_sharestack(64, 4 * 1024 * 1024);
-    m_co_attr.stack_size = 0;
 }
 
 Coroutines::~Coroutines() {
     clear_tasks();
-    co_release_sharestack(m_co_attr.share_stack);
+    if (m_co_attr.share_stack != nullptr) {
+        co_release_sharestack(m_co_attr.share_stack);
+        m_co_attr.share_stack = nullptr;
+    }
 }
 
 void Coroutines::clear_tasks() {
-    for (const auto& task : m_coroutines) {
+    for (auto& task : m_coroutines) {
         co_release(task->co);
+        free(task);
     }
+    m_co_free.clear();
     m_coroutines.clear();
 }
 
@@ -30,7 +36,7 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
 
     if (m_co_free.size() == 0) {
         if ((int)m_coroutines.size() > m_max_co_cnt) {
-            LOG_ERROR("exceed the coroutines limit: %d", m_max_co_cnt);
+            LOG_ERROR("exceed the coroutines‘s limit: %d", m_max_co_cnt);
             return nullptr;
         }
         task = (co_task_t*)calloc(1, sizeof(co_task_t));
@@ -38,42 +44,45 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
         m_coroutines.insert(task);
         co_create(&task->co, &m_co_attr, fn, (void*)task);
     } else {
-        auto it = m_co_free.begin();
-        task = *it;
+        task = *m_co_free.begin();
+        co_reset(task->co);
         if (task->c != nullptr) {
             LOG_WARN("pls ensure connection: %p\n", c);
         }
-        if (task->co->cEnd) {
-            co_reset(task->co);
-        }
         task->c = c;
         task->co->pfn = fn;
-        m_co_free.erase(it);
-        // LOG_DEBUG("use free co: %p", task->co);
+        m_co_free.erase(task);
+        LOG_DEBUG("use free co: %p", task->co);
     }
 
     return task;
 }
 
 bool Coroutines::add_free_co_task(co_task_t* task) {
-    auto it = m_co_free.insert(task);
-    return it.second;
+    if (task == nullptr ||
+        m_coroutines.find(task) == m_coroutines.end()) {
+        return false;
+    }
+    return m_co_free.insert(task).second;
 }
 
 void Coroutines::on_repeat_timer() {
-    return;
     int i = 0;
     co_task_t* task;
+
+    /* release free coroutines in timer. */
     run_with_period(1000) {
-        /* release free coroutines in timer. */
-        while (!m_co_free.empty() && i++ < 10) {
-            auto it = m_co_free.begin();
-            task = *it;
+        while (!m_co_free.empty() && i++ < FREE_CO_CNT) {
+            task = *m_co_free.begin();
+            LOG_DEBUG("co free co: %p", task->co);
             co_release(task->co);
-            m_co_free.erase(it);
+            m_co_free.erase(task);
             m_coroutines.erase(task);
+            SAFE_FREE(task);
         }
+        LOG_DEBUG("free co cnt: %u", m_co_free.size());
     }
+
     m_cronloops++;
 }
 

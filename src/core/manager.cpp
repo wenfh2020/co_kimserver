@@ -41,6 +41,7 @@ bool Manager::init(const char* conf_path) {
         LOG_ERROR("load config failed! %s", conf_path);
         return false;
     }
+    set_proc_title("%s", m_config("server_name").c_str());
 
     if (!load_logger()) {
         LOG_ERROR("init log failed!");
@@ -52,11 +53,8 @@ bool Manager::init(const char* conf_path) {
         return false;
     }
 
-    load_signals();
-
     create_workers();
-    set_proc_title("%s", m_config("server_name").c_str());
-
+    load_signals();
     init_timer();
     LOG_INFO("init manager done!");
     return true;
@@ -165,10 +163,10 @@ bool Manager::create_worker(int worker_index) {
         worker_info_t info{0, worker_index, ctrl_fds[1], data_fds[1], m_node_info.work_path()};
         Worker worker(worker_name(worker_index));
         if (!worker.init(&info, m_config)) {
-            exit(EXIT_CHILD_INIT_FAIL);
+            _exit(EXIT_CHILD_INIT_FAIL);
         }
         worker.run();
-        exit(EXIT_CHILD);
+        _exit(EXIT_CHILD);
     } else if (pid > 0) {
         /* parent. */
         close(ctrl_fds[1]);
