@@ -10,8 +10,8 @@ namespace kim {
 typedef struct worker_info_s {
     int pid;               /* worker's process id. */
     int index;             /* worker's index which assiged by manager. */
-    int ctrl_fd;           /* socketpair for parent and child. */
-    int data_fd;           /* socketpair for parent and child. */
+    fd_t fctrl;            /* socketpair for parent and child. */
+    fd_t fdata;            /* socketpair for parent and child. */
     std::string work_path; /* process work path. */
     Payload payload;       /* payload info. */
 } worker_info_t;
@@ -22,9 +22,9 @@ class WorkerDataMgr : public Logger {
     virtual ~WorkerDataMgr();
 
    public:
-    bool add_worker_info(int index, int pid, int ctrl_fd, int data_fd);
     bool del_worker_info(int pid);
     worker_info_t* get_worker_info(int index);
+    bool add_worker_info(int index, int pid, const fd_t& fctrl, const fd_t& fdata);
     const std::unordered_map<int, worker_info_t*>& get_infos() const { return m_workers; }
 
     int get_next_worker_data_fd();

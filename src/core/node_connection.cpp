@@ -363,7 +363,7 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
     return c;
 
 error:
-    m_net->close_conn(fd);
+    m_net->close_conn(c);
     return nullptr;
 }
 
@@ -375,7 +375,7 @@ int NodeConn::handle_sys_message(Connection* c) {
 
     fd = c->fd();
     ret = ERR_OK;
-    req = new Request(c->fd_data());
+    req = new Request(c->ft());
 
     for (;;) {
         codec_res = c->conn_read(*req->msg_head(), *req->msg_body());

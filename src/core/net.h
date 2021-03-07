@@ -24,14 +24,15 @@ class INet {
     INet() {}
     virtual ~INet() {}
 
-    virtual uint64_t now() { return mstime(); }
     virtual uint64_t new_seq() { return 0; }
+    virtual uint64_t now() { return mstime(); }
+
     virtual CJsonObject* config() { return nullptr; }
     virtual MysqlMgr* mysql_mgr() { return nullptr; }
     virtual RedisMgr* redis_mgr() { return nullptr; }
-    virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
     virtual SysCmd* sys_cmd() { return nullptr; }
     virtual ZkClient* zk_client() { return nullptr; }
+    virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
 
     /* for cluster. */
     virtual Nodes* nodes() { return nullptr; }
@@ -40,15 +41,15 @@ class INet {
     virtual bool is_worker() { return false; }
     virtual bool is_manager() { return false; }
 
-    virtual std::string node_type() { return ""; }
-    virtual std::string node_host() { return ""; }
     virtual int node_port() { return 0; }
     virtual int worker_index() { return -1; }
+    virtual std::string node_type() { return ""; }
+    virtual std::string node_host() { return ""; }
 
-    virtual Connection* create_conn(int fd) { return nullptr; }
-    virtual bool close_conn(int fd) { return false; }
-    virtual bool close_conn(Connection* c) { return false; }
     virtual void close_fd(int fd) {}
+    virtual bool close_conn(uint64_t id) { return false; }
+    virtual bool close_conn(Connection* c) { return false; }
+    virtual Connection* create_conn(int fd) { return nullptr; }
 
     /* tcp send. */
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
@@ -68,7 +69,7 @@ class INet {
     virtual int send_to_workers(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
 
     /* connection. */
-    virtual bool update_conn_state(int fd, int state) { return false; }
+    virtual bool update_conn_state(const fd_t& ft, int state) { return false; }
     virtual bool add_client_conn(const std::string& node_id, const fd_t& f) { return false; }
 };
 

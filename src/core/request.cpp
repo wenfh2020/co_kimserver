@@ -2,8 +2,7 @@
 
 namespace kim {
 
-Request::Request(const fd_t& f, bool is_http) : m_is_http(is_http) {
-    m_fd_data = f;
+Request::Request(const fd_t& ft, bool is_http) : m_ft(ft), m_is_http(is_http) {
     if (is_http) {
         CHECK_NEW(m_http_msg, HttpMsg);
     } else {

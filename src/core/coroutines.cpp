@@ -74,13 +74,15 @@ void Coroutines::on_repeat_timer() {
     run_with_period(1000) {
         while (!m_co_free.empty() && i++ < FREE_CO_CNT) {
             task = *m_co_free.begin();
-            LOG_DEBUG("co free co: %p", task->co);
             co_release(task->co);
             m_co_free.erase(task);
             m_coroutines.erase(task);
             SAFE_FREE(task);
         }
-        LOG_DEBUG("free co cnt: %u", m_co_free.size());
+
+        if (!m_co_free.empty()) {
+            LOG_DEBUG("free co cnt: %u", m_co_free.size());
+        }
     }
 
     m_cronloops++;

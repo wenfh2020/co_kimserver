@@ -114,7 +114,7 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     return true;
 }
 
-bool Network::init_manager_channel(int ctrl_fd, int data_fd) {
+bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
     if (!is_manager()) {
         return false;
     }
@@ -122,30 +122,33 @@ bool Network::init_manager_channel(int ctrl_fd, int data_fd) {
     co_task_t* task;
     Connection *conn_ctrl, *conn_data;
 
-    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
+    conn_ctrl = create_conn(fctrl.fd, Codec::TYPE::PROTOBUF, true);
     if (conn_ctrl == nullptr) {
-        close_fd(ctrl_fd);
-        LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
+        close_fd(fctrl.fd);
+        LOG_ERROR("add read event failed, fd: %d", fctrl.fd);
         return false;
     }
 
-    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
+    conn_data = create_conn(fdata.fd, Codec::TYPE::PROTOBUF, true);
     if (conn_data == nullptr) {
-        close_fd(data_fd);
-        LOG_ERROR("add read event failed, fd: %d", data_fd);
+        close_fd(fdata.fd);
+        close_conn(conn_ctrl);
+        LOG_ERROR("add read event failed, fd: %d", fdata.fd);
         return false;
     }
 
-    m_manager_ctrl_fd = ctrl_fd;
-    m_manager_data_fd = data_fd;
+    fctrl = m_manager_fctrl = conn_ctrl->ft();
+    fdata = m_manager_fdata = conn_data->ft();
 
     /* recv data from worker. */
     task = m_coroutines->create_co_task(conn_ctrl, co_handle_requests);
     if (task == nullptr) {
         LOG_ERROR("create new corotines failed!");
         close_conn(conn_ctrl);
+        close_conn(conn_data);
         return false;
     }
+
     co_resume(task->co);
     return true;
 }
@@ -200,8 +203,8 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     }
 
     m_config = config;
-    m_manager_ctrl_fd = ctrl_fd;
-    m_manager_data_fd = data_fd;
+    m_manager_fctrl = conn_ctrl->ft();
+    m_manager_fdata = conn_data->ft();
     m_worker_index = index;
     LOG_INFO("create network done!");
 
@@ -411,11 +414,10 @@ void* Network::handle_accept_nodes_conn(void*) {
 
         c = create_conn(fd, Codec::TYPE::PROTOBUF);
         if (c == nullptr) {
+            close_fd(fd);
             LOG_ERROR("add data fd read event failed, fd: %d", fd);
-            close_conn(fd);
             continue;
         }
-
         c->set_system(true);
 
         co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
@@ -531,8 +533,8 @@ void* Network::handle_read_transfer_fd(void* d) {
         codec = static_cast<Codec::TYPE>(ch.codec);
         c = create_conn(ch.fd, codec);
         if (c == nullptr) {
+            close_fd(ch.fd);
             LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
-            close_conn(ch.fd);
             continue;
         }
 
@@ -622,7 +624,7 @@ int Network::process_tcp_msg(Connection* c) {
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
 
-    req = new Request(c->fd_data());
+    req = new Request(c->ft());
     head = req->msg_head();
     body = req->msg_body();
 
@@ -698,7 +700,6 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
 
     Connection* c = create_conn(fd);
     if (c == nullptr) {
-        close_fd(fd);
         LOG_ERROR("add channel event failed! fd: %d", fd);
         return nullptr;
     }
@@ -716,12 +717,6 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
 }
 
 Connection* Network::create_conn(int fd) {
-    auto it = m_conns.find(fd);
-    if (it != m_conns.end()) {
-        LOG_WARN("find old connection, fd: %d", fd);
-        close_conn(fd);
-    }
-
     uint64_t seq;
     Connection* c;
 
@@ -732,7 +727,7 @@ Connection* Network::create_conn(int fd) {
         return nullptr;
     }
 
-    m_conns[fd] = c;
+    m_conns[seq] = c;
     c->set_net(this);
     c->set_keep_alive(m_keep_alive);
     LOG_DEBUG("create connection fd: %d, seq: %llu", fd, seq);
@@ -853,29 +848,21 @@ bool Network::load_redis_mgr() {
 }
 
 int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
-    if (c == nullptr) {
+    if (c == nullptr || c->is_invalid()) {
         return ERR_INVALID_CONN;
     }
 
-    Codec::STATUS ret;
-    int old_cnt, old_bytes;
-
-    ret = c->conn_append_message(head, body);
-    if (ret != Codec::STATUS::OK) {
+    Codec::STATUS stat = c->conn_append_message(head, body);
+    if (stat != Codec::STATUS::OK) {
         LOG_ERROR("encode message failed! fd: %d", c->fd());
         return ERR_ENCODE_DATA_FAILED;
     }
 
     for (;;) {
-        old_cnt = c->write_cnt();
-        old_bytes = c->write_bytes();
-        ret = c->conn_write();
-        m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
-        m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
-
-        if (ret == Codec::STATUS::OK) {
+        stat = conn_write_data(c);
+        if (stat == Codec::STATUS::OK) {
             return ERR_OK;
-        } else if (ret == Codec::STATUS::PAUSE) {
+        } else if (stat == Codec::STATUS::PAUSE) {
             co_sleep(100, c->fd(), POLLOUT);
             continue;
         } else {
@@ -885,9 +872,31 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
     }
 }
 
-Connection* Network::get_conn(const fd_t& f) {
-    auto it = m_conns.find(f.fd);
-    return (it == m_conns.end() || it->second->id() != f.id) ? nullptr : it->second;
+Codec::STATUS Network::conn_write_data(Connection* c) {
+    int old_cnt = c->write_cnt();
+    int old_bytes = c->write_bytes();
+    Codec::STATUS stat = c->conn_write();
+    if (stat != Codec::STATUS::ERR) {
+        m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
+        m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
+    }
+    return stat;
+}
+
+Connection* Network::get_conn(const fd_t& ft) {
+    auto it = m_conns.find(ft.id);
+    if (it == m_conns.end()) {
+        return nullptr;
+    }
+
+    Connection* c = it->second;
+    if (c->fd() != ft.fd) {
+        LOG_WARN("conflict conn data, old id: %llu, fd: %d, new id: %llu, fd: %d",
+                 c->id(), c->fd(), ft.id, ft.id);
+        return nullptr;
+    }
+
+    return c;
 }
 
 int Network::send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) {
@@ -906,7 +915,7 @@ int Network::send_ack(const Request* req, int err, const std::string& errstr, co
     head.set_cmd(req->msg_head()->cmd() + 1);
     head.set_len(body.ByteSizeLong());
 
-    return send_to(req->fd_data(), head, body);
+    return send_to(req->ft(), head, body);
 }
 
 int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq,
@@ -941,15 +950,15 @@ int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
         return ERR_INVALID_PROCESS_TYPE;
     }
 
-    auto it = m_conns.find(m_manager_ctrl_fd);
+    auto it = m_conns.find(m_manager_fctrl.id);
     if (it == m_conns.end()) {
-        LOG_ERROR("can not find manager ctrl fd, fd: %d", m_manager_ctrl_fd);
+        LOG_ERROR("can not find manager ctrl fd, fd: %d", m_manager_fctrl.fd);
         return ERR_INVALID_CONN;
     }
 
     int ret = send_req(it->second, cmd, seq, data);
     if (ret != ERR_OK) {
-        LOG_ALERT("send to parent failed! fd: %d", m_manager_ctrl_fd);
+        LOG_ALERT("send to parent failed! fd: %d", m_manager_fctrl.fd);
         return ret;
     }
 
@@ -969,14 +978,14 @@ int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
         m_worker_data_mgr->get_infos();
 
     for (auto& v : infos) {
-        auto it = m_conns.find(v.second->ctrl_fd);
+        auto it = m_conns.find(v.second->fctrl.id);
         if (it == m_conns.end() || it->second->is_invalid()) {
-            LOG_ALERT("ctrl fd is invalid! fd: %d", v.second->ctrl_fd);
+            LOG_ALERT("ctrl fd is invalid! fd: %d", v.second->fctrl.fd);
             continue;
         }
 
         if (send_req(it->second, cmd, seq, data) != ERR_OK) {
-            LOG_ALERT("send to worker failed! fd: %d", v.second->ctrl_fd);
+            LOG_ALERT("send to worker failed! fd: %d", v.second->fctrl.fd);
             continue;
         }
     }
@@ -1024,18 +1033,13 @@ bool Network::close_conn(Connection* c) {
     if (c == nullptr) {
         return false;
     }
-    return close_conn(c->fd());
+    return close_conn(c->id());
 }
 
-bool Network::close_conn(int fd) {
-    LOG_TRACE("close conn, fd: %d", fd);
+bool Network::close_conn(uint64_t id) {
+    LOG_DEBUG("close conn, id: %llu", id);
 
-    if (fd == -1) {
-        LOG_ERROR("invalid fd: %d", fd);
-        return false;
-    }
-
-    auto it = m_conns.find(fd);
+    auto it = m_conns.find(id);
     if (it == m_conns.end()) {
         return false;
     }
@@ -1047,7 +1051,9 @@ bool Network::close_conn(int fd) {
         m_node_conns.erase(c->get_node_id());
     }
 
-    close_fd(fd);
+    LOG_DEBUG("close conn, fd: %d, id: %llu", c->fd(), c->id());
+
+    close_fd(c->fd());
     SAFE_DELETE(c);
     m_conns.erase(it);
     return true;
@@ -1056,13 +1062,15 @@ bool Network::close_conn(int fd) {
 bool Network::is_valid_conn(Connection* c) {
     if (c != nullptr) {
         if (!c->is_invalid()) {
-            return m_conns.find(c->fd()) != m_conns.end();
+            return m_conns.find(c->id()) != m_conns.end();
         }
     }
     return false;
 }
 
 void Network::close_fd(int fd) {
+    LOG_DEBUG("close fd: %d.", fd);
+
     if (close(fd) == -1) {
         LOG_WARN("close channel failed, fd: %d. errno: %d, errstr: %s",
                  fd, errno, strerror(errno));
@@ -1079,8 +1087,8 @@ bool Network::set_gate_codec(const std::string& codec_type) {
     return false;
 }
 
-bool Network::update_conn_state(int fd, int state) {
-    auto it = m_conns.find(fd);
+bool Network::update_conn_state(const fd_t& ft, int state) {
+    auto it = m_conns.find(ft.id);
     if (it == m_conns.end()) {
         return false;
     }

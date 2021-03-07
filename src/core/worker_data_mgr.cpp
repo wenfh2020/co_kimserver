@@ -17,19 +17,19 @@ WorkerDataMgr::~WorkerDataMgr() {
     m_index_workers.clear();
 }
 
-bool WorkerDataMgr::add_worker_info(int index, int pid, int ctrl_fd, int data_fd) {
+bool WorkerDataMgr::add_worker_info(int index, int pid, const fd_t& fctrl, const fd_t& fdata) {
     auto it = m_workers.find(pid);
     if (it != m_workers.end()) {
         LOG_WARN(
             "duplicate worker info, pid: %d, "
             "old index: %d, old ctrl fd: %d, old data fd: %d, "
             "new index: %d, new ctrl fd: %d, new data fd: %d, ",
-            pid, it->second->index, it->second->ctrl_fd, it->second->data_fd,
-            index, ctrl_fd, data_fd);
+            pid, it->second->index, it->second->fctrl.fd, it->second->fdata.fd,
+            index, fctrl.fd, fdata.fd);
         del_worker_info(pid);
     }
 
-    worker_info_t* info = new worker_info_t{pid, index, ctrl_fd, data_fd};
+    worker_info_t* info = new worker_info_t{pid, index, fctrl, fdata};
     if (info != nullptr) {
         m_workers[pid] = info;
         m_itr_worker = m_workers.begin();
@@ -46,7 +46,7 @@ int WorkerDataMgr::get_worker_index(int pid) {
 
 int WorkerDataMgr::get_worker_data_fd(int worker_index) {
     auto it = m_index_workers.find(worker_index);
-    return (it != m_index_workers.end()) ? (it->second->data_fd) : -1;
+    return (it != m_index_workers.end()) ? (it->second->fdata.fd) : -1;
 }
 
 worker_info_t* WorkerDataMgr::get_worker_info(int worker_index) {
@@ -78,8 +78,8 @@ bool WorkerDataMgr::get_worker_channel(int pid, int* chs) {
     }
 
     worker_info_t* info = it->second;
-    chs[0] = info->ctrl_fd;
-    chs[1] = info->data_fd;
+    chs[0] = info->fctrl.fd;
+    chs[1] = info->fdata.fd;
     return true;
 }
 
@@ -91,7 +91,7 @@ int WorkerDataMgr::get_next_worker_data_fd() {
     if (m_itr_worker == m_workers.end()) {
         m_itr_worker = m_workers.begin();
     }
-    return m_itr_worker->second->data_fd;
+    return m_itr_worker->second->fdata.fd;
 }
 
 }  // namespace kim

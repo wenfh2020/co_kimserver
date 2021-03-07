@@ -19,8 +19,8 @@ Worker::~Worker() {
 
 bool Worker::init(const worker_info_t* info, const CJsonObject& config) {
     m_worker_info.work_path = info->work_path;
-    m_worker_info.ctrl_fd = info->ctrl_fd;
-    m_worker_info.data_fd = info->data_fd;
+    m_worker_info.fctrl = info->fctrl;
+    m_worker_info.fdata = info->fdata;
     m_worker_info.index = info->index;
     m_worker_info.pid = getpid();
 
@@ -31,8 +31,8 @@ bool Worker::init(const worker_info_t* info, const CJsonObject& config) {
         return false;
     }
 
-    LOG_INFO("init worker, index: %d, ctrl_fd: %d, data_fd: %d",
-             info->index, info->ctrl_fd, info->data_fd);
+    LOG_INFO("init worker, index: %d, fctrl fd: %d, fdata: %d",
+             info->index, info->fctrl.fd, info->fdata.fd);
 
     if (!load_network()) {
         LOG_ERROR("create network failed!");
@@ -79,8 +79,8 @@ bool Worker::load_network() {
         return false;
     }
 
-    if (!m_net->create_w(m_config, m_worker_info.ctrl_fd,
-                         m_worker_info.data_fd, m_worker_info.index)) {
+    if (!m_net->create_w(m_config, m_worker_info.fctrl.fd, m_worker_info.fdata.fd,
+                         m_worker_info.index)) {
         LOG_ERROR("init network failed!");
         SAFE_DELETE(m_net);
         return false;

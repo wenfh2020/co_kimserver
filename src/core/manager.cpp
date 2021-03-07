@@ -160,7 +160,10 @@ bool Manager::create_worker(int worker_index) {
         close(ctrl_fds[0]);
         close(data_fds[0]);
 
-        worker_info_t info{0, worker_index, ctrl_fds[1], data_fds[1], m_node_info.work_path()};
+        fd_t fctrl{ctrl_fds[1], 0};
+        fd_t fdata{data_fds[1], 0};
+
+        worker_info_t info{0, worker_index, fctrl, fdata, m_node_info.work_path()};
         Worker worker(worker_name(worker_index));
         if (!worker.init(&info, m_config)) {
             _exit(EXIT_CHILD_INIT_FAIL);
@@ -172,16 +175,17 @@ bool Manager::create_worker(int worker_index) {
         close(ctrl_fds[1]);
         close(data_fds[1]);
 
-        if (!m_net->init_manager_channel(ctrl_fds[0], data_fds[0])) {
+        fd_t fctrl{ctrl_fds[0], 0};
+        fd_t fdata{data_fds[0], 0};
+
+        if (!m_net->init_manager_channel(fctrl, fdata)) {
             LOG_CRIT("channel fd add event failed! kill child: %d", pid);
             kill(pid, SIGKILL);
             return false;
         }
 
-        m_net->worker_data_mgr()->add_worker_info(
-            worker_index, pid, ctrl_fds[0], data_fds[0]);
-        LOG_INFO("manager ctrl_fd: %d, data_fd: %d", ctrl_fds[0], data_fds[0]);
-
+        m_net->worker_data_mgr()->add_worker_info(worker_index, pid, fctrl, fdata);
+        LOG_INFO("manager ctrl fd: %d, data fd: %d", fctrl.fd, fdata.fd);
         return true;
     } else {
         m_net->close_channel(data_fds);

@@ -509,8 +509,8 @@ int SysCmd::on_req_tell_worker(const Request* req) {
 
     /* B1 connect A1 ok. */
     node_id = format_nodes_id(tn.ip(), tn.port(), tn.worker_index());
-    m_net->update_conn_state(req->fd(), (int)Connection::STATE::CONNECTED);
-    m_net->add_client_conn(node_id, req->fd_data());
+    m_net->update_conn_state(req->ft(), (int)Connection::STATE::CONNECTED);
+    m_net->add_client_conn(node_id, req->ft());
     return ERR_OK;
 }
 
@@ -535,8 +535,8 @@ int SysCmd::on_rsp_tell_worker(const Request* req) {
     }
 
     node_id = format_nodes_id(tn.ip(), tn.port(), tn.worker_index());
-    m_net->update_conn_state(req->fd(), (int)Connection::STATE::CONNECTED);
-    m_net->add_client_conn(node_id, req->fd_data());
+    m_net->update_conn_state(req->ft(), (int)Connection::STATE::CONNECTED);
+    m_net->add_client_conn(node_id, req->ft());
 
     /* A1 begin to send waiting buffer. */
     return ERR_OK;
@@ -563,7 +563,7 @@ int SysCmd::on_rsp_connect_to_worker(const Request* req) {
 
     LOG_TRACE("A1 --> B1: CMD_REQ_TELL_WORKER. fd: %d", req->fd());
 
-    ret = m_net->send_req(req->fd_data(), CMD_REQ_TELL_WORKER, m_net->new_seq(), tn.SerializeAsString());
+    ret = m_net->send_req(req->ft(), CMD_REQ_TELL_WORKER, m_net->new_seq(), tn.SerializeAsString());
     if (ret != ERR_OK) {
         LOG_ERROR("send data failed! fd: %d, ip: %s, port: %d, worker_index: %d",
                   req->fd(), tn.ip().c_str(), tn.port(), tn.worker_index());

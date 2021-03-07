@@ -18,7 +18,7 @@ int MoudleGate::filter_request(const Request* req) {
     if (ret != ERR_OK) {
         ret = net()->send_ack(req, ret, "relay to node failed!");
     } else {
-        ret = net()->send_to(req->fd_data(), *head_out, *body_out);
+        ret = net()->send_to(req->ft(), *head_out, *body_out);
     }
 
     LOG_DEBUG("req, cmd: %d, seq: %u, len: %d, body data: <%s>",

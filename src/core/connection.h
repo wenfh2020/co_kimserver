@@ -26,10 +26,10 @@ class Connection : Logger {
     bool init(Codec::TYPE codec);
     bool is_http();
 
-    int fd() { return m_fd_data.fd; }
-    uint64_t id() const { return m_fd_data.id; }
-    const fd_t& fd_data() const { return m_fd_data; }
-    void set_fd_data(int fd, uint64_t id) { m_fd_data = {fd, id}; }
+    int fd() { return m_ft.fd; }
+    uint64_t id() const { return m_ft.id; }
+    const fd_t& ft() const { return m_ft; }
+    void set_fd_data(int fd, uint64_t id) { m_ft = {fd, id}; }
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
@@ -89,7 +89,7 @@ class Connection : Logger {
     Codec::STATUS conn_write(const MsgHead& head, const MsgBody& body, SocketBuffer** buf, bool is_send = true);
 
    private:
-    fd_t m_fd_data;
+    fd_t m_ft;                  /* file data struct. */
     void* m_privdata = nullptr; /* private data. */
     Codec* m_codec = nullptr;   /* protocol parser。 */
     bool m_is_system = false;   /* system connection. */

@@ -36,7 +36,7 @@ class Network : public INet, public TimerCron {
     /* for worker.  */
     bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
 
-    bool init_manager_channel(int ctrl_fd, int data_fd);
+    bool init_manager_channel(fd_t& fctrl, fd_t& fdata);
 
     /* events. */
     void run();
@@ -48,18 +48,18 @@ class Network : public INet, public TimerCron {
     uint64_t keep_alive() { return m_keep_alive; }
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
-    virtual CJsonObject* config() override { return &m_config; }
     virtual uint64_t now() override;
     virtual uint64_t new_seq() override { return ++m_seq; }
+    virtual CJsonObject* config() override { return &m_config; }
 
     /* pro's type. */
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
 
+    virtual int worker_index() override { return m_worker_index; }
+    virtual int node_port() override { return m_node_port; }
     virtual std::string node_type() override { return m_node_type; }
     virtual std::string node_host() override { return m_node_host; }
-    virtual int node_port() override { return m_node_port; }
-    virtual int worker_index() override { return m_worker_index; }
 
     virtual Nodes* nodes() override { return m_nodes; }
     virtual SysCmd* sys_cmd() override { return m_sys_cmd; }
@@ -82,21 +82,23 @@ class Network : public INet, public TimerCron {
     virtual int send_to_workers(int cmd, uint64_t seq, const std::string& data) override;
 
     /* connection. */
-    virtual bool update_conn_state(int fd, int state) override;
+    virtual bool update_conn_state(const fd_t& ft, int state) override;
     virtual bool add_client_conn(const std::string& node_id, const fd_t& f) override;
 
-    /* connection. */
-    void close_fds(); /* use in fork. */
+    /* use in fork. */
+    void close_fds();
+    void close_channel(int* fds); /* close socketpair. */
 
+    /* connection. */
     virtual void close_fd(int fd) override;
-    virtual bool close_conn(int fd) override;
+    virtual bool close_conn(uint64_t id) override;
     virtual bool close_conn(Connection* c) override;
     virtual Connection* create_conn(int fd) override;
-    bool is_valid_conn(Connection* c);
 
-    void close_channel(int* fds); /* close socketpair. */
-    Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
+    bool is_valid_conn(Connection* c);
     Connection* get_conn(const fd_t& f);
+    Codec::STATUS conn_write_data(Connection* c);
+    Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
     Connection* get_node_conn(const std::string& host, int port, int worker_index);
 
     void clear_routines();
@@ -139,7 +141,7 @@ class Network : public INet, public TimerCron {
     Log* m_logger;                                             /* logger. */
     CJsonObject m_config;                                      /* config. */
     Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
-    std::unordered_map<int, Connection*> m_conns;              /* key: fd, value: connection. */
+    std::unordered_map<uint64_t, Connection*> m_conns;         /* key: fd, value: connection. */
     std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
 
     uint64_t m_seq = 0;          /* incremental serial number. */
@@ -157,7 +159,7 @@ class Network : public INet, public TimerCron {
     int m_node_port = 0;
     int m_node_host_fd = -1;
 
-    int m_max_clients = 1024 - CONFIG_MIN_RESERVED_FDS;
+    int m_max_clients = (1024 - CONFIG_MIN_RESERVED_FDS);
 
     /* gate for client. */
     std::string m_gate_host;
@@ -168,8 +170,8 @@ class Network : public INet, public TimerCron {
     int m_worker_index = 0;  /* current process index number. */
 
     /* manager/workers communicate. */
-    int m_manager_ctrl_fd = -1; /* channel for send message. */
-    int m_manager_data_fd = -1; /* channel for transfer fd. */
+    fd_t m_manager_fctrl; /* channel for send message. */
+    fd_t m_manager_fdata; /* channel for transfer fd. */
 
     Nodes* m_nodes = nullptr;           /* server nodes. ketama nodes manager. */
     NodeConn* m_nodes_conn = nullptr;   /* node connection pool. */
