@@ -231,23 +231,21 @@ bool Network::ensure_files_limit() {
     int max_clients = 0;
 
     max_clients = str_to_int(m_config("max_clients"));
-    if (max_clients > 0) {
-        m_max_clients = max_clients;
+    if (max_clients == 0) {
+        return false;
     }
 
-    max_clients = adjust_files_limit(m_max_clients, CONFIG_MIN_RESERVED_FDS, error);
-    if (max_clients < 0) {
-        LOG_ERROR("set files limit failed!");
+    m_max_clients = adjust_files_limit(max_clients, CONFIG_MIN_RESERVED_FDS, error);
+    if (m_max_clients < 0) {
+        LOG_ERROR("set files limit: %d failed!", m_max_clients);
         return false;
-    } else if (max_clients < m_max_clients) {
+    } else if (m_max_clients < max_clients) {
         LOG_WARN("set files not hit, cur limit: %d, ensure hit: %d, error: %d.",
                  max_clients, m_max_clients, error);
-        m_max_clients = max_clients;
     } else {
-        m_max_clients = max_clients;
+        LOG_INFO("set max clients: %d done!", m_max_clients);
     }
 
-    LOG_INFO("set max clients: %d done!", m_max_clients);
     return true;
 }
 
