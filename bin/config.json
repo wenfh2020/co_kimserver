@@ -10,7 +10,7 @@
     "keep_alive": 30000,
     "log_path": "kimserver.log",
     "log_level": "info",
-    "max_clients": 512,
+    "max_clients": 100000,
     "modules": [
         "module_test.so"
     ],
