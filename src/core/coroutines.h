@@ -23,7 +23,7 @@ class Coroutines : public TimerCron {
 
     void clear_tasks();
     void run();
-    void exit();
+    void exit_libco();
 
     bool add_free_co_task(co_task_t* task);
     co_task_t* create_co_task(Connection* c, pfn_co_routine_t fn);
@@ -31,17 +31,19 @@ class Coroutines : public TimerCron {
     int get_max_co_cnt() { return m_max_co_cnt; }
     void set_max_co_cnt(int cnt) { m_max_co_cnt = cnt; }
 
-    static int event_loop_handler(void*);
+    int event_loop_handler(void*);
+    static int co_event_loop_handler(void*);
+
     virtual void on_repeat_timer() override;
 
    private:
     Log* m_logger = nullptr;
-    std::set<co_task_t*> m_coroutines;
-    std::set<co_task_t*> m_co_free;
-    int m_max_co_cnt = MAX_CO_CNT;
-    stCoRoutineAttr_t m_co_attr;
+    bool m_is_exit = false; /* exit libco. */
 
-    static bool m_is_exit; /* exit libco. */
+    stCoRoutineAttr_t m_co_attr;
+    int m_max_co_cnt = MAX_CO_CNT;
+    std::set<co_task_t*> m_co_free;
+    std::set<co_task_t*> m_coroutines;
 };
 
 }  // namespace kim

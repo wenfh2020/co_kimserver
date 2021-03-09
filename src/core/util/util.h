@@ -36,7 +36,7 @@ extern "C" {
 
 void daemonize();
 /* redis's adjustOpenFilesLimit. */
-int adjust_files_limit(int max_clients, int extra_cnt, int& error);
+int adjust_files_limit(int max_clients, int& error);
 
 const char* to_lower(const char* s, int len);
 long long mstime();     // millisecond

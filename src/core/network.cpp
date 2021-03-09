@@ -224,6 +224,7 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
 
 bool Network::ensure_files_limit() {
     int error = 0;
+    int file_limit = 0;
     int max_clients = 0;
 
     max_clients = str_to_int(m_config("max_clients"));
@@ -231,17 +232,20 @@ bool Network::ensure_files_limit() {
         return false;
     }
 
-    m_max_clients = adjust_files_limit(max_clients, CONFIG_MIN_RESERVED_FDS, error);
-    if (m_max_clients < 0) {
-        LOG_ERROR("set files limit: %d failed!", m_max_clients);
+    file_limit = adjust_files_limit(max_clients + CONFIG_MIN_RESERVED_FDS, error);
+    file_limit -= CONFIG_MIN_RESERVED_FDS;
+
+    if (file_limit < 0) {
+        LOG_ERROR("set files limit: %d failed!", max_clients);
         return false;
-    } else if (m_max_clients < max_clients) {
+    } else if (file_limit < max_clients) {
         LOG_WARN("set files not hit, cur limit: %d, ensure hit: %d, error: %d.",
-                 max_clients, m_max_clients, error);
+                 file_limit, max_clients, error);
     } else {
-        LOG_INFO("set max clients: %d done!", m_max_clients);
+        LOG_INFO("set max clients: %d done!", file_limit);
     }
 
+    m_max_clients = file_limit;
     return true;
 }
 
@@ -252,9 +256,9 @@ void Network::run() {
     }
 }
 
-void Network::exit() {
+void Network::exit_libco() {
     if (m_coroutines != nullptr) {
-        m_coroutines->exit();
+        m_coroutines->exit_libco();
     }
 }
 
@@ -991,7 +995,7 @@ void Network::clear_routines() {
 }
 
 void Network::destory() {
-    exit();
+    exit_libco();
     SAFE_DELETE(m_zk_cli);
     SAFE_DELETE(m_module_mgr);
     SAFE_DELETE(m_mysql_mgr);

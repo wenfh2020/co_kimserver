@@ -63,7 +63,10 @@ bool Manager::init(const char* conf_path) {
 void Manager::on_repeat_timer() {
     co_enable_hook_sys();
 
-    restart_workers();
+    run_with_period(1000) {
+        restart_workers();
+    }
+
     if (m_net != nullptr) {
         m_net->on_timer();
     }
