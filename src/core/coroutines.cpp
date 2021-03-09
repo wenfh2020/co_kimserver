@@ -59,11 +59,12 @@ co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {
 }
 
 bool Coroutines::add_free_co_task(co_task_t* task) {
-    if (task == nullptr ||
-        m_coroutines.find(task) == m_coroutines.end()) {
-        return false;
+    if (task != nullptr) {
+        if (m_coroutines.find(task) != m_coroutines.end()) {
+            return m_co_free.insert(task).second;
+        }
     }
-    return m_co_free.insert(task).second;
+    return false;
 }
 
 void Coroutines::on_repeat_timer() {

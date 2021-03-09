@@ -157,14 +157,14 @@ class Network : public INet, public TimerCron {
     /* node for inner servers. */
     std::string m_node_host;
     int m_node_port = 0;
-    int m_node_host_fd = -1;
+    int m_node_fd = -1;
 
     int m_max_clients = (1024 - CONFIG_MIN_RESERVED_FDS);
 
     /* gate for client. */
     std::string m_gate_host;
     int m_gate_port = 0;
-    int m_gate_host_fd = -1;
+    int m_gate_fd = -1;
 
     std::string m_node_type; /* current server node type. */
     int m_worker_index = 0;  /* current process index number. */

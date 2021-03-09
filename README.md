@@ -144,7 +144,7 @@ cd ./co_kimserver
     "keep_alive": 30,                       # 服务对外连接保活有效时间。
     "log_path": "kimserver.log",            # 日志文件。
     "log_level": "info",                    # 日志等级。(trace/debug/warn/info/notice/error/alert/crit)
-    "max_clients": 512,                     # 最大支持用户数量（与系统支持的进程最大文件数量有关）。
+    "max_clients": 10000,                   # 最大支持用户数量（与系统支持的进程最大文件数量有关）。
     "modules": [                            # 业务功能插件，动态库数组。
         "module_test.so"
     ],

@@ -6,11 +6,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <string.h>
 #include <sys/socket.h>
-#include <unistd.h>
 
 #include "redis/redis_mgr.h"
 #include "request.h"
@@ -54,20 +50,19 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     if (!ai->node_host().empty()) {
         fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
         if (fd == -1) {
-            LOG_ERROR("listen to port failed! %s:%d",
-                      ai->node_host().c_str(), ai->node_port());
+            LOG_ERROR("listen to port failed! %s:%d", ai->node_host().c_str(), ai->node_port());
             return false;
         }
 
-        m_node_host_fd = fd;
+        m_node_fd = fd;
         m_node_host = ai->node_host();
         m_node_port = ai->node_port();
-        LOG_INFO("node fd: %d", m_node_host_fd);
+        LOG_INFO("node fd: %d", m_node_fd);
 
-        c = create_conn(m_node_host_fd, Codec::TYPE::PROTOBUF);
+        c = create_conn(m_node_fd, Codec::TYPE::PROTOBUF);
         if (c == nullptr) {
-            close_fd(m_node_host_fd);
-            LOG_ERROR("add read event failed, fd: %d", m_node_host_fd);
+            close_fd(m_node_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_node_fd);
             return false;
         }
 
@@ -89,16 +84,16 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
             return false;
         }
 
-        m_gate_host_fd = fd;
+        m_gate_fd = fd;
         m_gate_host = ai->gate_host();
         m_gate_port = ai->gate_port();
         LOG_INFO("gate fd: %d, host: %s, port: %d",
-                 m_gate_host_fd, m_gate_host.c_str(), m_gate_port);
+                 m_gate_fd, m_gate_host.c_str(), m_gate_port);
 
-        c = create_conn(m_gate_host_fd, m_gate_codec);
+        c = create_conn(m_gate_fd, m_gate_codec);
         if (c == nullptr) {
-            close_fd(m_gate_host_fd);
-            LOG_ERROR("add read event failed, fd: %d", m_gate_host_fd);
+            close_fd(m_gate_fd);
+            LOG_ERROR("add read event failed, fd: %d", m_gate_fd);
             return false;
         }
 
@@ -307,7 +302,7 @@ bool Network::report_payload_to_zookeeper() {
 
     NodeData* node;
     PayloadStats pls;
-    Payload *manager_pls, *worker_pls;
+    Payload *manager_pl, *worker_pl;
     std::string json_data;
     int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0,
         read_bytes = 0, write_bytes = 0;
@@ -332,23 +327,23 @@ bool Network::report_payload_to_zookeeper() {
         read_bytes += it.second->payload.read_bytes();
         write_cnt += it.second->payload.write_cnt();
         write_bytes += it.second->payload.write_bytes();
-        worker_pls = pls.add_workers();
-        *worker_pls = it.second->payload;
+        worker_pl = pls.add_workers();
+        *worker_pl = it.second->payload;
         if (it.second->payload.worker_index() == 0) {
-            worker_pls->set_worker_index(it.second->index);
+            worker_pl->set_worker_index(it.second->index);
         }
     }
 
     /* manager statistics data results。 */
-    manager_pls = pls.mutable_manager();
-    manager_pls->set_worker_index(worker_index());
-    manager_pls->set_cmd_cnt(cmd_cnt);
-    manager_pls->set_conn_cnt(conn_cnt + m_conns.size());
-    manager_pls->set_read_cnt(read_cnt + m_payload.read_cnt());
-    manager_pls->set_read_bytes(read_bytes + m_payload.read_bytes());
-    manager_pls->set_write_cnt(write_cnt + m_payload.write_cnt());
-    manager_pls->set_write_bytes(write_bytes + m_payload.write_bytes());
-    manager_pls->set_create_time(now());
+    manager_pl = pls.mutable_manager();
+    manager_pl->set_worker_index(worker_index());
+    manager_pl->set_cmd_cnt(cmd_cnt);
+    manager_pl->set_conn_cnt(conn_cnt + m_conns.size());
+    manager_pl->set_read_cnt(read_cnt + m_payload.read_cnt());
+    manager_pl->set_read_bytes(read_bytes + m_payload.read_bytes());
+    manager_pl->set_write_cnt(write_cnt + m_payload.write_cnt());
+    manager_pl->set_write_bytes(write_bytes + m_payload.write_bytes());
+    manager_pl->set_create_time(now());
 
     m_payload.Clear();
 
@@ -398,13 +393,13 @@ void* Network::handle_accept_nodes_conn(void*) {
     int fd, port, family, max = MAX_ACCEPTS_PER_CALL;
 
     while (max--) {
-        fd = anet_tcp_accept(m_errstr, m_node_host_fd, ip, sizeof(ip), &port, &family);
+        fd = anet_tcp_accept(m_errstr, m_node_fd, ip, sizeof(ip), &port, &family);
         if (fd == ANET_ERR) {
             if (errno != EWOULDBLOCK) {
                 LOG_ERROR("accepting client connection failed: fd: %d, errstr %s",
-                          m_node_host_fd, m_errstr);
+                          m_node_fd, m_errstr);
             }
-            co_sleep(1000, m_node_host_fd, POLLIN);
+            co_sleep(1000, m_node_fd, POLLIN);
             continue;
         }
 
@@ -444,12 +439,12 @@ void* Network::handle_accept_gate_conn(void* d) {
     int fd, port, family, channel_fd, err;
 
     for (;;) {
-        fd = anet_tcp_accept(m_errstr, m_gate_host_fd, ip, sizeof(ip), &port, &family);
+        fd = anet_tcp_accept(m_errstr, m_gate_fd, ip, sizeof(ip), &port, &family);
         if (fd == ANET_ERR) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            co_sleep(1000, m_gate_host_fd, POLLIN);
+            co_sleep(1000, m_gate_fd, POLLIN);
             continue;
         }
 
@@ -627,10 +622,12 @@ int Network::process_tcp_msg(Connection* c) {
     body = req->msg_body();
 
     stat = c->conn_read(*head, *body);
-    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
+    if (stat != Codec::STATUS::ERR) {
+        m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
+        m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
+    }
 
-    m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
-    m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
+    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
 
     while (stat == Codec::STATUS::OK) {
         ret = ERR_UNKOWN_CMD;
@@ -715,20 +712,20 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
 }
 
 Connection* Network::create_conn(int fd) {
-    uint64_t seq;
+    uint64_t id;
     Connection* c;
 
-    seq = new_seq();
-    c = new Connection(m_logger, fd, seq);
+    id = new_seq();
+    c = new Connection(m_logger, fd, id);
     if (c == nullptr) {
         LOG_ERROR("new connection failed! fd: %d", fd);
         return nullptr;
     }
 
-    m_conns[seq] = c;
+    m_conns[id] = c;
     c->set_net(this);
     c->set_keep_alive(m_keep_alive);
-    LOG_DEBUG("create connection fd: %d, seq: %llu", fd, seq);
+    LOG_DEBUG("create connection fd: %d, id: %llu", fd, id);
     return c;
 }
 
