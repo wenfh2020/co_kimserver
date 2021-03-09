@@ -1,11 +1,15 @@
 #include "worker.h"
 
+#include <signal.h>
+
 #include <random>
 
 #include "util/set_proc_title.h"
 #include "util/util.h"
 
 namespace kim {
+
+void* Worker::m_signal_user_data = nullptr;
 
 Worker::Worker(const std::string& name) {
     srand((unsigned)time(NULL));
@@ -66,6 +70,7 @@ bool Worker::load_logger() {
     m_logger->set_process_type(false);
     m_logger->set_worker_index(m_worker_info.index);
 
+    load_signals();
     LOG_INFO("init logger done!");
     return true;
 }
@@ -101,6 +106,36 @@ void Worker::on_repeat_timer() {
     if (m_net != nullptr) {
         m_net->on_timer();
     }
+}
+
+std::string Worker::worker_name(int index) {
+    return format_str("%s_w_%d", m_config("server_name").c_str(), index);
+}
+
+void Worker::load_signals() {
+    struct sigaction act;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    act.sa_handler = &signal_handler;
+
+    int signals[] = {SIGINT, SIGKILL, SIGTERM};
+    for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); i++) {
+        sigaction(signals[i], &act, 0);
+    }
+
+    signal(SIGPIPE, SIG_IGN);
+    m_signal_user_data = this;
+}
+
+void Worker::signal_handler(int sig) {
+    Worker* m = (Worker*)m_signal_user_data;
+    m->signal_handler_event(sig);
+}
+
+void Worker::signal_handler_event(int sig) {
+    std::string name = worker_name(m_worker_info.index);
+    LOG_CRIT("%s terminated by signal %d!", name.c_str(), sig);
+    _exit(EXIT_CHILD);
 }
 
 }  // namespace kim

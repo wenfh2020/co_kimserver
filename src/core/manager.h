@@ -19,7 +19,6 @@ class Manager : CoTimer {
     bool load_logger();
     bool load_network();
     bool load_config(const char* path);
-    void load_signals();
 
     void create_workers();                /* fork children. */
     bool create_worker(int worker_index); /* creates the specified index process. */
@@ -31,6 +30,7 @@ class Manager : CoTimer {
     virtual void on_repeat_timer() override;
 
     /* signals. */
+    void load_signals();
     static void signal_handler(int sig);
     void signal_handler_event(int sig);
 

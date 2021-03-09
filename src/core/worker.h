@@ -23,11 +23,19 @@ class Worker : CoTimer {
     bool load_logger();
     bool load_network();
 
+    std::string worker_name(int index);
+
+    /* signals. */
+    void load_signals();
+    static void signal_handler(int sig);
+    void signal_handler_event(int sig);
+
    private:
     Log* m_logger = nullptr;     /* logger. */
     Network* m_net = nullptr;    /* network. */
     CJsonObject m_config;        /* config */
     worker_info_t m_worker_info; /* current worker info. */
+    static void* m_signal_user_data;
 };
 
 }  // namespace kim
