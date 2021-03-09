@@ -6,6 +6,8 @@
 
 namespace kim {
 
+bool Coroutines::m_is_exit = false;
+
 Coroutines::Coroutines(Log* logger) : m_logger(logger) {
     m_co_attr.share_stack = co_alloc_sharestack(64, 4 * 1024 * 1024);
 }
@@ -27,8 +29,16 @@ void Coroutines::clear_tasks() {
     m_coroutines.clear();
 }
 
+void Coroutines::exit() {
+    m_is_exit = true;
+}
+
+int Coroutines::event_loop_handler(void*) {
+    return m_is_exit ? -1 : 0;
+}
+
 void Coroutines::run() {
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct(), &event_loop_handler, 0);
 }
 
 co_task_t* Coroutines::create_co_task(Connection* c, pfn_co_routine_t fn) {

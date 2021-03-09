@@ -252,6 +252,12 @@ void Network::run() {
     }
 }
 
+void Network::exit() {
+    if (m_coroutines != nullptr) {
+        m_coroutines->exit();
+    }
+}
+
 int Network::listen_to_port(const char* host, int port) {
     int fd = -1;
 
@@ -603,8 +609,6 @@ int Network::process_tcp_msg(Connection* c) {
 
     int fd, ret;
     Request* req;
-    MsgHead* head;
-    MsgBody* body;
     Codec::STATUS stat;
     uint32_t old_cnt, old_bytes;
 
@@ -612,12 +616,9 @@ int Network::process_tcp_msg(Connection* c) {
     ret = ERR_OK;
     old_cnt = c->read_cnt();
     old_bytes = c->read_bytes();
-
     req = new Request(c->ft());
-    head = req->msg_head();
-    body = req->msg_body();
 
-    stat = c->conn_read(*head, *body);
+    stat = c->conn_read(*req->msg_head(), *req->msg_body());
     if (stat != Codec::STATUS::ERR) {
         m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
         m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
@@ -643,19 +644,19 @@ int Network::process_tcp_msg(Connection* c) {
             if (ret != ERR_OK) {
                 if (ret == ERR_UNKOWN_CMD) {
                     LOG_WARN("can not find cmd handler! ret: %d, fd: %d, cmd: %d",
-                             ret, fd, head->cmd());
+                             ret, fd, req->msg_head()->cmd());
                 } else {
                     LOG_DEBUG("handler cmd failed! ret: %d, fd: %d, cmd: %d",
-                              ret, fd, head->cmd());
+                              ret, fd, req->msg_head()->cmd());
                 }
                 break;
             }
         }
 
-        head->Clear();
-        body->Clear();
+        req->msg_head()->Clear();
+        req->msg_body()->Clear();
 
-        stat = c->fetch_data(*head, *body);
+        stat = c->fetch_data(*req->msg_head(), *req->msg_body());
         LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
     }
 
@@ -990,6 +991,7 @@ void Network::clear_routines() {
 }
 
 void Network::destory() {
+    exit();
     SAFE_DELETE(m_zk_cli);
     SAFE_DELETE(m_module_mgr);
     SAFE_DELETE(m_mysql_mgr);

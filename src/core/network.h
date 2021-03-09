@@ -40,7 +40,7 @@ class Network : public INet, public TimerCron {
 
     /* events. */
     void run();
-
+    void exit();
     void destory();
 
     bool set_gate_codec(const std::string& codec);
