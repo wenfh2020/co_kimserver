@@ -38,7 +38,7 @@ class Bio {
     virtual void timer_process_ack(zk_task_t* task) {}
 
     /* timer. */
-    virtual void on_repeat_timer();
+    virtual void on_bio_timer();
     /* async handle task ack. */
     void handle_acks();
 

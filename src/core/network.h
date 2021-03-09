@@ -102,7 +102,7 @@ class Network : public INet, public TimerCron {
     Connection* get_node_conn(const std::string& host, int port, int worker_index);
 
     void clear_routines();
-    void on_repeat_timer(); /* call by parent, 10 times/s on Linux. */
+    virtual void on_repeat_timer() override; /* call by parent, 10 times/s on Linux. */
 
     /* payload. */
     bool report_payload_to_manager();

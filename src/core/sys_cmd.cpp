@@ -268,7 +268,6 @@ void SysCmd::on_repeat_timer() {
             /* keep data consistent between manager and worker. */
             send_zk_nodes_version_to_manager(m_net->nodes()->version());
         }
-        m_cronloops++;
     }
 }
 

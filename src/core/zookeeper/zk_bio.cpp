@@ -111,7 +111,7 @@ void Bio::add_ack_task(zk_task_t* task) {
     pthread_mutex_unlock(&m_mutex);
 }
 
-void Bio::on_repeat_timer() {
+void Bio::on_bio_timer() {
     handle_acks();
 }
 

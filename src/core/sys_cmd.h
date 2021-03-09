@@ -30,7 +30,7 @@ class SysCmd : Logger, public TimerCron {
     int send_reg_zk_node_to_worker(const register_node& rn);
 
     int handle_msg(const Request* req);
-    void on_repeat_timer();
+    virtual void on_repeat_timer() override;
 
    private:
     int handle_worker_msg(const Request* req);

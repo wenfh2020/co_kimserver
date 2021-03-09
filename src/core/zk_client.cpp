@@ -176,10 +176,9 @@ void ZkClient::on_repeat_timer() {
             run_with_period(1000) {
                 reconnect();
             }
-            m_cronloops++;
         }
     }
-    Bio::on_repeat_timer();
+    Bio::on_bio_timer();
 }
 
 bool ZkClient::node_register() {

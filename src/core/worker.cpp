@@ -99,7 +99,7 @@ void Worker::run() {
 void Worker::on_repeat_timer() {
     co_enable_hook_sys();
     if (m_net != nullptr) {
-        m_net->on_repeat_timer();
+        m_net->on_timer();
     }
 }
 

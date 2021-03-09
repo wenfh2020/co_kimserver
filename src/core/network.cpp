@@ -198,10 +198,9 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
     }
 
     m_config = config;
+    m_worker_index = index;
     m_manager_fctrl = conn_ctrl->ft();
     m_manager_fdata = conn_data->ft();
-    m_worker_index = index;
-    LOG_INFO("create network done!");
 
     task = m_coroutines->create_co_task(conn_data, co_handle_read_transfer_fd);
     if (task == nullptr) {
@@ -218,6 +217,8 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
         return false;
     }
     co_resume(task->co);
+
+    LOG_INFO("create network done!");
     return true;
 }
 
@@ -275,7 +276,7 @@ void Network::on_repeat_timer() {
 
     if (is_manager()) {
         if (m_zk_cli != nullptr) {
-            m_zk_cli->on_repeat_timer();
+            m_zk_cli->on_timer();
         }
         run_with_period(1000) {
             // report_payload_to_zookeeper();
@@ -288,10 +289,8 @@ void Network::on_repeat_timer() {
     }
 
     if (m_coroutines != nullptr) {
-        m_coroutines->on_repeat_timer();
+        m_coroutines->on_timer();
     }
-
-    m_cronloops++;
 }
 
 bool Network::report_payload_to_zookeeper() {
@@ -301,13 +300,11 @@ bool Network::report_payload_to_zookeeper() {
     }
 
     NodeData* node;
+    std::string json_data;
     PayloadStats pls;
     Payload *manager_pl, *worker_pl;
-    std::string json_data;
-    int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0,
-        read_bytes = 0, write_bytes = 0;
-    const std::unordered_map<int, worker_info_t*>& infos =
-        m_worker_data_mgr->get_infos();
+    int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0, read_bytes = 0, write_bytes = 0;
+    const std::unordered_map<int, worker_info_t*>& infos = m_worker_data_mgr->get_infos();
 
     /* node info. */
     node = pls.mutable_node();
@@ -564,7 +561,6 @@ void* Network::handle_requests(void* d) {
 
     task = (co_task_t*)d;
     c = (Connection*)task->c;
-
     if (!is_valid_conn(c)) {
         LOG_ERROR("invalid conn: %p", c);
         goto end;

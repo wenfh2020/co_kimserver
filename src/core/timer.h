@@ -6,6 +6,8 @@
 
 namespace kim {
 
+#define DEFAULT_TIMER_RATE 10
+
 #define run_with_period(_ms_) if ((_ms_ <= 1000 / m_hz) || !(m_cronloops % ((_ms_) / (1000 / m_hz))))
 
 class TimerCron {
@@ -13,8 +15,14 @@ class TimerCron {
     TimerCron() {}
     virtual ~TimerCron() {}
 
+    virtual void on_repeat_timer() {}
+    virtual void on_timer() {
+        on_repeat_timer();
+        m_cronloops++;
+    }
+
    protected:
-    int m_hz = 10;
+    int m_hz = DEFAULT_TIMER_RATE;
     int m_cronloops = 1;
 };
 
@@ -30,7 +38,6 @@ class CoTimer : public TimerCron {
 
     /* timer's frequency. */
     void set_hz(int hz) { m_hz = hz; }
-    virtual void on_repeat_timer() {}
 
     bool init_timer() {
         if (m_co_timer == nullptr) {
@@ -45,7 +52,7 @@ class CoTimer : public TimerCron {
         CoTimer* m = (CoTimer*)arg;
         for (;;) {
             co_sleep(1000 / m->m_hz);
-            m->on_repeat_timer();
+            m->on_timer();
         }
         return 0;
     }

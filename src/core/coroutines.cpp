@@ -85,8 +85,6 @@ void Coroutines::on_repeat_timer() {
             LOG_DEBUG("free co cnt: %u", m_co_free.size());
         }
     }
-
-    m_cronloops++;
 }
 
 }  // namespace kim
