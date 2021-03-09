@@ -27,8 +27,8 @@ class Worker : CoTimer {
 
     /* signals. */
     void load_signals();
-    static void signal_handler(int sig);
     void signal_handler_event(int sig);
+    static void signal_handler(int sig);
 
    private:
     Log* m_logger = nullptr;     /* logger. */

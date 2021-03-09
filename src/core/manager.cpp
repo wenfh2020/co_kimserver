@@ -251,6 +251,16 @@ bool Manager::restart_worker(pid_t pid) {
     return true;
 }
 
+void Manager::close_workers() {
+    WorkerDataMgr* worker_mgr = m_net->worker_data_mgr();
+    if (worker_mgr != nullptr) {
+        const std::unordered_map<int, worker_info_t*>& infos = worker_mgr->get_infos();
+        for (const auto& it : infos) {
+            kill(it.second->pid, SIGUSR1);
+        }
+    }
+}
+
 void Manager::load_signals() {
     struct sigaction act;
     sigemptyset(&act.sa_mask);
@@ -287,10 +297,14 @@ void Manager::signal_handler_event(int sig) {
         }
     } else {
         LOG_CRIT("%s terminated by signal %d!", m_config("server_name").c_str(), sig);
+
+        close_workers();
+
         if (m_net != nullptr) {
             m_net->zk_client()->close_my_node();
             usleep(100 * 1000);
         }
+
         exit(sig);
     }
 }

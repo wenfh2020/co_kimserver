@@ -24,6 +24,7 @@ class Manager : CoTimer {
     bool create_worker(int worker_index); /* creates the specified index process. */
     bool restart_worker(pid_t pid);       /* restart the specified pid process. */
     void restart_workers();               /* delay restart of a process that has been shut down. */
+    void close_workers();                 /* notify workers to close. */
 
     std::string worker_name(int index);
 
@@ -31,8 +32,8 @@ class Manager : CoTimer {
 
     /* signals. */
     void load_signals();
-    static void signal_handler(int sig);
     void signal_handler_event(int sig);
+    static void signal_handler(int sig);
 
    private:
     Log* m_logger = nullptr;  /* logger. */

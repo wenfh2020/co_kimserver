@@ -118,7 +118,7 @@ void Worker::load_signals() {
     act.sa_flags = 0;
     act.sa_handler = &signal_handler;
 
-    int signals[] = {SIGINT, SIGKILL, SIGTERM};
+    int signals[] = {SIGINT, SIGKILL, SIGTERM, SIGUSR1};
     for (unsigned int i = 0; i < sizeof(signals) / sizeof(int); i++) {
         sigaction(signals[i], &act, 0);
     }
