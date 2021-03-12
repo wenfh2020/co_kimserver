@@ -68,13 +68,15 @@ class RedisMgr : Logger {
 
    private:
     void destory();
+    co_data_t* get_co_data(const std::string& node);
     redisContext* connect(const std::string& host, int port);
 
-    void clear_co_tasks(co_data_t* cd);
-    static void* co_handle_task(void* arg);
     void* handle_task(void* arg);
+    static void* co_handle_task(void* arg);
     redisReply* send_task(const std::string& node, const std::string& cmd);
-    co_data_t* get_co_data(const std::string& node);
+    void clear_co_tasks(co_data_t* cd);
+
+    void handle_redis_cmd(co_data_t* cd);
 
    private:
     /* key: node, valude: config data. */

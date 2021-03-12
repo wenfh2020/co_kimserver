@@ -4,8 +4,8 @@
 
 #include "error.h"
 
-#define DEF_CONN_CNT 5
-#define MAX_CONN_CNT 30
+#define MAX_CONN_CNT 10
+#define PIPLINE_CMD_CNT 100
 
 namespace kim {
 
@@ -51,80 +51,6 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     return reply;
 }
 
-void* RedisMgr::co_handle_task(void* arg) {
-    co_enable_hook_sys();
-    co_data_t* cd = (co_data_t*)arg;
-    RedisMgr* m = (RedisMgr*)cd->privdata;
-    return m->handle_task(arg);
-}
-
-void* RedisMgr::handle_task(void* arg) {
-    task_t* task;
-    co_data_t* cd = (co_data_t*)arg;
-
-    for (;;) {
-        if (cd->tasks.empty()) {
-            LOG_TRACE("no redis task, pls wait! node: %s, co: %p",
-                      cd->ri->node.c_str(), cd->co);
-            co_cond_timedwait(cd->cond, -1);
-            continue;
-        }
-
-        while (cd->c == nullptr) {
-            cd->c = connect(cd->ri->host.c_str(), cd->ri->port);
-            if (cd->c == nullptr) {
-                LOG_ERROR("connect redis failed! node: %s, host: %s, port: %d",
-                          cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-                clear_co_tasks(cd);
-                co_sleep(1000);
-                continue;
-            }
-
-            LOG_INFO("connect redis server done! host: %s, port: %d",
-                     cd->ri->host.c_str(), cd->ri->port);
-        }
-
-        task = cd->tasks.front();
-        cd->tasks.pop();
-
-        task->reply = (redisReply*)redisCommand(cd->c, task->cmd.c_str());
-        if (task->reply != nullptr) {
-            co_resume(task->co);
-            continue;
-        }
-
-        LOG_ERROR("redis exec cmd failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
-                  cd->c->err, cd->c->errstr,
-                  cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-
-        /* no need to reconnect. */
-        if (cd->c->err != REDIS_ERR_EOF && cd->c->err != REDIS_ERR_IO) {
-            co_resume(task->co);
-            continue;
-        }
-
-        /* reconnect. */
-        while (redisReconnect(cd->c) != REDIS_OK) {
-            LOG_ERROR("redis reconnect failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
-                      cd->c->err, cd->c->errstr,
-                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-            clear_co_tasks(cd);
-            co_sleep(1000);
-            continue;
-        }
-
-        LOG_INFO("redis reconnect done! node: %s, host: %s, port: %d",
-                 cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-
-        if (task != nullptr) {
-            co_resume(task->co);
-            task = nullptr;
-        }
-    }
-
-    return 0;
-}
-
 RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     co_data_t* cd;
     co_array_data_t* ad;
@@ -164,6 +90,75 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     co_create(&(cd->co), nullptr, co_handle_task, cd);
     co_resume(cd->co);
     return cd;
+}
+
+void* RedisMgr::co_handle_task(void* arg) {
+    co_enable_hook_sys();
+    co_data_t* cd = (co_data_t*)arg;
+    RedisMgr* m = (RedisMgr*)cd->privdata;
+    return m->handle_task(arg);
+}
+
+void* RedisMgr::handle_task(void* arg) {
+    co_data_t* cd = (co_data_t*)arg;
+
+    for (;;) {
+        if (cd->tasks.empty()) {
+            LOG_TRACE("no redis task, pls wait! node: %s, co: %p",
+                      cd->ri->node.c_str(), cd->co);
+            co_cond_timedwait(cd->cond, -1);
+            continue;
+        }
+
+        if (cd->c == nullptr) {
+            cd->c = connect(cd->ri->host.c_str(), cd->ri->port);
+            if (cd->c == nullptr) {
+                LOG_ERROR("connect redis failed! node: %s, host: %s, port: %d",
+                          cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
+                clear_co_tasks(cd);
+                co_sleep(1000);
+                continue;
+            }
+
+            LOG_INFO("connect redis server done! host: %s, port: %d",
+                     cd->ri->host.c_str(), cd->ri->port);
+        }
+
+        handle_redis_cmd(cd);
+
+        if (cd->c->err != REDIS_OK) {
+            redisFree(cd->c);
+            cd->c = nullptr;
+        }
+    }
+
+    return 0;
+}
+
+void RedisMgr::handle_redis_cmd(co_data_t* cd) {
+    int cnt = 0;
+    int ret = REDIS_OK;
+    task_t* task;
+    task_t* tasks[PIPLINE_CMD_CNT];
+
+    for (int i = 0; i < PIPLINE_CMD_CNT && !cd->tasks.empty(); i++, cnt++) {
+        tasks[i] = cd->tasks.front();
+        cd->tasks.pop();
+        ret = redisAppendCommand(cd->c, tasks[i]->cmd.c_str());
+        if (ret != REDIS_OK) {
+            break;
+        }
+    }
+
+    for (int i = 0; i < cnt; i++) {
+        ret = redisGetReply(cd->c, (void**)&tasks[i]->reply);
+        if (ret != REDIS_OK) {
+            LOG_ERROR("redis exec cmd failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
+                      cd->c->err, cd->c->errstr,
+                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
+        }
+        co_resume(tasks[i]->co);
+    }
 }
 
 void RedisMgr::clear_co_tasks(co_data_t* cd) {
