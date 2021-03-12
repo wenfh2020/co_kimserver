@@ -7,7 +7,7 @@
 namespace kim {
 
 Coroutines::Coroutines(Log* logger) : m_logger(logger) {
-    m_co_attr.share_stack = co_alloc_sharestack(64, 4 * 1024 * 1024);
+    m_co_attr.share_stack = co_alloc_sharestack(128, 4 * 1024 * 1024);
 }
 
 Coroutines::~Coroutines() {
