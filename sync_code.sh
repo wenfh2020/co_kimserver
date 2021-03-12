@@ -10,6 +10,8 @@ cd $work_path
 
 [ $1x == 'remote'x ] && DST=$REMOTE_DST
 
+echo "send files to: $DST"
+
 rsync -avz --exclude="*.o" \
     --exclude=".git" \
     --exclude=".vscode" \

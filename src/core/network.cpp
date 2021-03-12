@@ -314,7 +314,7 @@ bool Network::report_payload_to_zookeeper() {
     PayloadStats pls;
     Payload *manager_pl, *worker_pl;
     int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0, read_bytes = 0, write_bytes = 0;
-    const std::unordered_map<int, worker_info_t*>& infos = m_worker_data_mgr->get_infos();
+    const std::unordered_map<int, worker_info_t*>& workers = m_worker_data_mgr->get_infos();
 
     /* node info. */
     node = pls.mutable_node();
@@ -324,20 +324,21 @@ bool Network::report_payload_to_zookeeper() {
     node->set_node_port(node_port());
     node->set_gate_host(m_gate_host);
     node->set_gate_port(m_gate_port);
-    node->set_worker_cnt(infos.size());
+    node->set_worker_cnt(workers.size());
 
     /* worker payload infos. */
-    for (const auto& it : infos) {
-        cmd_cnt += it.second->payload.cmd_cnt();
-        conn_cnt += it.second->payload.conn_cnt();
-        read_cnt += it.second->payload.read_cnt();
-        read_bytes += it.second->payload.read_bytes();
-        write_cnt += it.second->payload.write_cnt();
-        write_bytes += it.second->payload.write_bytes();
+    for (const auto& it : workers) {
+        const worker_info_t* info = it.second;
+        cmd_cnt += info->payload.cmd_cnt();
+        conn_cnt += info->payload.conn_cnt();
+        read_cnt += info->payload.read_cnt();
+        read_bytes += info->payload.read_bytes();
+        write_cnt += info->payload.write_cnt();
+        write_bytes += info->payload.write_bytes();
         worker_pl = pls.add_workers();
-        *worker_pl = it.second->payload;
-        if (it.second->payload.worker_index() == 0) {
-            worker_pl->set_worker_index(it.second->index);
+        *worker_pl = info->payload;
+        if (info->payload.worker_index() == 0) {
+            worker_pl->set_worker_index(info->index);
         }
     }
 
@@ -859,7 +860,7 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
         if (stat == Codec::STATUS::OK) {
             return ERR_OK;
         } else if (stat == Codec::STATUS::PAUSE) {
-            co_sleep(100, c->fd(), POLLOUT);
+            co_sleep(50, c->fd());
             continue;
         } else {
             LOG_WARN("send data failed! fd: %d", c->fd());
@@ -914,8 +915,7 @@ int Network::send_ack(const Request* req, int err, const std::string& errstr, co
     return send_to(req->ft(), head, body);
 }
 
-int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq,
-                      const std::string& data) {
+int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) {
     if (c == nullptr) {
         LOG_DEBUG("invalid connection!");
         return false;
@@ -970,10 +970,10 @@ int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
     }
 
     /* manger and workers communicate through socketpair. */
-    const std::unordered_map<int, worker_info_t*>& infos =
+    const std::unordered_map<int, worker_info_t*>& workers =
         m_worker_data_mgr->get_infos();
 
-    for (auto& v : infos) {
+    for (auto& v : workers) {
         auto it = m_conns.find(v.second->fctrl.id);
         if (it == m_conns.end() || it->second->is_invalid()) {
             LOG_ALERT("ctrl fd is invalid! fd: %d", v.second->fctrl.fd);
