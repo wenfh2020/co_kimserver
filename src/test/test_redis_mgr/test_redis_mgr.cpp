@@ -39,10 +39,10 @@ void show_result(redisReply* r) {
 void* co_handler(void* arg) {
     co_enable_hook_sys();
 
-    int i;
+    int i, ret;
     double spend;
     char cmd[256];
-    redisReply* reply;
+    redisReply* reply = nullptr;
     const char* node = "test";
     const char* key = "key111";
     const char* val = "value111";
@@ -54,16 +54,16 @@ void* co_handler(void* arg) {
             snprintf(cmd, sizeof(cmd), "set %s %s:%d", key, val, i);
         }
 
-        reply = g_redis_mgr->exec_cmd(node, cmd);
+        ret = g_redis_mgr->exec_cmd(node, cmd, &reply);
 
         g_cur_test_cnt++;
-        if (reply != nullptr) {
+        if (ret == ERR_OK) {
             g_cur_success_cnt++;
             // printf("redis oper failed! node: %s, cmd: %s\n", node, cmd);
         } else {
             g_cur_fail_cnt++;
             co_sleep(1);
-            // printf("----\n");
+            printf("ret: %d----\n", ret);
         }
         // show_result(reply);
         freeReplyObject(reply);

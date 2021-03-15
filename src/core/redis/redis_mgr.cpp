@@ -1,11 +1,13 @@
 #include "redis_mgr.h"
 
+#include <hiredis/hiredis.h>
 #include <stdarg.h>
 
 #include "error.h"
 
 #define MAX_CONN_CNT 10
-#define PIPLINE_CMD_CNT 100
+#define PIPELINE_CMD_CNT 100
+#define TASKS_QUEUE_LIMIT 100000
 
 namespace kim {
 
@@ -16,25 +18,37 @@ RedisMgr::~RedisMgr() {
     destory();
 }
 
-redisReply* RedisMgr::exec_cmd(const std::string& node, const std::string& cmd) {
+int RedisMgr::exec_cmd(const std::string& node, const std::string& cmd, redisReply** r) {
     if (node.empty() || cmd.empty()) {
         LOG_ERROR("invalid params!");
-        return nullptr;
+        return ERR_INVALID_PARAMS;
     }
-    return send_task(node, cmd);
+    return send_task(node, cmd, r);
 }
 
-redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd) {
+int RedisMgr::send_task(const std::string& node, const std::string& cmd, redisReply** r) {
     LOG_DEBUG("send redis task, node: %s, cmd: %s.", node.c_str(), cmd.c_str());
 
+    int ret;
     task_t* task;
     co_data_t* cd;
-    redisReply* reply;
 
-    cd = get_co_data(node);
-    if (cd == nullptr) {
-        LOG_ERROR("can not find conn, node: %s", node.c_str());
-        return nullptr;
+    for (int i = 0; i < 3; i++) {
+        cd = get_co_data(node);
+        if (cd == nullptr) {
+            LOG_ERROR("can not find conn, node: %s", node.c_str());
+            return ERR_REDIS_NO_CONNCTION;
+        }
+        if (cd->tasks.size() > TASKS_QUEUE_LIMIT) {
+            co_sleep(1000);
+            continue;
+        }
+        break;
+    }
+
+    if (cd->tasks.size() > TASKS_QUEUE_LIMIT) {
+        LOG_WARN("redis task over limit! node: %s.", node.c_str());
+        return ERR_REDIS_TASKS_OVER_LIMIT;
     }
 
     task = new task_t;
@@ -46,9 +60,10 @@ redisReply* RedisMgr::send_task(const std::string& node, const std::string& cmd)
     LOG_TRACE("signal redis co handler! node: %s, co: %p", node.c_str(), cd->co);
     co_yield_ct();
 
-    reply = task->reply;
+    ret = task->ret;
+    *r = task->reply;
     SAFE_DELETE(task);
-    return reply;
+    return ret;
 }
 
 RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
@@ -69,9 +84,9 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     } else {
         ad = (co_array_data_t*)itr->second;
         if ((int)ad->coroutines.size() >= ad->ri->max_conn_cnt) {
-            cd = ad->coroutines[ad->cur_index % ad->coroutines.size()];
-            if (++ad->cur_index == (int)ad->coroutines.size()) {
-                ad->cur_index = 0;
+            cd = ad->coroutines[ad->cur_idx % ad->coroutines.size()];
+            if (++ad->cur_idx == (int)ad->coroutines.size()) {
+                ad->cur_idx = 0;
             }
             return cd;
         }
@@ -138,25 +153,46 @@ void* RedisMgr::handle_task(void* arg) {
 void RedisMgr::handle_redis_cmd(co_data_t* cd) {
     int cnt = 0;
     int ret = REDIS_OK;
-    task_t* task;
-    task_t* tasks[PIPLINE_CMD_CNT];
+    bool is_reply_ok = true;
+    task_t* tasks[PIPELINE_CMD_CNT];
 
-    for (int i = 0; i < PIPLINE_CMD_CNT && !cd->tasks.empty(); i++, cnt++) {
+    for (int i = 0; i < PIPELINE_CMD_CNT && !cd->tasks.empty(); i++) {
         tasks[i] = cd->tasks.front();
         cd->tasks.pop();
+        LOG_DEBUG("append redis cmd: %s", tasks[i]->cmd.c_str());
+
         ret = redisAppendCommand(cd->c, tasks[i]->cmd.c_str());
         if (ret != REDIS_OK) {
-            break;
+            LOG_ERROR("redis append cmd failed! cmd: %s, err: %d, node: %s, host: %s, port: %d",
+                      tasks[i]->cmd.c_str(), ret,
+                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
+            tasks[i]->ret = ERR_REDIS_APPEND_CMD_FAILED;
+            co_resume(tasks[i]->co);
+        } else {
+            cnt++;
         }
     }
 
     for (int i = 0; i < cnt; i++) {
         ret = redisGetReply(cd->c, (void**)&tasks[i]->reply);
-        if (ret != REDIS_OK) {
-            LOG_ERROR("redis exec cmd failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
+        if (ret != REDIS_OK || cd->c->err != REDIS_OK) {
+            is_reply_ok = false;
+            LOG_ERROR("redis get reply failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
                       cd->c->err, cd->c->errstr,
                       cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
+        } else if ((tasks[i]->reply != nullptr) && (tasks[i]->reply->type == REDIS_REPLY_ERROR)) {
+            is_reply_ok = false;
+            LOG_ERROR("redis get reply failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
+                      tasks[i]->reply->type, tasks[i]->reply->str,
+                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
         }
+
+        if (!is_reply_ok) {
+            freeReplyObject(tasks[i]->reply);
+            tasks[i]->reply = nullptr;
+            tasks[i]->ret = ERR_REDIS_GET_REPLY_FAILED;
+        }
+
         co_resume(tasks[i]->co);
     }
 }
@@ -167,6 +203,7 @@ void RedisMgr::clear_co_tasks(co_data_t* cd) {
     while (!cd->tasks.empty()) {
         task = cd->tasks.front();
         cd->tasks.pop();
+        task->ret = ERR_REDIS_TASKS_CLEAR;
         co_resume(task->co);
     }
 }

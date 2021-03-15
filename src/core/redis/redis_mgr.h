@@ -4,12 +4,10 @@
 #ifndef __KIM_REDIS_MGR_H__
 #define __KIM_REDIS_MGR_H__
 
-#include <hiredis/hiredis.h>
-
-#include "../coroutines.h"
 #include "../libco/co_routine.h"
 #include "../libco/co_routine_inner.h"
 #include "../server.h"
+#include "../error.h"
 
 namespace kim {
 
@@ -26,6 +24,7 @@ class RedisMgr : Logger {
     typedef struct task_s {
         std::string cmd;             /* redis cmd. */
         stCoRoutine_t* co = nullptr; /* user's coroutine. */
+        int ret = ERR_OK;
         redisReply* reply = nullptr; /* redis cmd's reply. */
     } task_t;
 
@@ -41,7 +40,7 @@ class RedisMgr : Logger {
 
     typedef struct co_array_data_s {
         redis_info_t* ri = nullptr; /* redis info(host,port...) */
-        int cur_index = 0;
+        int cur_idx = 0;
         std::vector<co_data_t*> coroutines;
     } co_array_data_t;
 
@@ -61,10 +60,11 @@ class RedisMgr : Logger {
      * 
      * @param node: define in config.json {"redis":{"node":{...}}}
      * @param cmd: redis's commnad string.
+     * @param r: redisReply result.
      * 
-     * @return hiredis result: redisReply*.
+     * @return error.h / enum E_ERROR.
      */
-    redisReply* exec_cmd(const std::string& node, const std::string& cmd);
+    int exec_cmd(const std::string& node, const std::string& cmd, redisReply** r);
 
    private:
     void destory();
@@ -73,7 +73,7 @@ class RedisMgr : Logger {
 
     void* handle_task(void* arg);
     static void* co_handle_task(void* arg);
-    redisReply* send_task(const std::string& node, const std::string& cmd);
+    int send_task(const std::string& node, const std::string& cmd, redisReply** r);
     void clear_co_tasks(co_data_t* cd);
 
     void handle_redis_cmd(co_data_t* cd);

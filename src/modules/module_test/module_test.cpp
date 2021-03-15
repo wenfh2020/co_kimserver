@@ -72,8 +72,8 @@ int MoudleTest::test_redis(const Request* req) {
 
     /* write redis. */
     snprintf(cmd, sizeof(cmd), "set %s %s:%d", key, val, id);
-    reply = net()->redis_mgr()->exec_cmd(node, cmd);
-    if (reply == nullptr) {
+    ret = net()->redis_mgr()->exec_cmd(node, cmd, &reply);
+    if (ret != REDIS_OK || reply == nullptr) {
         ret = ERR_REDIS_WRITE_FAILED;
         LOG_ERROR("write redis failed!");
         return net()->send_ack(req, ret, "write redis failed!");
@@ -84,8 +84,8 @@ int MoudleTest::test_redis(const Request* req) {
 
     /* read redis. */
     snprintf(cmd, sizeof(cmd), "get %s", key);
-    reply = net()->redis_mgr()->exec_cmd(node, cmd);
-    if (reply == nullptr) {
+    ret = net()->redis_mgr()->exec_cmd(node, cmd, &reply);
+    if (ret != REDIS_OK || reply == nullptr) {
         LOG_ERROR("read redis failed!");
         ret = ERR_REDIS_READ_FAILED;
         return net()->send_ack(req, ret, "read redis failed!");
