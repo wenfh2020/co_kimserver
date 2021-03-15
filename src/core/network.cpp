@@ -524,7 +524,7 @@ void* Network::handle_read_transfer_fd(void* d) {
             }
         }
 
-        if ((int)m_conns.size() >= m_max_clients) {
+        if ((int)m_conns.size() > m_max_clients) {
             LOG_WARN("max number of clients reached! %d", m_max_clients);
             close_fd(ch.fd);
             co_sleep(10);
@@ -572,14 +572,14 @@ void* Network::handle_requests(void* d) {
 
     task = (co_task_t*)d;
     c = (Connection*)task->c;
-    if (!is_valid_conn(c)) {
-        LOG_ERROR("invalid conn: %p", c);
-        goto end;
-    }
-
     fd = c->fd();
 
     for (;;) {
+        if (!is_valid_conn(c)) {
+            LOG_ERROR("invalid conn: %p", c);
+            break;
+        }
+
         if (!c->is_system()) {
             /* check alive. */
             if (now() - c->active_time() > m_keep_alive) {
@@ -596,11 +596,8 @@ void* Network::handle_requests(void* d) {
         }
     }
 
-end:
-    if (c != nullptr) {
-        close_conn(c);
-        task->c = nullptr;
-    }
+    close_conn(c);
+    task->c = nullptr;
     m_coroutines->add_free_co_task(task);
     return 0;
 }
@@ -725,6 +722,7 @@ Connection* Network::create_conn(int fd) {
     }
 
     m_conns[id] = c;
+    m_fd_conns[fd] = id;
     c->set_net(this);
     c->set_keep_alive(m_keep_alive);
     LOG_DEBUG("create connection fd: %d, id: %llu", fd, id);
@@ -856,6 +854,11 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
     }
 
     for (;;) {
+        if (!is_valid_conn(c)) {
+            LOG_ERROR("invalid conn, fd: %d, id: %llu", c->fd(), c->id());
+            return ERR_INVALID_CONN;
+        }
+
         stat = conn_write_data(c);
         if (stat == Codec::STATUS::OK) {
             return ERR_OK;
@@ -1050,19 +1053,51 @@ bool Network::close_conn(uint64_t id) {
 
     LOG_DEBUG("close conn, fd: %d, id: %llu", c->fd(), c->id());
 
-    close_fd(c->fd());
-    SAFE_DELETE(c);
     m_conns.erase(it);
+    auto itr = m_fd_conns.find(c->fd());
+    if (itr != m_fd_conns.end() && itr->second == c->ft().id) {
+        LOG_DEBUG("remove fdt done! fd: %d, id: %llu", c->fd(), c->id());
+        m_fd_conns.erase(c->fd());
+        close_fd(c->fd());
+    } else {
+        LOG_WARN("remove fdt failed, fd: %d, id: %llu", c->fd(), c->id());
+    }
+
+    SAFE_DELETE(c);
     return true;
 }
 
 bool Network::is_valid_conn(Connection* c) {
-    if (c != nullptr) {
-        if (!c->is_invalid()) {
-            return m_conns.find(c->id()) != m_conns.end();
-        }
+    if (c == nullptr) {
+        return false;
     }
-    return false;
+    return is_valid_conn(c->id());
+}
+
+bool Network::is_valid_conn(uint64_t id) {
+    auto it = m_conns.find(id);
+    if (it == m_conns.end()) {
+        LOG_WARN("can not find client id: %d", id);
+        return false;
+    }
+
+    Connection* c = it->second;
+    if (c->is_invalid()) {
+        return false;
+    }
+
+    auto itr = m_fd_conns.find(c->fd());
+    if (itr == m_fd_conns.end()) {
+        LOG_WARN("can not find conn fd, fd: %d", c->fd());
+        return false;
+    }
+
+    if (itr->second != c->id()) {
+        LOG_WARN("invalid conn id, new: %llu, old: %llu", itr->second, c->id());
+        return false;
+    }
+
+    return true;
 }
 
 void Network::close_fd(int fd) {

@@ -95,7 +95,9 @@ class Network : public INet, public TimerCron {
     virtual bool close_conn(Connection* c) override;
     virtual Connection* create_conn(int fd) override;
 
+    bool is_valid_conn(uint64_t id);
     bool is_valid_conn(Connection* c);
+
     Connection* get_conn(const fd_t& f);
     Codec::STATUS conn_write_data(Connection* c);
     Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
@@ -138,9 +140,11 @@ class Network : public INet, public TimerCron {
     void* handle_requests(void*);
 
    private:
-    Log* m_logger;                                             /* logger. */
-    CJsonObject m_config;                                      /* config. */
-    Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN;           /* gate codec type. */
+    Log* m_logger;                                   /* logger. */
+    CJsonObject m_config;                            /* config. */
+    Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN; /* gate codec type. */
+
+    std::unordered_map<int, uint64_t> m_fd_conns;              /* key fd, value: conn id. */
     std::unordered_map<uint64_t, Connection*> m_conns;         /* key: fd, value: connection. */
     std::unordered_map<std::string, Connection*> m_node_conns; /* key: node_id, value: connection. */
 
