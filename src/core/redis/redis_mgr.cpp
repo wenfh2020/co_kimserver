@@ -151,49 +151,52 @@ void* RedisMgr::handle_task(void* arg) {
 }
 
 void RedisMgr::handle_redis_cmd(co_data_t* cd) {
-    int cnt = 0;
+    int i = 0;
     int ret = REDIS_OK;
     bool is_reply_ok = true;
-    task_t* tasks[PIPELINE_CMD_CNT];
+    task_t* task;
+    std::list<task_t*> tasks;
 
-    for (int i = 0; i < PIPELINE_CMD_CNT && !cd->tasks.empty(); i++) {
-        tasks[i] = cd->tasks.front();
+    while (i++ < PIPELINE_CMD_CNT && !cd->tasks.empty()) {
+        task = cd->tasks.front();
         cd->tasks.pop();
-        LOG_DEBUG("append redis cmd: %s", tasks[i]->cmd.c_str());
+        LOG_DEBUG("append redis cmd: %s", task->cmd.c_str());
 
-        ret = redisAppendCommand(cd->c, tasks[i]->cmd.c_str());
-        if (ret != REDIS_OK) {
-            LOG_ERROR("redis append cmd failed! cmd: %s, err: %d, node: %s, host: %s, port: %d",
-                      tasks[i]->cmd.c_str(), ret,
-                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-            tasks[i]->ret = ERR_REDIS_APPEND_CMD_FAILED;
-            co_resume(tasks[i]->co);
+        ret = redisAppendCommand(cd->c, task->cmd.c_str());
+        if (ret == REDIS_OK) {
+            tasks.push_back(task);
         } else {
-            cnt++;
+            LOG_ERROR("redis append cmd failed! cmd: %s, err: %d, node: %s, host: %s, port: %d",
+                      task->cmd.c_str(), ret,
+                      cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
+            task->ret = ERR_REDIS_APPEND_CMD_FAILED;
+            co_resume(task->co);
         }
     }
 
-    for (int i = 0; i < cnt; i++) {
-        ret = redisGetReply(cd->c, (void**)&tasks[i]->reply);
+    for (auto& v : tasks) {
+        ret = redisGetReply(cd->c, (void**)&v->reply);
         if (ret != REDIS_OK || cd->c->err != REDIS_OK) {
             is_reply_ok = false;
             LOG_ERROR("redis get reply failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
                       cd->c->err, cd->c->errstr,
                       cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
-        } else if ((tasks[i]->reply != nullptr) && (tasks[i]->reply->type == REDIS_REPLY_ERROR)) {
+        } else if ((v->reply != nullptr) && (v->reply->type == REDIS_REPLY_ERROR)) {
             is_reply_ok = false;
             LOG_ERROR("redis get reply failed! err: %d, errstr: %s, node: %s, host: %s, port: %d",
-                      tasks[i]->reply->type, tasks[i]->reply->str,
+                      v->reply->type, v->reply->str,
                       cd->ri->node.c_str(), cd->ri->host.c_str(), cd->ri->port);
         }
 
         if (!is_reply_ok) {
-            freeReplyObject(tasks[i]->reply);
-            tasks[i]->reply = nullptr;
-            tasks[i]->ret = ERR_REDIS_GET_REPLY_FAILED;
+            freeReplyObject(v->reply);
+            v->reply = nullptr;
+            v->ret = ERR_REDIS_GET_REPLY_FAILED;
         }
+    }
 
-        co_resume(tasks[i]->co);
+    for (auto& v : tasks) {
+        co_resume(v->co);
     }
 }
 
