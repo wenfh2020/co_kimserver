@@ -7,7 +7,7 @@
 
 using namespace kim;
 
-#define MAX_SEND_PACKETS_ONCE 100
+#define MAX_SEND_PACKETS_ONCE 300
 
 enum {
     KP_REQ_TEST_HELLO = 1001,
@@ -339,6 +339,8 @@ void* readwrite_routine(void* arg) {
             del_connect(c);
             return 0;
         }
+
+        co_sleep(100);
 
         ret = send_packets(c);
         if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
