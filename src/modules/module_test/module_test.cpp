@@ -19,16 +19,11 @@ int MoudleTest::test_mysql(const Request* req) {
               req->msg_head()->len(), req->msg_body()->data().c_str());
 
     int ret;
-    int id = 1;
-    char cmd[1024];
     vec_row_t* rows;
-    const char* node = "test";
+    const char* read_sql = "select value from mytest.test_async_mysql where id = 1;";
+    const char* write_sql = "insert into mytest.test_async_mysql (value) values ('hello world');";
 
-    /* write mysql. */
-    snprintf(cmd, sizeof(cmd),
-             "update mytest.test_async_mysql set value = '%s' where id = %d;",
-             req->msg_body()->data().c_str(), id);
-    ret = net()->mysql_mgr()->sql_write(node, cmd);
+    ret = net()->mysql_mgr()->sql_write("test", write_sql);
     if (ret != ERR_OK) {
         LOG_ERROR("write mysql failed! ret: %d", ret);
         return net()->send_ack(req, ret, "write mysql failed!");
@@ -37,8 +32,7 @@ int MoudleTest::test_mysql(const Request* req) {
     rows = new vec_row_t;
 
     /* read mysql. */
-    snprintf(cmd, sizeof(cmd), "select value from mytest.test_async_mysql where id = %d;", id);
-    ret = net()->mysql_mgr()->sql_read(node, cmd, *rows);
+    ret = net()->mysql_mgr()->sql_read("test", read_sql, *rows);
     if (ret != ERR_OK) {
         SAFE_DELETE(rows);
         LOG_ERROR("read mysql failed! ret: %d", ret);

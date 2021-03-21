@@ -1,4 +1,6 @@
 
+#include <signal.h>
+
 #include "./libco/co_routine.h"
 #include "connection.h"
 #include "error.h"
@@ -7,7 +9,7 @@
 
 using namespace kim;
 
-#define MAX_SEND_PACKETS_ONCE 300
+#define MAX_SEND_PACKETS_ONCE 100
 
 enum {
     KP_REQ_TEST_HELLO = 1001,
@@ -48,6 +50,166 @@ typedef struct statistics_user_data_s {
     int callback_cnt = 0;
 } statistics_user_data_t;
 
+int new_seq() { return ++g_seq; }
+bool load_logger(const char* path);
+bool check_args(int args, char** argv);
+void show_statics_result(bool force = false);
+
+void load_signals();
+void signal_handler_event(int sig);
+
+/* coroutines. */
+void* co_timer(void* arg);
+void* co_readwrite(void* arg);
+
+/* connection. */
+bool del_connect(Connection* c);
+bool check_connect(Connection* c);
+bool check_connect(Connection* c);
+bool is_connect_ok(Connection* c);
+Connection* get_connect(const char* host, int port);
+
+/* protocol. */
+bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body);
+Codec::STATUS send_packets(Connection* c);
+Codec::STATUS send_proto(Connection* c, int cmd, const std::string& data);
+
+int main(int args, char** argv) {
+    if (!check_args(args, argv)) {
+        return 1;
+    }
+
+    if (!load_logger("./test.log")) {
+        return 1;
+    }
+
+    LOG_INFO("start pressure, host: %s, port: %d, users: %d, packets: %d",
+             g_server_host.c_str(), g_server_port, g_test_users, g_test_user_packets);
+
+    // g_begin_time = time_now();
+
+    stCoRoutine_t* co;
+    for (int i = 0; i < g_test_users; i++) {
+        co_create(&co, NULL, co_readwrite, nullptr);
+        co_resume(co);
+    }
+
+    /* timer */
+    co_create(&co, NULL, co_timer, nullptr);
+    co_resume(co);
+
+    co_eventloop(co_get_epoll_ct(), 0, 0);
+    return 0;
+}
+
+void* co_timer(void* arg) {
+    co_enable_hook_sys();
+
+    for (;;) {
+        co_sleep(5000);
+        show_statics_result(true);
+    }
+
+    return 0;
+}
+
+void* co_readwrite(void* arg) {
+    co_enable_hook_sys();
+
+    int fd = -1;
+    Connection* c = nullptr;
+    bool is_connected = false;
+
+    MsgHead head;
+    MsgBody body;
+    Codec::STATUS ret;
+    statistics_user_data_t* stat;
+
+    c = get_connect(g_server_host.c_str(), g_server_port);
+    if (c == nullptr) {
+        LOG_ERROR("async connect failed, host: %s, port: %d",
+                  g_server_host.c_str(), g_server_port);
+        return 0;
+    }
+
+    for (;;) {
+        /* there may be delays connecting to the server. */
+        if (!check_connect(c)) {
+            co_sleep(1000);
+            continue;
+        }
+
+        if (!is_connected) {
+            is_connected = true;
+            g_connected_cnt++;
+        }
+
+        /* wait all client connected, then test. */
+        if (g_connected_cnt != g_test_users) {
+            co_sleep(1000);
+            continue;
+        }
+
+        if (g_begin_time == 0.0) {
+            g_begin_time = time_now();
+        }
+
+        fd = c->fd();
+        stat = (statistics_user_data_t*)c->privdata();
+        ret = c->conn_read(head, body);
+
+        while (ret == Codec::STATUS::OK) {
+            g_callback_cnt++;
+            stat->callback_cnt++;
+            LOG_DEBUG("fd: %d, callback cnt: %d.", c->fd(), stat->callback_cnt);
+
+            check_rsp(c, head, body) ? g_ok_callback_cnt++ : g_err_callback_cnt++;
+            show_statics_result();
+
+            if (stat->callback_cnt == stat->packets) {
+                LOG_DEBUG("handle all packets! fd: %d", c->fd());
+                del_connect(c);
+                return 0;
+            }
+
+            head.Clear();
+            body.Clear();
+            ret = c->fetch_data(head, body);
+            LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)ret);
+        }
+
+        show_statics_result();
+
+        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
+            if (ret == Codec::STATUS::ERR) {
+                g_callback_cnt++;
+                g_err_callback_cnt++;
+                stat->callback_cnt++;
+                LOG_ERROR("conn read failed. fd: %d", fd);
+            }
+            del_connect(c);
+            return 0;
+        }
+
+        co_sleep(100);
+
+        ret = send_packets(c);
+        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
+            del_connect(c);
+            LOG_ERROR("conn read failed. fd: %d", fd);
+            return 0;
+        } else if (ret == Codec::STATUS::PAUSE) {
+            co_sleep(100);
+            continue;
+        }
+
+        co_sleep(1000, fd, POLLIN);
+        continue;
+    }
+
+    return 0;
+}
+
 bool check_args(int args, char** argv) {
     if (args < 5 ||
         argv[2] == nullptr || !isdigit(argv[2][0]) || atoi(argv[2]) == 0 ||
@@ -67,8 +229,6 @@ bool check_args(int args, char** argv) {
     g_send_cnt = g_test_users * g_test_user_packets;
     return true;
 }
-
-int new_seq() { return ++g_seq; }
 
 bool load_logger(const char* path) {
     m_logger = new kim::Log;
@@ -243,7 +403,7 @@ bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body) {
     return true;
 }
 
-void show_statics_result(bool force = false) {
+void show_statics_result(bool force) {
     LOG_DEBUG("send cnt: %d, cur callback cnt: %d", g_send_cnt, g_callback_cnt);
 
     if (force && g_send_cnt == g_callback_cnt) {
@@ -260,140 +420,4 @@ void show_statics_result(bool force = false) {
                   << "ok callback cnt:  " << g_ok_callback_cnt << std::endl
                   << "err callback cnt: " << g_err_callback_cnt << std::endl;
     }
-}
-
-void* readwrite_routine(void* arg) {
-    co_enable_hook_sys();
-
-    int fd = -1;
-    Connection* c = nullptr;
-    bool is_connected = false;
-
-    MsgHead head;
-    MsgBody body;
-    Codec::STATUS ret;
-    statistics_user_data_t* stat;
-
-    c = get_connect(g_server_host.c_str(), g_server_port);
-    if (c == nullptr) {
-        LOG_ERROR("async connect failed, host: %s, port: %d",
-                  g_server_host.c_str(), g_server_port);
-        return 0;
-    }
-
-    for (;;) {
-        /* there may be delays connecting to the server. */
-        if (!check_connect(c)) {
-            co_sleep(1000);
-            continue;
-        }
-
-        if (!is_connected) {
-            is_connected = true;
-            g_connected_cnt++;
-        }
-
-        /* wait all client connected, then test. */
-        if (g_connected_cnt != g_test_users) {
-            co_sleep(1000);
-            continue;
-        }
-
-        if (g_begin_time == 0.0) {
-            g_begin_time = time_now();
-        }
-
-        fd = c->fd();
-        stat = (statistics_user_data_t*)c->privdata();
-        ret = c->conn_read(head, body);
-
-        while (ret == Codec::STATUS::OK) {
-            g_callback_cnt++;
-            stat->callback_cnt++;
-            LOG_DEBUG("fd: %d, callback cnt: %d.", c->fd(), stat->callback_cnt);
-
-            check_rsp(c, head, body) ? g_ok_callback_cnt++ : g_err_callback_cnt++;
-            show_statics_result();
-
-            if (stat->callback_cnt == stat->packets) {
-                LOG_DEBUG("handle all packets! fd: %d", c->fd());
-                del_connect(c);
-                return 0;
-            }
-
-            head.Clear();
-            body.Clear();
-            ret = c->fetch_data(head, body);
-            LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)ret);
-        }
-
-        show_statics_result();
-
-        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
-            if (ret == Codec::STATUS::ERR) {
-                g_callback_cnt++;
-                g_err_callback_cnt++;
-                stat->callback_cnt++;
-                LOG_ERROR("conn read failed. fd: %d", fd);
-            }
-            del_connect(c);
-            return 0;
-        }
-
-        co_sleep(100);
-
-        ret = send_packets(c);
-        if (ret == Codec::STATUS::ERR || ret == Codec::STATUS::CLOSED) {
-            del_connect(c);
-            LOG_ERROR("conn read failed. fd: %d", fd);
-            return 0;
-        } else if (ret == Codec::STATUS::PAUSE) {
-            co_sleep(100, fd);
-            continue;
-        }
-
-        co_sleep(1000, fd, POLLIN);
-        continue;
-    }
-
-    return 0;
-}
-
-void* co_handle_timer(void* arg) {
-    co_enable_hook_sys();
-
-    for (;;) {
-        co_sleep(5000);
-        show_statics_result(true);
-    }
-
-    return 0;
-}
-
-int main(int args, char** argv) {
-    if (!check_args(args, argv)) {
-        return 1;
-    }
-
-    if (!load_logger("./test.log")) {
-        return 1;
-    }
-
-    LOG_INFO("start pressure, host: %s, port: %d, users: %d, packets: %d",
-             g_server_host.c_str(), g_server_port, g_test_users, g_test_user_packets);
-
-    // g_begin_time = time_now();
-
-    stCoRoutine_t* co;
-    for (int i = 0; i < g_test_users; i++) {
-        co_create(&co, NULL, readwrite_routine, nullptr);
-        co_resume(co);
-    }
-
-    /* timer */
-    co_create(&co, NULL, co_handle_timer, nullptr);
-    co_resume(co);
-
-    co_eventloop(co_get_epoll_ct(), 0, 0);
-    return 0;
 }
