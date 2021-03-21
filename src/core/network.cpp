@@ -298,6 +298,10 @@ void Network::on_repeat_timer() {
         }
     }
 
+    if (m_mysql_mgr != nullptr) {
+        m_mysql_mgr->on_timer();
+    }
+
     if (m_coroutines != nullptr) {
         m_coroutines->on_timer();
     }
@@ -583,7 +587,7 @@ void* Network::handle_requests(void* d) {
         if (!c->is_system()) {
             /* check alive. */
             if (now() - c->active_time() > m_keep_alive) {
-                LOG_TRACE("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
+                LOG_DEBUG("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
                           fd, now(), c->active_time(), m_keep_alive);
                 break;
             }
@@ -863,10 +867,10 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
         if (stat == Codec::STATUS::OK) {
             return ERR_OK;
         } else if (stat == Codec::STATUS::PAUSE) {
-            co_sleep(50, c->fd());
+            co_sleep(100, c->fd(), POLLOUT);
             continue;
         } else {
-            LOG_WARN("send data failed! fd: %d", c->fd());
+            LOG_DEBUG("send data failed! fd: %d", c->fd());
             return ERR_SEND_DATA_FAILED;
         }
     }

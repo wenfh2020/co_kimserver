@@ -10,7 +10,7 @@
     "keep_alive": 30000,
     "log_path": "kimserver.log",
     "log_level": "info",
-    "max_clients": 100000,
+    "max_clients": 20000,
     "modules": [
         "module_test.so"
     ],
@@ -22,13 +22,16 @@
         }
     },
     "database": {
-        "test": {
-            "host": "127.0.0.1",
-            "port": 3306,
-            "user": "root",
-            "password": "root123!@#",
-            "charset": "utf8mb4",
-            "max_conn_cnt": 5
+        "slowlog_log_slower_than": 300,
+        "nodes": {
+            "test": {
+                "host": "127.0.0.1",
+                "port": 3306,
+                "user": "root",
+                "password": "root123!@#",
+                "charset": "utf8mb4",
+                "max_conn_cnt": 10
+            }
         }
     },
     "zookeeper": {

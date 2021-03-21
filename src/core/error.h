@@ -26,6 +26,7 @@ enum E_ERROR {
     ERR_READ_DATA_TIMEOUT = 18,
     ERR_PACKET_DECODE_FAILED = 19,
     ERR_CONN_CLOSED = 20,
+    ERR_COROUTINE_IS_END = 21,
 
     ERR_EXEC_SETP = 101,
     ERR_EXEC_CMD_TIMEUOT = 102,
@@ -49,6 +50,7 @@ enum E_ERROR {
     ERR_DB_QUERY_FAILED = 12004, /* read. */
     ERR_DB_EXEC_FAILED = 12005,  /* write. */
     ERR_DB_CAN_NOT_FIND_NODE = 12006,
+    ERR_DB_TASKS_OVER_LIMIT = 12007,
 };
 
 }  // namespace kim

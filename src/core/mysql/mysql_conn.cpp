@@ -8,6 +8,10 @@ MysqlConn::MysqlConn(Log* logger) : Logger(logger) {
 }
 
 MysqlConn::~MysqlConn() {
+    close();
+}
+
+void MysqlConn::close() {
     if (m_conn != nullptr) {
         mysql_close(m_conn);
         m_conn = nullptr;
@@ -34,7 +38,7 @@ bool MysqlConn::connect(db_info_t* db) {
     mysql_set_character_set(m_conn, db->charset.c_str());
     /* MYSQL_OPT_COMPRESS --> Cost performance. */
     // mysql_options(m_conn, MYSQL_OPT_COMPRESS, NULL);
-    mysql_options(m_conn, MYSQL_OPT_LOCAL_INFILE, NULL);
+    // mysql_options(m_conn, MYSQL_OPT_LOCAL_INFILE, NULL);
 
     if (!mysql_real_connect(m_conn, db->host.c_str(), db->user.c_str(),
                             db->password.c_str(), "mysql", db->port, NULL, 0)) {

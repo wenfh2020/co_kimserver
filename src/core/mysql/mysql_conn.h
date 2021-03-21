@@ -23,6 +23,7 @@ class MysqlConn : Logger {
 
     bool connect(db_info_t* db);
     MYSQL* get_conn() { return m_conn; }
+    void close();
 
    private:
     int sql_exec(const std::string& sql);

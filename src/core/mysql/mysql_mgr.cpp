@@ -3,7 +3,9 @@
 #include "error.h"
 
 #define DEF_CONN_CNT 5
-#define MAX_CONN_CNT 30
+#define MAX_CONN_CNT 100
+#define TASK_QUEUE_LIMIT 1000
+#define CONN_TIME_OUT (10 * 1000)
 
 namespace kim {
 
@@ -37,10 +39,22 @@ int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is
     task_t* task;
     co_data_t* cd;
 
-    cd = get_co_data(node);
-    if (cd == nullptr) {
-        LOG_ERROR("can not find conn, node: %s", node.c_str());
-        return ERR_DB_FAILED;
+    for (int i = 0; i < 10; i++) {
+        cd = get_co_data(node);
+        if (cd == nullptr) {
+            LOG_ERROR("can not find conn, node: %s", node.c_str());
+            return ERR_DB_TASKS_OVER_LIMIT;
+        }
+        if (cd->tasks.size() > TASK_QUEUE_LIMIT) {
+            co_sleep(30);
+            continue;
+        }
+        break;
+    }
+
+    if (cd->tasks.size() > TASK_QUEUE_LIMIT) {
+        LOG_WARN("db task over limit! node: %s.", node.c_str());
+        return ERR_DB_TASKS_OVER_LIMIT;
     }
 
     task = new task_t;
@@ -69,6 +83,7 @@ void* MysqlMgr::co_handle_task(void* arg) {
 
 void* MysqlMgr::handle_task(void* arg) {
     task_t* task;
+    uint64_t begin, spend;
     co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
@@ -94,10 +109,21 @@ void* MysqlMgr::handle_task(void* arg) {
         task = cd->tasks.front();
         cd->tasks.pop();
 
+        begin = mstime();
+        cd->is_working = true;
+        cd->active_time = begin;
+        m_cur_handle_cnt++;
+
         if (task->is_read) {
             task->ret = cd->c->sql_read(task->sql, *task->query_res_rows);
         } else {
             task->ret = cd->c->sql_write(task->sql);
+        }
+
+        cd->is_working = false;
+        spend = mstime() - begin;
+        if (spend > m_slowlog_log_slower_than) {
+            LOG_WARN("slowlog - sql spend time: %llu, sql: %s", mstime() - begin, task->sql.c_str());
         }
 
         co_resume(task->co);
@@ -124,9 +150,9 @@ MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
     } else {
         ad = (co_array_data_t*)itr->second;
         if ((int)ad->coroutines.size() >= ad->db->max_conn_cnt) {
-            cd = ad->coroutines[ad->cur_index % ad->coroutines.size()];
-            if (++ad->cur_index == (int)ad->coroutines.size()) {
-                ad->cur_index = 0;
+            cd = ad->coroutines[ad->cur_co_idx % ad->coroutines.size()];
+            if (++ad->cur_co_idx == (int)ad->coroutines.size()) {
+                ad->cur_co_idx = 0;
             }
             return cd;
         }
@@ -146,6 +172,46 @@ MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
     return cd;
 }
 
+void MysqlMgr::on_repeat_timer() {
+    int conn_cnt = 0;
+    int task_cnt = 0;
+
+    run_with_period(1000) {
+        for (auto& it : m_coroutines) {
+            co_array_data_t* ad = it.second;
+            for (auto& v : ad->coroutines) {
+                task_cnt += v->tasks.size();
+                if (v->c != nullptr) {
+                    conn_cnt++;
+                }
+            }
+        }
+
+        if (task_cnt > 0 || m_old_handle_cnt != m_cur_handle_cnt) {
+            LOG_DEBUG("conn cnt: %d, avg handle cnt: %d, waiting cnt: %d",
+                      conn_cnt, m_cur_handle_cnt - m_old_handle_cnt, task_cnt);
+            m_old_handle_cnt = m_cur_handle_cnt;
+        }
+
+        /* 根据速率去调整。 */
+        /* recover connections. no waiting task, not in working, and timeout. */
+        for (auto& it : m_coroutines) {
+            co_array_data_t* ad = it.second;
+            auto itr = ad->coroutines.begin();
+            for (; itr != ad->coroutines.end(); itr++) {
+                co_data_t* v = *itr;
+                if (v->c != nullptr && v->tasks.empty() &&
+                    !v->is_working && mstime() > v->active_time + CONN_TIME_OUT) {
+                    LOG_INFO("recover db coroutines, ad cnt: %lu, node: %s, co: %p",
+                             ad->coroutines.size(), v->db->node.c_str(), v->co);
+                    v->c->close();
+                    SAFE_DELETE(v->c);
+                }
+            }
+        }
+    }
+}
+
 bool MysqlMgr::init(CJsonObject* config) {
     if (config == nullptr) {
         LOG_ERROR("invalid params!");
@@ -155,14 +221,16 @@ bool MysqlMgr::init(CJsonObject* config) {
     db_info_t* db;
     std::vector<std::string> vec;
 
-    config->GetKeys(vec);
+    m_slowlog_log_slower_than = str_to_int((*config)("slowlog_log_slower_than"));
+
+    (*config)["nodes"].GetKeys(vec);
     if (vec.size() == 0) {
         LOG_ERROR("database info is empty.");
         return false;
     }
 
     for (const auto& v : vec) {
-        const CJsonObject& obj = (*config)[v];
+        const CJsonObject& obj = (*config)["nodes"][v];
 
         db = new db_info_t;
         db->host = obj("host");

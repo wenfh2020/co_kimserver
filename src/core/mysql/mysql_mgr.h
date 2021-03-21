@@ -3,12 +3,13 @@
 
 #include "../libco/co_routine.h"
 #include "../libco/co_routine_inner.h"
+#include "../timer.h"
 #include "mysql_conn.h"
 #include "server.h"
 
 namespace kim {
 
-class MysqlMgr : Logger {
+class MysqlMgr : Logger, public TimerCron {
     /* cmd task. */
     typedef struct task_s {
         stCoRoutine_t* co = nullptr;
@@ -27,11 +28,13 @@ class MysqlMgr : Logger {
         MysqlConn* c = nullptr;
         void* privdata = nullptr;
         std::queue<task_t*> tasks; /* tasks wait to be handled. */
+        uint64_t active_time = 0;
+        bool is_working = false;
     } co_data_t;
 
     typedef struct co_array_data_s {
         db_info_t* db = nullptr;
-        int cur_index = 0;
+        int cur_co_idx = 0;
         std::vector<co_data_t*> coroutines;
     } co_array_data_t;
 
@@ -67,6 +70,9 @@ class MysqlMgr : Logger {
      */
     int sql_read(const std::string& node, const std::string& sql, vec_row_t& rows);
 
+   public:
+    virtual void on_repeat_timer() override; /* call by parent, 10 times/s on Linux. */
+
    private:
     void destory();
 
@@ -77,6 +83,10 @@ class MysqlMgr : Logger {
     int send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);
 
    private:
+    int m_old_handle_cnt = 0;
+    int m_cur_handle_cnt = 0;
+    int m_slowlog_log_slower_than = 0; /* slow long time. */
+
     /* key: node, valude: db info. */
     std::unordered_map<std::string, db_info_t*> m_dbs;
     /* key: node, value: coroutines array data. */

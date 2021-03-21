@@ -95,8 +95,8 @@ class Network : public INet, public TimerCron {
     virtual bool close_conn(Connection* c) override;
     virtual Connection* create_conn(int fd) override;
 
-    bool is_valid_conn(uint64_t id);
-    bool is_valid_conn(Connection* c);
+    inline bool is_valid_conn(uint64_t id);
+    inline bool is_valid_conn(Connection* c);
 
     Connection* get_conn(const fd_t& f);
     Codec::STATUS conn_write_data(Connection* c);
