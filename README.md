@@ -56,78 +56,38 @@
 
 ---
 
-## 4. 编译
 
-* 方法一
+## 4. 测试
+
+4核 8G 虚拟机，本地压测：客户端与**单进程**服务网络通信，100w 条数据（10000 个用户，每个用户发 100 个包）。
+
+* 压测命令。
+
+    客户端（[测试源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)），服务端（[测试源码](https://github.com/wenfh2020/co_kimserver/blob/main/src/modules/module_test/module_test.cpp)）。
 
 ```shell
-# 执行脚本生成 protobuf 源码。
-cd ./co_kimserver/src/core/protobuf
-chmod +x gen_proto.sh
-./gen_proto.sh
-
-# 编译整个源码文件。
-cd ./co_kimserver/src
-make clean; make
+# ./test_tcp_pressure [host] [port] [protocol(1001/1003/1005)] [users] [user_packets]
 ```
+
+* 压测数据。
+
+| 测试功能                | 数据量 | 并发        | 协议号 | 压测命令                                          |
+| :---------------------- | :----- | :---------- | :----- | :------------------------------------------------ |
+| 普通协议（hello world） | 100w   | 200,000 / s | 1001   | ./test_tcp_pressure 127.0.0.1 3355 1001 10000 100 |
+| 读写 mysql（5 连接）    | 100w   | 4500 /s     | 1003   | ./test_tcp_pressure 127.0.0.1 3355 1003 10000 100 |
+| 读写 redis （2 连接）   | 100w   | 30,000/s    | 1005   | ./test_tcp_pressure 127.0.0.1 3355 1005 10000 100 |
 
 ---
 
-* 方法二
+mysql 和 redis 通信协议测试，服务端[测试源码](https://github.com/wenfh2020/co_kimserver/blob/main/src/modules/module_test/module_test.cpp)：一条协议，测试读写两个命令，所以会相对慢一点。
 
-```shell
-cd ./co_kimserver
-chmod +x run.sh
-./run.sh compile all
-```
+虽然 libco 能 hook 住 mysqlclient，使进程能在 mysqlclient 阻塞情况下，切换到其它协程工作，但数据库操作始终是瓶颈，mysql 连接数需要根据实际使用环境进行调整。
+
+co_kimserver 是多进程分布式架构，可以通过修改配置：每个节点开多个子进程，或者增加多个服务节点，从而增加服务系统整体并发能力。
 
 ---
 
-## 5. 运行
-
-源码编译成功后，进入 bin 目录启动服务。
-
-* 方法一
-
-```shell
-cd ./co_kimserver/bin
-./co_kimserver config.json
-```
-
----
-
-* 方法二
-
-```shell
-cd ./co_kimserver
-./run.sh
-```
-
----
-
-## 6. 测试
-
-**单进程**服务，本地压力测试 100w 条数据（10000 个用户，每个用户发 100 个包）。
-
-* 压测命令（[压测源码](https://github.com/wenfh2020/co_kimserver/tree/main/src/test/test_tcp_pressure)）。
-
-```shell
-./test_tcp_pressure [host] [port] [protocol(1001/1003/1005)] [users] [user_packets]
-```
-
-* 测试数据。
-
-centos 虚拟机，4 核 8 G。
-
-| 测试功能                | 数据量 | 并发                                     |
-| :---------------------- | :----- | :--------------------------------------- |
-| 普通协议（hello world） | 100w   | 200,000 / s                              |
-| 读写 redis （1 连接）   | 100w   | 30000 * 2（一条协议两个操作）= 60,0000/s |
-| 读写 mysql（5 连接）    | 100w   | 4500 * 2（一条协议两个操作）= 9,000/s    |
-
----
-
-## 7. 服务配置
+## 5. 服务配置
 
 ```shell
 ./bin/config.json
@@ -154,17 +114,20 @@ centos 虚拟机，4 核 8 G。
         "test": {                           # redis 配置节点，支持配置多个。
             "host": "127.0.0.1",            # redis 连接 host。
             "port": 6379,                   # redis 连接 port。
-            "max_conn_cnt": 5               # redis 连接池最大连接数。
+            "max_conn_cnt": 3               # redis 连接池最大连接数。
         }
     },
     "database": {                           # mysql 数据库连接池配置。
-        "test": {                           # mysql 数据库配置节点，支持配置多个。
-            "host": "127.0.0.1",            # mysql host。
-            "port": 3306,                   # mysql port。
-            "user": "root",                 # mysql 用户名。
-            "password": "root123!@#",       # mysql 密码。
-            "charset": "utf8mb4",           # mysql 字符集。
-            "max_conn_cnt": 5               # mysql 连接池最大连接数。
+        "slowlog_log_slower_than": 300,     # mysql 执行 sql 命令，超过指定时间，打印慢日志。
+        "nodes": {                          # mysql 连接池连接节点。
+            "test": {                       # mysql 数据库配置节点，支持配置多个。
+                "host": "127.0.0.1",        # mysql host。
+                "port": 3306,               # mysql port。
+                "user": "root",             # mysql 用户名。
+                "password": "root123!@#",   # mysql 密码。
+                "charset": "utf8mb4",       # mysql 字符集。
+                "max_conn_cnt": 10          # mysql 连接池最大连接数。
+            }
         }
     },
     "zookeeper": {                          # zookeeper 中心节点管理配置，用于节点发现，节点负载等功能。
@@ -178,4 +141,53 @@ centos 虚拟机，4 核 8 G。
         ]
     }
 }
+```
+
+---
+
+## 6. 编译
+
+* 方法一
+
+```shell
+# 执行脚本生成 protobuf 源码。
+cd ./co_kimserver/src/core/protobuf
+chmod +x gen_proto.sh
+./gen_proto.sh
+
+# 编译整个源码文件。
+cd ./co_kimserver/src
+make clean; make
+```
+
+---
+
+* 方法二
+
+```shell
+cd ./co_kimserver
+chmod +x run.sh
+./run.sh compile all
+```
+
+---
+
+## 7. 运行
+
+源码编译成功后，进入 bin 目录启动服务。
+
+* 方法一
+
+```shell
+cd ./co_kimserver/bin
+./co_kimserver config.json
+```
+
+---
+
+* 方法二
+
+```shell
+cd ./co_kimserver
+./run.sh
 ```
