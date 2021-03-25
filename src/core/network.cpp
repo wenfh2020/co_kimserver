@@ -1153,10 +1153,14 @@ int Network::relay_to_node(const std::string& node_type, const std::string& obj,
     return m_nodes_conn->relay_to_node(node_type, obj, head, body, head_out, body_out);
 }
 
-uint64_t Network::now() {
-    if ((++m_time_index % 10) == 0) {
-        /* mstime waste too much cpu, so set it at intervals and in timer. */
+uint64_t Network::now(bool force) {
+    if (force) {
         m_now_time = mstime();
+    } else {
+        if ((++m_time_index % 10) == 0) {
+            /* mstime waste too much cpu, so set it at intervals and in timer. */
+            m_now_time = mstime();
+        }
     }
     return m_now_time;
 }

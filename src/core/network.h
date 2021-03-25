@@ -48,7 +48,7 @@ class Network : public INet, public TimerCron {
     uint64_t keep_alive() { return m_keep_alive; }
     bool is_request(int cmd) { return (cmd & 0x00000001); }
 
-    virtual uint64_t now() override;
+    virtual uint64_t now(bool force = false) override;
     virtual uint64_t new_seq() override { return ++m_seq; }
     virtual CJsonObject* config() override { return &m_config; }
 

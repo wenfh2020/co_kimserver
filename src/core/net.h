@@ -25,7 +25,7 @@ class INet {
     virtual ~INet() {}
 
     virtual uint64_t new_seq() { return 0; }
-    virtual uint64_t now() { return mstime(); }
+    virtual uint64_t now(bool force = false) { return mstime(); }
 
     virtual CJsonObject* config() { return nullptr; }
     virtual MysqlMgr* mysql_mgr() { return nullptr; }
