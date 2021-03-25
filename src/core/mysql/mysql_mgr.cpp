@@ -4,8 +4,10 @@
 
 #define DEF_CONN_CNT 5
 #define MAX_CONN_CNT 100
-#define TASK_QUEUE_LIMIT 1000
-#define CONN_TIME_OUT (10 * 1000)
+#define TASK_TIME_OUT (10 * 1000)
+#define CONN_TIME_OUT (30 * 1000)
+/* distribute tasks to connection one time. */
+#define DIST_CONN_TASKS_ONCE 50
 
 namespace kim {
 
@@ -37,41 +39,71 @@ int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is
 
     int ret;
     task_t* task;
-    co_data_t* cd;
+    co_mgr_data_t* md;
 
-    for (int i = 0; i < 10; i++) {
-        cd = get_co_data(node);
-        if (cd == nullptr) {
-            LOG_ERROR("can not find conn, node: %s", node.c_str());
-            return ERR_DB_TASKS_OVER_LIMIT;
-        }
-        if (cd->tasks.size() > TASK_QUEUE_LIMIT) {
-            co_sleep(30);
-            continue;
-        }
-        break;
-    }
-
-    if (cd->tasks.size() > TASK_QUEUE_LIMIT) {
-        LOG_WARN("db task over limit! node: %s.", node.c_str());
-        return ERR_DB_TASKS_OVER_LIMIT;
+    md = get_co_mgr_data(node);
+    if (md == nullptr) {
+        LOG_ERROR("invalid node: %s", node.c_str());
+        return ERR_CAN_NOT_FIND_NODE;
     }
 
     task = new task_t;
-    task->co = GetCurrThreadCo();
-    task->is_read = is_read;
     task->sql = sql;
-    task->query_res_rows = rows;
+    task->rows = rows;
+    task->is_read = is_read;
+    task->active_time = mstime();
+    task->user_co = GetCurrThreadCo();
 
-    cd->tasks.push(task);
+    md->tasks.push(task);
 
-    co_cond_signal(cd->cond);
-    LOG_TRACE("signal mysql co handler! node: %s, co: %p", node.c_str(), cd->co);
+    co_cond_signal(md->dist_cond);
+    LOG_TRACE("signal task to dist coroutines! node: %s, co: %p",
+              node.c_str(), md->dist_co);
     co_yield_ct();
 
     ret = task->ret;
     SAFE_DELETE(task);
     return ret;
+}
+
+void* MysqlMgr::co_dist_task(void* arg) {
+    co_enable_hook_sys();
+    co_mgr_data_t* md = (co_mgr_data_t*)arg;
+    MysqlMgr* m = (MysqlMgr*)md->privdata;
+    return m->dist_task(arg);
+}
+
+void* MysqlMgr::dist_task(void* arg) {
+    task_t* task;
+    co_data_t* cd;
+    co_mgr_data_t* md = (co_mgr_data_t*)arg;
+
+    for (;;) {
+        if (md->tasks.empty()) {
+            LOG_TRACE("no task, pls wait! node: %s, co: %p",
+                      md->db->node.c_str(), md->dist_co);
+            co_cond_timedwait(md->dist_cond, -1);
+            continue;
+        }
+
+        cd = get_co_data(md->db->node);
+        if (cd == nullptr) {
+            LOG_ERROR("can not get co data, node: %s", md->db->node.c_str());
+            co_sleep(1000);
+            continue;
+        }
+
+        /* distribute tasks to connection's coroutine. */
+        for (int i = 0; i < DIST_CONN_TASKS_ONCE && !md->tasks.empty(); i++) {
+            task = md->tasks.front();
+            md->tasks.pop();
+            cd->tasks.push(task);
+        }
+
+        co_cond_signal(cd->conn_cond);
+    }
+
+    return 0;
 }
 
 void* MysqlMgr::co_handle_task(void* arg) {
@@ -83,23 +115,24 @@ void* MysqlMgr::co_handle_task(void* arg) {
 
 void* MysqlMgr::handle_task(void* arg) {
     task_t* task;
-    uint64_t begin, spend;
+    long long spend;
     co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
         if (cd->tasks.empty()) {
-            LOG_TRACE("no redis task, pls wait! node: %s, co: %p",
-                      cd->db->node.c_str(), cd->co);
-            co_cond_timedwait(cd->cond, -1);
+            LOG_TRACE("no task, pls wait! node: %s, co: %p",
+                      cd->db->node.c_str(), cd->conn_co);
+            add_to_free_list(cd);
+            co_cond_timedwait(cd->conn_cond, -1);
             continue;
         }
 
         if (cd->c == nullptr) {
             cd->c = new MysqlConn(logger());
-            if (!cd->c->connect(cd->db)) {
+            if (cd->c == nullptr || !cd->c->connect(cd->db)) {
                 LOG_ERROR("db connect failed! node: %s, host: %s, port: %d",
                           cd->db->node.c_str(), cd->db->host.c_str(), cd->db->port);
-                clear_co_tasks(cd);
+                clear_co_tasks(cd, ERR_DB_CONNECT_FAILED);
                 SAFE_DELETE(cd->c);
                 co_sleep(1000);
                 continue;
@@ -109,106 +142,162 @@ void* MysqlMgr::handle_task(void* arg) {
         task = cd->tasks.front();
         cd->tasks.pop();
 
-        begin = mstime();
-        cd->is_working = true;
-        cd->active_time = begin;
         m_cur_handle_cnt++;
+        cd->active_time = mstime();
+
+        if (cd->active_time > task->active_time + TASK_TIME_OUT) {
+            LOG_WARN("task time out, sql: %s.", task->sql.c_str());
+            task->ret = ERR_DB_TASKS_TIME_OUT;
+            co_resume(task->user_co);
+            continue;
+        }
 
         if (task->is_read) {
-            task->ret = cd->c->sql_read(task->sql, *task->query_res_rows);
+            task->ret = cd->c->sql_read(task->sql, *task->rows);
         } else {
             task->ret = cd->c->sql_write(task->sql);
         }
 
-        cd->is_working = false;
-        spend = mstime() - begin;
+        spend = mstime() - cd->active_time;
         if (spend > m_slowlog_log_slower_than) {
-            LOG_WARN("slowlog - sql spend time: %llu, sql: %s", mstime() - begin, task->sql.c_str());
+            LOG_WARN("slowlog - sql spend time: %llu, sql: %s", spend, task->sql.c_str());
         }
 
-        co_resume(task->co);
+        co_resume(task->user_co);
     }
 
     return 0;
 }
 
-MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
-    co_data_t* cd;
-    co_array_data_t* ad;
+MysqlMgr::co_mgr_data_t* MysqlMgr::get_co_mgr_data(const std::string& node) {
+    co_mgr_data_t* md;
 
-    auto it = m_dbs.find(node);
-    if (it == m_dbs.end()) {
-        LOG_ERROR("can not find node: %s.", node.c_str());
+    auto it = m_coroutines.find(node);
+    if (it != m_coroutines.end()) {
+        return it->second;
+    }
+
+    auto it_db = m_dbs.find(node);
+    if (it_db == m_dbs.end()) {
+        LOG_ERROR("can not find db node: %s.", node.c_str());
         return nullptr;
     }
 
-    auto itr = m_coroutines.find(node);
-    if (itr == m_coroutines.end()) {
-        ad = new co_array_data_t;
-        ad->db = it->second;
-        m_coroutines[node] = ad;
-    } else {
-        ad = (co_array_data_t*)itr->second;
-        if ((int)ad->coroutines.size() >= ad->db->max_conn_cnt) {
-            cd = ad->coroutines[ad->cur_co_idx % ad->coroutines.size()];
-            if (++ad->cur_co_idx == (int)ad->coroutines.size()) {
-                ad->cur_co_idx = 0;
-            }
-            return cd;
-        }
+    md = new co_mgr_data_t;
+    md->privdata = this;
+    md->db = it_db->second;
+    md->dist_cond = co_cond_alloc();
+
+    m_coroutines[node] = md;
+    co_create(&(md->dist_co), nullptr, co_dist_task, md);
+    co_resume(md->dist_co);
+    return md;
+}
+
+MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
+    co_data_t* cd;
+    co_mgr_data_t* md;
+
+    md = get_co_mgr_data(node);
+    if (md == nullptr) {
+        LOG_ERROR("can not find co array data. node: %s.", node.c_str());
+        return nullptr;
+    }
+
+    /* get conn from free list. */
+    if (!md->free_conns.empty()) {
+        cd = md->free_conns.front();
+        md->free_conns.pop_front();
+        md->busy_conns.push_back(cd);
+        return cd;
+    }
+
+    if ((int)md->conn_cnt == md->db->max_conn_cnt) {
+        /* get conn from busy list. */
+        cd = md->busy_conns.front();
+        md->busy_conns.pop_front();
+        md->busy_conns.push_back(cd);
+        return cd;
     }
 
     cd = new co_data_t;
-    cd->db = it->second;
+    cd->md = md;
     cd->privdata = this;
-    cd->cond = co_cond_alloc();
-    ad->coroutines.push_back(cd);
+    cd->conn_cond = co_cond_alloc();
+    cd->db = m_dbs.find(node)->second;
 
-    LOG_INFO("node: %s, co cnt: %d, max conn cnt: %d",
-             node.c_str(), (int)ad->coroutines.size(), ad->db->max_conn_cnt);
+    md->conn_cnt++;
+    md->busy_conns.push_back(cd);
 
-    co_create(&(cd->co), nullptr, co_handle_task, cd);
-    co_resume(cd->co);
+    LOG_INFO("create new conn data, node: %s, co cnt: %d, max conn cnt: %d",
+             node.c_str(), md->conn_cnt, md->db->max_conn_cnt);
+
+    co_create(&(cd->conn_co), nullptr, co_handle_task, cd);
+    co_resume(cd->conn_co);
     return cd;
 }
 
 void MysqlMgr::on_repeat_timer() {
-    int conn_cnt = 0;
+    long long now;
     int task_cnt = 0;
+    int busy_conn_cnt = 0;
 
     run_with_period(1000) {
         for (auto& it : m_coroutines) {
-            co_array_data_t* ad = it.second;
-            for (auto& v : ad->coroutines) {
+            co_mgr_data_t* md = it.second;
+            for (auto& v : md->busy_conns) {
                 task_cnt += v->tasks.size();
                 if (v->c != nullptr) {
-                    conn_cnt++;
+                    busy_conn_cnt++;
                 }
             }
         }
 
         if (task_cnt > 0 || m_old_handle_cnt != m_cur_handle_cnt) {
-            LOG_DEBUG("conn cnt: %d, avg handle cnt: %d, waiting cnt: %d",
-                      conn_cnt, m_cur_handle_cnt - m_old_handle_cnt, task_cnt);
+            LOG_DEBUG("busy conn cnt: %d, avg handle cnt: %d, waiting cnt: %d",
+                      busy_conn_cnt, m_cur_handle_cnt - m_old_handle_cnt, task_cnt);
             m_old_handle_cnt = m_cur_handle_cnt;
         }
 
-        /* 根据速率去调整。 */
-        /* recover connections. no waiting task, not in working, and timeout. */
+        now = mstime();
+
+        /* recover free connections. */
         for (auto& it : m_coroutines) {
-            co_array_data_t* ad = it.second;
-            auto itr = ad->coroutines.begin();
-            for (; itr != ad->coroutines.end(); itr++) {
-                co_data_t* v = *itr;
-                if (v->c != nullptr && v->tasks.empty() &&
-                    !v->is_working && mstime() > v->active_time + CONN_TIME_OUT) {
-                    LOG_INFO("recover db coroutines, ad cnt: %lu, node: %s, co: %p",
-                             ad->coroutines.size(), v->db->node.c_str(), v->co);
+            co_mgr_data_t* md = it.second;
+            for (auto& v : md->free_conns) {
+                if (v->c != nullptr && now > (v->active_time + CONN_TIME_OUT)) {
+                    LOG_INFO("recover db conn, node: %s, coroutines cnt: %lu, co: %p, conn: %p",
+                             v->db->node.c_str(), md->conn_cnt, v->conn_co, v->c);
                     v->c->close();
                     SAFE_DELETE(v->c);
                 }
             }
         }
+    }
+}
+
+void MysqlMgr::add_to_free_list(co_data_t* cd) {
+    co_mgr_data_t* md = cd->md;
+
+    auto it = md->busy_conns.begin();
+    for (; it != md->busy_conns.end(); it++) {
+        if (*it == cd) {
+            md->busy_conns.erase(it);
+            break;
+        }
+    }
+
+    md->free_conns.push_front(cd);
+}
+
+void MysqlMgr::clear_co_tasks(co_data_t* cd, int ret) {
+    task_t* task;
+
+    while (!cd->tasks.empty()) {
+        task = cd->tasks.front();
+        cd->tasks.pop();
+        task->ret = ret;
+        co_resume(task->user_co);
     }
 }
 
@@ -220,8 +309,6 @@ bool MysqlMgr::init(CJsonObject* config) {
 
     db_info_t* db;
     std::vector<std::string> vec;
-
-    m_slowlog_log_slower_than = str_to_int((*config)("slowlog_log_slower_than"));
 
     (*config)["nodes"].GetKeys(vec);
     if (vec.size() == 0) {
@@ -264,6 +351,7 @@ bool MysqlMgr::init(CJsonObject* config) {
         m_dbs.insert({v, db});
     }
 
+    m_slowlog_log_slower_than = str_to_int((*config)("slowlog_log_slower_than"));
     return true;
 }
 
@@ -274,28 +362,33 @@ void MysqlMgr::destory() {
     m_dbs.clear();
 
     for (auto& it : m_coroutines) {
-        co_array_data_t* d = it.second;
-        for (auto& v : d->coroutines) {
+        co_mgr_data_t* md = it.second;
+        co_release(md->dist_co);
+        co_cond_free(md->dist_cond);
+        while (!md->tasks.empty()) {
+            SAFE_DELETE(md->tasks.front());
+            md->tasks.pop();
+        }
+
+        for (auto& v : md->busy_conns) {
             SAFE_DELETE(v->c);
-            co_release(v->co);
-            co_cond_free(v->cond);
+            co_release(v->conn_co);
+            co_cond_free(v->conn_cond);
             while (!v->tasks.empty()) {
                 SAFE_DELETE(v->tasks.front());
                 v->tasks.pop();
             }
         }
+
+        for (auto& v : md->free_conns) {
+            SAFE_DELETE(v->c);
+            co_release(v->conn_co);
+            co_cond_free(v->conn_cond);
+        }
+
+        SAFE_DELETE(md);
     }
     m_coroutines.clear();
-}
-
-void MysqlMgr::clear_co_tasks(co_data_t* cd) {
-    task_t* task;
-
-    while (!cd->tasks.empty()) {
-        task = cd->tasks.front();
-        cd->tasks.pop();
-        co_resume(task->co);
-    }
 }
 
 }  // namespace kim

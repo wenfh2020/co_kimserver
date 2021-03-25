@@ -69,7 +69,8 @@ void* co_handler_mysql(void* arg) {
         g_cur_test_cnt++;
 
         if (ret != 0) {
-            LOG_ERROR("sql read failed! node: %s, sql: %s", "test", sql);
+            LOG_ERROR("sql read failed! ret: %d,node: %s, sql: %s",
+                      ret, "test", sql);
             break;
         }
     }
