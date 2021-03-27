@@ -35,6 +35,8 @@ gen_proto() {
 }
 
 run() {
+    cd $work_path/src/modules
+    find . -name '*.so' -type f -exec cp -f {} $work_path/bin/modules \;
     cd $work_path/bin
     ./$server config.json
     echo '<------------------'

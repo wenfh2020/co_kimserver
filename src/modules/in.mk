@@ -40,7 +40,6 @@ all: $(SOS)
 
 module%.so: module%.o $(CORE_OBJS)
 	$(SERVER_LD) -fPIC -rdynamic -shared -o $@ $^ $(LDFLAGS)
-	cp $(SOS) ../../../bin/modules
 
 %.o:%.c
 	$(SERVER_CC) -c -o $@ $<
