@@ -134,7 +134,11 @@ void Worker::signal_handler(int sig) {
 
 void Worker::signal_handler_event(int sig) {
     std::string name = worker_name(m_worker_info.index);
-    LOG_CRIT("%s terminated by signal %d!", name.c_str(), sig);
+    if (sig == SIGUSR1 || sig == SIGINT) {
+        LOG_INFO("%s terminated by signal %d!", name.c_str(), sig);
+    } else {
+        LOG_CRIT("%s terminated by signal %d!", name.c_str(), sig);
+    }
     _exit(EXIT_CHILD);
 }
 

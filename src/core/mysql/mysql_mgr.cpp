@@ -51,8 +51,8 @@ int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is
     task->sql = sql;
     task->rows = rows;
     task->is_read = is_read;
+    task->user_co = co_self();
     task->active_time = mstime();
-    task->user_co = GetCurrThreadCo();
 
     md->tasks.push(task);
 

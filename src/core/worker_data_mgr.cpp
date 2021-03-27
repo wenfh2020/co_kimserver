@@ -49,9 +49,17 @@ int WorkerDataMgr::get_worker_data_fd(int worker_index) {
     return (it != m_index_workers.end()) ? (it->second->fdata.fd) : -1;
 }
 
-worker_info_t* WorkerDataMgr::get_worker_info(int worker_index) {
+worker_info_t* WorkerDataMgr::get_worker_info_by_index(int worker_index) {
     auto it = m_index_workers.find(worker_index);
     return (it != m_index_workers.end()) ? (it->second) : nullptr;
+}
+
+worker_info_t* WorkerDataMgr::get_worker_info_by_pid(int pid) {
+    auto it = m_workers.find(pid);
+    if (it != m_workers.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 bool WorkerDataMgr::del_worker_info(int pid) {

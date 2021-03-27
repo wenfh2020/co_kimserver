@@ -53,11 +53,11 @@ class INet {
 
     /* tcp send. */
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
-    virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
+    virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
     virtual int send_ack(const Request* req, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
-    virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
+    virtual int send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
 
     /* send to other node. */
     virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) { return false; }
@@ -70,7 +70,7 @@ class INet {
 
     /* connection. */
     virtual bool update_conn_state(const fd_t& ft, int state) { return false; }
-    virtual bool add_client_conn(const std::string& node_id, const fd_t& f) { return false; }
+    virtual bool add_client_conn(const std::string& node_id, const fd_t& ft) { return false; }
 };
 
 }  // namespace kim

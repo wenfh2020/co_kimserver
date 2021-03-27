@@ -302,9 +302,9 @@ void Manager::signal_handler_event(int sig) {
 
         if (m_net != nullptr) {
             m_net->zk_client()->close_my_node();
-            usleep(100 * 1000);
         }
 
+        sleep(1);
         exit(sig);
     }
 }

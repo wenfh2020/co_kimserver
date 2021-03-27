@@ -23,7 +23,8 @@ class WorkerDataMgr : public Logger {
 
    public:
     bool del_worker_info(int pid);
-    worker_info_t* get_worker_info(int index);
+    worker_info_t* get_worker_info_by_pid(int pid);
+    worker_info_t* get_worker_info_by_index(int index);
     bool add_worker_info(int index, int pid, const fd_t& fctrl, const fd_t& fdata);
     const std::unordered_map<int, worker_info_t*>& get_infos() const { return m_workers; }
 

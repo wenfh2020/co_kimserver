@@ -69,9 +69,9 @@ class Network : public INet, public TimerCron {
     virtual ZkClient* zk_client() override { return m_zk_cli; }
 
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
-    virtual int send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) override;
+    virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) override;
     virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") override;
-    virtual int send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) override;
+    virtual int send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) override;
     virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) override;
 
     // virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) override;
@@ -83,7 +83,7 @@ class Network : public INet, public TimerCron {
 
     /* connection. */
     virtual bool update_conn_state(const fd_t& ft, int state) override;
-    virtual bool add_client_conn(const std::string& node_id, const fd_t& f) override;
+    virtual bool add_client_conn(const std::string& node_id, const fd_t& ft) override;
 
     /* use in fork. */
     void close_fds();
@@ -98,7 +98,7 @@ class Network : public INet, public TimerCron {
     inline bool is_valid_conn(uint64_t id);
     inline bool is_valid_conn(Connection* c);
 
-    Connection* get_conn(const fd_t& f);
+    Connection* get_conn(const fd_t& ft);
     Codec::STATUS conn_write_data(Connection* c);
     Connection* create_conn(int fd, Codec::TYPE codec, bool is_channel = false);
     Connection* get_node_conn(const std::string& host, int port, int worker_index);
@@ -173,7 +173,7 @@ class Network : public INet, public TimerCron {
     std::string m_node_type; /* current server node type. */
     int m_worker_index = 0;  /* current process index number. */
 
-    /* manager/workers communicate. */
+    /* manager/workers communicate, used by worker. */
     fd_t m_manager_fctrl; /* channel for send message. */
     fd_t m_manager_fdata; /* channel for transfer fd. */
 

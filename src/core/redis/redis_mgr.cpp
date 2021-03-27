@@ -53,7 +53,7 @@ int RedisMgr::send_task(const std::string& node, const std::string& cmd, redisRe
 
     task = new task_t;
     task->cmd = cmd;
-    task->co = GetCurrThreadCo();
+    task->co = co_self();
     cd->tasks.push(task);
 
     co_cond_signal(cd->cond);

@@ -164,7 +164,7 @@ int SysCmd::on_req_update_payload(const Request* req) {
         return ERR_INVALID_PROTOBUF_PACKET;
     }
 
-    info = m_net->worker_data_mgr()->get_worker_info(pl.worker_index());
+    info = m_net->worker_data_mgr()->get_worker_info_by_index(pl.worker_index());
     if (info == nullptr) {
         m_net->send_ack(req, ERR_INVALID_WORKER_INDEX, "can not find worker index!");
         LOG_ERROR("can not find worker index: %d", pl.worker_index());

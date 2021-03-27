@@ -462,24 +462,22 @@ void* Network::handle_accept_gate_conn(void* d) {
 
         LOG_INFO("accepted client: %s:%d, fd: %d", ip, port, fd);
 
+        /* transfer fd from manager to worker. */
         channel_fd = m_worker_data_mgr->get_next_worker_data_fd();
         if (channel_fd <= 0) {
             LOG_ERROR("find next worker channel failed!");
-            close_fd(fd);
-            continue;
+            break;
         }
 
-        LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
-
-        /* manager transfers client fd to worker. */
         ch = {fd, family, static_cast<int>(m_gate_codec), 0};
 
         for (;;) {
             err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
             if (err == ERR_OK) {
+                LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
                 break;
             } else if (err == EAGAIN) {
-                LOG_WARN("wait to write again, fd: %d, errno: %d", fd, err);
+                LOG_DEBUG("wait to write again, fd: %d, errno: %d", fd, err);
                 co_sleep(1000, channel_fd, POLLOUT);
                 continue;
             } else {
@@ -903,8 +901,8 @@ Connection* Network::get_conn(const fd_t& ft) {
     return c;
 }
 
-int Network::send_to(const fd_t& f, const MsgHead& head, const MsgBody& body) {
-    return send_to(get_conn(f), head, body);
+int Network::send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) {
+    return send_to(get_conn(ft), head, body);
 }
 
 int Network::send_ack(const Request* req, int err, const std::string& errstr, const std::string& data) {
@@ -937,14 +935,14 @@ int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::stri
     return send_to(c, head, body);
 }
 
-int Network::send_req(const fd_t& f, uint32_t cmd, uint32_t seq, const std::string& data) {
+int Network::send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) {
     MsgHead head;
     MsgBody body;
     body.set_data(data);
     head.set_seq(seq);
     head.set_cmd(cmd);
     head.set_len(body.ByteSizeLong());
-    return send_to(f, head, body);
+    return send_to(ft, head, body);
 }
 
 int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
@@ -1132,8 +1130,8 @@ bool Network::update_conn_state(const fd_t& ft, int state) {
     return true;
 }
 
-bool Network::add_client_conn(const std::string& node_id, const fd_t& f) {
-    Connection* c = get_conn(f);
+bool Network::add_client_conn(const std::string& node_id, const fd_t& ft) {
+    Connection* c = get_conn(ft);
     if (c == nullptr) {
         return false;
     }

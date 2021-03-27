@@ -117,7 +117,7 @@ Codec::STATUS Connection::conn_write() {
         if (m_errno == EAGAIN) {
             return Codec::STATUS::PAUSE;
         } else {
-            LOG_WARN(
+            LOG_DEBUG(
                 "send data failed! error: %d, errstr: %s, "
                 " fd: %d, seq: %llu, readable len: %d",
                 m_errno, strerror(m_errno), fd(), id(), sbuf->readable_len());
