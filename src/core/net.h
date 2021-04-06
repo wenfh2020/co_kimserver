@@ -18,6 +18,7 @@ class ZkClient;
 class Coroutines;
 class Request;
 class Connection;
+class SessionMgr;
 
 class INet {
    public:
@@ -33,6 +34,7 @@ class INet {
     virtual SysCmd* sys_cmd() { return nullptr; }
     virtual ZkClient* zk_client() { return nullptr; }
     virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
+    virtual SessionMgr* session_mgr() { return nullptr; }
 
     /* for cluster. */
     virtual Nodes* nodes() { return nullptr; }

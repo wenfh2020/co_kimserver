@@ -45,11 +45,9 @@ typedef struct fd_s {
 } fd_t;
 
 // time out info.
-#define CMD_MAX_TIMEOUT_CNT 3     /* default max cmd time out count. */
-#define SESSION_MAX_TIMEOUT_CNT 3 /* default max session time out count. */
-#define IO_TIMEOUT_VAL 15000      /* connection time out value. */
-#define CMD_TIMEOUT_VAL 3000      /* cmd time out value. */
-#define REPEAT_TIMEOUT_VAL 1000   /* repeat time out value. */
+#define IO_TIMEOUT_VAL 15000           /* connection time out value. */
+#define REPEAT_TIMEOUT_VAL 1000        /* repeat time out value. */
+#define SESSION_TIMEOUT_VAL (5 * 1000) /* default session timeout. */
 
 #define MAX_PATH 256
 #define TCP_BACK_LOG 511
@@ -75,6 +73,8 @@ typedef struct fd_s {
 #define LOG_INFO(args...) LOG_FORMAT((kim::Log::LL_INFO), ##args)
 #define LOG_DEBUG(args...) LOG_FORMAT((kim::Log::LL_DEBUG), ##args)
 #define LOG_TRACE(args...) LOG_FORMAT((kim::Log::LL_TRACE), ##args)
+
+#define SESS_MGR_PTR net()->session_mgr()
 
 #define MUDULE_CREATE(module_name)       \
     extern "C" {                         \

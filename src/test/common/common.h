@@ -5,6 +5,7 @@
 #include "mysql/mysql_mgr.h"
 #include "redis/redis_mgr.h"
 #include "server.h"
+#include "session.h"
 
 using namespace kim;
 
@@ -12,17 +13,18 @@ CJsonObject g_config;
 Log* m_logger = nullptr;
 MysqlMgr* g_mysql_mgr = nullptr;
 RedisMgr* g_redis_mgr = nullptr;
+SessionMgr* g_session_mgr = nullptr;
 
 #define LOG_PATH "test.log"
 #define CONFIG_PATH "../../../bin/config.json"
 
-bool load_logger(const char* path) {
+bool load_logger(const char* path, int level = Log::LL_INFO) {
     m_logger = new Log;
     if (!m_logger->set_log_path(path)) {
         std::cerr << "set log path failed!" << std::endl;
         return false;
     }
-    m_logger->set_level(Log::LL_INFO);
+    m_logger->set_level(level);
     m_logger->set_worker_index(0);
     m_logger->set_process_type(true);
     return true;
@@ -49,6 +51,15 @@ bool load_redis_mgr(Log* logger, CJsonObject& config) {
     g_redis_mgr = new RedisMgr(logger);
     if (!g_redis_mgr->init(&config)) {
         LOG_ERROR("load redis mgr failed!");
+        return false;
+    }
+    return true;
+}
+
+bool load_session_mgr() {
+    g_session_mgr = new SessionMgr(m_logger, nullptr);
+    if (g_session_mgr == nullptr) {
+        LOG_ERROR("alloc session mgr failed!");
         return false;
     }
     return true;

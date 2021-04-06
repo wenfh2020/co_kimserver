@@ -5,6 +5,7 @@
 #include "connection.h"
 #include "error.h"
 #include "net/anet.h"
+#include "util/json/CJsonObject.hpp"
 #include "util/util.h"
 
 using namespace kim;
@@ -18,9 +19,11 @@ enum {
     KP_RSP_TEST_MYSQL = 1004,
     KP_REQ_TEST_REDIS = 1005,
     KP_RSP_TEST_REDIS = 1006,
+    KP_REQ_TEST_SESSION = 1007,
+    KP_RSP_TEST_SESSION = 1008,
 };
 
-int g_rest_request = KP_REQ_TEST_HELLO;
+int g_test_cmd = KP_REQ_TEST_HELLO;
 
 int g_packets = 0;
 int g_send_cnt = 0;
@@ -223,7 +226,7 @@ bool check_args(int args, char** argv) {
 
     g_server_host = argv[1];
     g_server_port = atoi(argv[2]);
-    g_rest_request = atoi(argv[3]);
+    g_test_cmd = atoi(argv[3]);
     g_test_users = atoi(argv[4]);
     g_test_user_packets = atoi(argv[5]);
     g_send_cnt = g_test_users * g_test_user_packets;
@@ -362,6 +365,7 @@ Codec::STATUS send_packets(Connection* c) {
         return Codec::STATUS::ERR;
     }
 
+    std::string data;
     Codec::STATUS ret = Codec::STATUS::PAUSE;
     statistics_user_data_t* stat = (statistics_user_data_t*)c->privdata();
 
@@ -379,7 +383,18 @@ Codec::STATUS send_packets(Connection* c) {
             stat->send_cnt++;
             LOG_DEBUG("packets info: fd: %d, packets: %d, send cnt: %d, callback cnt: %d\n",
                       c->fd(), stat->packets, stat->send_cnt, stat->callback_cnt);
-            ret = send_proto(c, g_rest_request, format_str("%d - hello", i));
+
+            if (g_test_cmd == KP_REQ_TEST_SESSION) {
+                CJsonObject packet;
+                packet.Add("user_id", (int)c->id());
+                packet.Add("user_name", format_str("hello - %d", c->id()));
+                data = packet.ToString();
+                // printf("data: %s\n", data.c_str());
+            } else {
+                data = format_str("%d - hello", i + 1);
+            }
+
+            ret = send_proto(c, g_test_cmd, data);
             if (ret != Codec::STATUS::OK) {
                 return ret;
             }

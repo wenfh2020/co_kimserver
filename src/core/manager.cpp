@@ -252,6 +252,9 @@ bool Manager::restart_worker(pid_t pid) {
 }
 
 void Manager::close_workers() {
+    if (m_net == nullptr) {
+        return;
+    }
     WorkerDataMgr* worker_mgr = m_net->worker_data_mgr();
     if (worker_mgr != nullptr) {
         const std::unordered_map<int, worker_info_t*>& infos = worker_mgr->get_infos();

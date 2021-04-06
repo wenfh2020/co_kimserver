@@ -18,27 +18,30 @@ LDFLAGS := $(LDFLAGS) -D_LINUX_OS_ \
         -lcolib -lmysqlclient -lpthread -ldl -lcryptopp \
         -lprotobuf -lhiredis -lzookeeper_mt
 
-# so objs.
-SO_PATH = .
-SO_PATH_SRC = $(foreach dir, $(SO_PATH), $(shell find $(dir) -maxdepth 5 -type d))
-SO_CPP_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.cpp))
-SO_CC_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.cc))
-SO_C_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.c))
-SO_OBJS = $(patsubst %.cpp,%.o,$(SO_CPP_SRCS)) $(patsubst %.c,%.o,$(SO_C_SRCS)) $(patsubst %.cc,%.o,$(SO_CC_SRCS))
-SOS = $(patsubst %.o,%.so,$(SO_OBJS))
-
-# core objs.
+# core's .o objs.
 CORE_PATH_SRC = $(foreach dir, $(CORE_PATH), $(shell find $(dir) -maxdepth 5 -type d))
 CORE_CPP_SRCS = $(foreach dir, $(CORE_PATH_SRC), $(wildcard $(dir)/*.cpp))
 CORE_CC_SRCS = $(foreach dir, $(CORE_PATH_SRC), $(wildcard $(dir)/*.cc))
 CORE_C_SRCS = $(foreach dir, $(CORE_PATH_SRC), $(wildcard $(dir)/*.c))
 CORE_OBJS = $(patsubst %.cpp,%.o,$(CORE_CPP_SRCS)) $(patsubst %.c,%.o,$(CORE_C_SRCS)) $(patsubst %.cc,%.o,$(CORE_CC_SRCS))
 
+# .o objs
+SO_PATH = .
+SO_PATH_SRC = $(foreach dir, $(SO_PATH), $(shell find $(dir) -maxdepth 5 -type d))
+SO_CPP_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.cpp))
+SO_CC_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.cc))
+SO_C_SRCS = $(foreach dir, $(SO_PATH_SRC), $(wildcard $(dir)/*.c))
+SO_OBJS = $(patsubst %.cpp,%.o,$(SO_CPP_SRCS)) $(patsubst %.c,%.o,$(SO_C_SRCS)) $(patsubst %.cc,%.o,$(SO_CC_SRCS))
+
+# .so
+MODULE_SO_CPP_SRCS = $(foreach dir, $(SO_PATH), $(wildcard $(dir)/module*.cpp))
+SOS = $(patsubst %.cpp,%.so,$(MODULE_SO_CPP_SRCS))
+
 all: $(SOS)
 .PHONY: clean
 .SECONDARY: $(SO_OBJS) $(CORE_OBJS)
 
-module%.so: module%.o $(CORE_OBJS)
+module%.so: module%.o $(SO_OBJS) $(CORE_OBJS)
 	$(SERVER_LD) -fPIC -rdynamic -shared -o $@ $^ $(LDFLAGS)
 
 %.o:%.c
@@ -47,7 +50,6 @@ module%.so: module%.o $(CORE_OBJS)
 	$(SERVER_CPP) -c -o $@ $<
 %.o:%.cpp
 	$(SERVER_CPP) -c -o $@ $< 
-
 clean:
 	rm -f $(SOS) $(SO_OBJS)
 

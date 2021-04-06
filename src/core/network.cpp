@@ -298,12 +298,23 @@ void Network::on_repeat_timer() {
         }
     }
 
+#if !defined(__APPLE__)
+    /* glibc maybe memory leak, so release the cache memory in timer. */
+    run_with_period(60 * 1000) {
+        malloc_trim(0);
+    }
+#endif
+
     if (m_mysql_mgr != nullptr) {
         m_mysql_mgr->on_timer();
     }
 
     if (m_coroutines != nullptr) {
         m_coroutines->on_timer();
+    }
+
+    if (m_session_mgr != nullptr) {
+        m_session_mgr->on_timer();
     }
 }
 
@@ -496,11 +507,12 @@ void* Network::co_handle_read_transfer_fd(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
     Network* net = (Network*)task->c->privdata();
-    return net->handle_read_transfer_fd(d);
+    net->on_handle_read_transfer_fd(d);
+    return 0;
 }
 
-void* Network::handle_read_transfer_fd(void* d) {
-    LOG_TRACE("handle_read_transfer_fd....");
+void Network::on_handle_read_transfer_fd(void* d) {
+    LOG_TRACE("on_handle_read_transfer_fd....");
 
     int err;
     int data_fd;
@@ -556,18 +568,17 @@ void* Network::handle_read_transfer_fd(void* d) {
         }
         co_resume(co_task->co);
     }
-
-    return 0;
 }
 
 void* Network::co_handle_requests(void* d) {
     co_enable_hook_sys();
     co_task_t* task = (co_task_t*)d;
     Network* net = (Network*)task->c->privdata();
-    return net->handle_requests(d);
+    net->on_handle_requests(d);
+    return 0;
 }
 
-void* Network::handle_requests(void* d) {
+void Network::on_handle_requests(void* d) {
     int fd;
     Connection* c;
     co_task_t* task;
@@ -601,7 +612,6 @@ void* Network::handle_requests(void* d) {
     close_conn(c);
     task->c = nullptr;
     m_coroutines->add_free_co_task(task);
-    return 0;
 }
 
 int Network::process_msg(Connection* c) {
@@ -751,6 +761,12 @@ bool Network::load_public(const CJsonObject& config) {
     m_nodes = new Nodes(m_logger);
     if (m_nodes == nullptr) {
         LOG_ERROR("alloc nodes failed!");
+        return false;
+    }
+
+    m_session_mgr = new SessionMgr(m_logger, this);
+    if (m_session_mgr == nullptr) {
+        LOG_ERROR("alloc session mgr failed!");
         return false;
     }
 
@@ -1009,6 +1025,7 @@ void Network::destory() {
     SAFE_DELETE(m_nodes_conn);
     SAFE_DELETE(m_worker_data_mgr);
     SAFE_DELETE(m_nodes);
+    SAFE_DELETE(m_session_mgr);
     close_fds();
     clear_routines();
 }
@@ -1039,8 +1056,6 @@ bool Network::close_conn(Connection* c) {
 }
 
 bool Network::close_conn(uint64_t id) {
-    LOG_DEBUG("close conn, id: %llu", id);
-
     auto it = m_conns.find(id);
     if (it == m_conns.end()) {
         return false;
@@ -1104,12 +1119,10 @@ bool Network::is_valid_conn(uint64_t id) {
 
 void Network::close_fd(int fd) {
     LOG_DEBUG("close fd: %d.", fd);
-
     if (close(fd) == -1) {
         LOG_WARN("close channel failed, fd: %d. errno: %d, errstr: %s",
                  fd, errno, strerror(errno));
     }
-    LOG_DEBUG("close fd: %d.", fd);
 }
 
 bool Network::set_gate_codec(const std::string& codec_type) {

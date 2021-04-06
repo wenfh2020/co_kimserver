@@ -1,22 +1,25 @@
 #include "module_test.h"
 
 #include "redis/redis_mgr.h"
+#include "user_session.h"
 
 MUDULE_CREATE(MoudleTest)
 
 namespace kim {
 
-int MoudleTest::test_hello(const Request* req) {
+void MoudleTest::print_cmd_info(const Request* req) {
     LOG_DEBUG("cmd: %d, seq: %u, len: %d, body data: <%s>",
               req->msg_head()->cmd(), req->msg_head()->seq(),
               req->msg_head()->len(), req->msg_body()->data().c_str());
+}
+
+int MoudleTest::test_hello(const Request* req) {
+    print_cmd_info(req);
     return net()->send_ack(req, ERR_OK, "ok", "good job!");
 }
 
 int MoudleTest::test_mysql(const Request* req) {
-    LOG_DEBUG("cmd: %d, seq: %u, len: %d, body data: <%s>",
-              req->msg_head()->cmd(), req->msg_head()->seq(),
-              req->msg_head()->len(), req->msg_body()->data().c_str());
+    print_cmd_info(req);
 
     int ret;
     vec_row_t* rows;
@@ -52,9 +55,7 @@ int MoudleTest::test_mysql(const Request* req) {
 }
 
 int MoudleTest::test_redis(const Request* req) {
-    LOG_DEBUG("cmd: %d, seq: %u, len: %d, body data: <%s>",
-              req->msg_head()->cmd(), req->msg_head()->seq(),
-              req->msg_head()->len(), req->msg_body()->data().c_str());
+    print_cmd_info(req);
 
     int ret;
     int id = 1;
@@ -89,6 +90,38 @@ int MoudleTest::test_redis(const Request* req) {
     LOG_DEBUG("read redis done! cmd: %s", cmd);
 
     return net()->send_ack(req, ERR_OK, "ok", "test redis done!");
+}
+
+int MoudleTest::test_session(const Request* req) {
+    print_cmd_info(req);
+
+    CJsonObject data;
+    if (!data.Parse(req->msg_body()->data())) {
+        LOG_ERROR("invalid json data!");
+        return net()->send_ack(req, ERR_FAILED, "fail", "invalid json data!");
+    }
+
+    LOG_DEBUG("user_id: %s, user_name: %s",
+              data("user_id").c_str(), data("user_name").c_str());
+
+    std::string sessid(data("user_id"));
+    auto s = SESS_MGR_PTR->get_alloc_session<UserSession>(sessid);
+    PROTECT_REF(s);
+    if (s == nullptr) {
+        LOG_ERROR("get alloc session failed! sessid: %s", sessid.c_str());
+        return net()->send_ack(req, ERR_FAILED, "fail", "get alloc session failed!");
+    }
+
+    s->set_user_id(str_to_int(sessid));
+    s->set_user_name(data("user_name"));
+
+    /* delete. */
+    if (!SESS_MGR_PTR->del_session(sessid)) {
+        LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());
+        return net()->send_ack(req, ERR_FAILED, "fail", "del session failed!");
+    }
+
+    return net()->send_ack(req, ERR_OK, "done", "test session!");
 }
 
 }  // namespace kim

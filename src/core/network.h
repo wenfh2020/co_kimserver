@@ -10,6 +10,7 @@
 #include "net/channel.h"
 #include "node_connection.h"
 #include "nodes.h"
+#include "session.h"
 #include "sys_cmd.h"
 #include "util/json/CJsonObject.hpp"
 #include "worker_data_mgr.h"
@@ -67,6 +68,7 @@ class Network : public INet, public TimerCron {
     virtual RedisMgr* redis_mgr() override { return m_redis_mgr; }
     virtual WorkerDataMgr* worker_data_mgr() override { return m_worker_data_mgr; }
     virtual ZkClient* zk_client() override { return m_zk_cli; }
+    virtual SessionMgr* session_mgr() override { return m_session_mgr; }
 
     virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) override;
     virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) override;
@@ -135,9 +137,9 @@ class Network : public INet, public TimerCron {
     static void* co_handle_accept_gate_conn(void*);
     void* handle_accept_gate_conn(void*);
     static void* co_handle_read_transfer_fd(void*);
-    void* handle_read_transfer_fd(void*);
+    void on_handle_read_transfer_fd(void*);
     static void* co_handle_requests(void*);
-    void* handle_requests(void*);
+    void on_handle_requests(void*);
 
    private:
     Log* m_logger;                                   /* logger. */
@@ -177,15 +179,16 @@ class Network : public INet, public TimerCron {
     fd_t m_manager_fctrl; /* channel for send message. */
     fd_t m_manager_fdata; /* channel for transfer fd. */
 
-    Nodes* m_nodes = nullptr;           /* server nodes. ketama nodes manager. */
-    NodeConn* m_nodes_conn = nullptr;   /* node connection pool. */
-    Coroutines* m_coroutines = nullptr; /* coroutines pool. */
-    ModuleMgr* m_module_mgr = nullptr;  /* modules so. */
-    MysqlMgr* m_mysql_mgr = nullptr;    /* mysql pool. */
-    RedisMgr* m_redis_mgr = nullptr;    /* redis pool. */
-    ZkClient* m_zk_cli = nullptr;       /* zookeeper client. */
-    Payload m_payload;                  /* pro's payload data. */
-    SysCmd* m_sys_cmd = nullptr;        /* for node communication.  */
+    Nodes* m_nodes = nullptr;            /* server nodes. ketama nodes manager. */
+    NodeConn* m_nodes_conn = nullptr;    /* node connection pool. */
+    Coroutines* m_coroutines = nullptr;  /* coroutines pool. */
+    ModuleMgr* m_module_mgr = nullptr;   /* modules so. */
+    MysqlMgr* m_mysql_mgr = nullptr;     /* mysql pool. */
+    RedisMgr* m_redis_mgr = nullptr;     /* redis pool. */
+    ZkClient* m_zk_cli = nullptr;        /* zookeeper client. */
+    Payload m_payload;                   /* pro's payload data. */
+    SysCmd* m_sys_cmd = nullptr;         /* for node communication.  */
+    SessionMgr* m_session_mgr = nullptr; /* session pool. */
 };
 
 }  // namespace kim
