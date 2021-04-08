@@ -45,6 +45,7 @@
     - hash.cpp             # ~
     - log.h                # 日志。
     - log.cpp              # ~
+    - reference.h          # 索引类，用于保护对象，避免使用过程中，被释放。
     - set_proc_title.h     # 设置进程名称接口。
     - set_proc_title.cpp   # ~
     - so.h                 # 动态库基础类。
@@ -88,6 +89,8 @@
 - sys_cmd.h                # 系统内部通信协议处理。
 - sys_cmd.cpp              # ~
 - timer.h                  # 时钟，通过协程实现。
+- timers.h                 # 多定时器，通过 map 实现。
+- timers.cpp               # ~
 - worker_data_mgr.h        # 子进程数据，在主进程中使用。
 - worker_data_mgr.cpp      # ~
 - worker.h                 # 子进程逻辑实现，负责详细的网络通信逻辑。
