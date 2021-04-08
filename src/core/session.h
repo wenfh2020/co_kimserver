@@ -5,7 +5,7 @@
 #include "libco/co_routine_inner.h"
 #include "net.h"
 #include "server.h"
-#include "timer.h"
+#include "timers.h"
 #include "util/reference.h"
 
 namespace kim {
@@ -15,26 +15,22 @@ namespace kim {
 
 class Session : public Logger, public Reference {
    public:
-    Session(Log* logger, INet* net, const std::string& sessid, uint64_t alive = SESSION_TIMEOUT_VAL);
-    virtual ~Session();
+    Session(Log* logger, INet* net, const std::string& sessid);
+    virtual ~Session() {}
 
-    const std::string& sessid() const { return m_sessid; }
     const char* sessid() { return m_sessid.c_str(); }
+    const std::string& sessid() const { return m_sessid; }
 
-    uint64_t keep_alive() { return m_keep_alive; }
-    void set_keep_alive(uint64_t tm) { m_keep_alive = tm; }
-
-    uint64_t active_time() const { return m_active_time; }
-    void set_active_time(uint64_t tm) { m_active_time = tm; }
+    void* privdata() { return m_privdata; }
+    void set_privdata(void* privdata) { m_privdata = privdata; }
 
    public:
     virtual void on_timeout() {}
 
    protected:
     INet* m_net = nullptr;
-    std::string m_sessid;       /* session id. */
-    uint64_t m_keep_alive = 0;  /* session alive time. */
-    uint64_t m_active_time = 0; /* session active time. */
+    std::string m_sessid;
+    void* m_privdata = nullptr;
 };
 
 // SessionMgr
@@ -43,53 +39,51 @@ class Session : public Logger, public Reference {
 class SessionMgr : public Logger, public TimerCron {
    public:
     typedef struct co_timer_s {
+        int tid; /* tiemr id. */
         Session* s;
-        stCoRoutine_t* co;
         void* privdata;
-        bool is_ending;
     } co_timer_t;
 
     SessionMgr(Log* logger, INet* net);
     virtual ~SessionMgr();
 
-    Session* add_session(Session* s);
+    bool init();
     bool del_session(const std::string& sessid);
-    Session* get_session(const std::string& sessid, bool re_active = false);
+    Session* get_session(const std::string& sessid);
+    bool add_session(Session* s, uint64_t after, uint64_t repeat = 0);
 
     template <typename T>
     T* get_alloc_session(const std::string& sessid,
-                         uint64_t alive = SESSION_TIMEOUT_VAL, bool re_active = false) {
-        auto s = dynamic_cast<T*>(get_session(sessid, re_active));
+                         uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
+        auto s = dynamic_cast<T*>(get_session(sessid));
         if (s == nullptr) {
-            s = new T(m_logger, m_net, sessid, alive);
-            if (!add_session(s)) {
+            s = new T(m_logger, m_net, sessid);
+            if (!add_session(s, after, repeat)) {
                 SAFE_DELETE(s);
                 return nullptr;
             }
         }
-        LOG_DEBUG("get session id: %s", s->sessid());
         return s;
     }
 
    private:
     void destory();
 
-    bool add_timer(Session* s);
-    bool del_timer(const std::string& sessid);
+    bool del_timer(int tid);
+    co_timer_t* add_timer(Session* s, uint64_t after, uint64_t repeat);
 
-    void on_handle_session_timer(void* arg);
-    static void* co_handle_session_timer(void* arg);
+    void on_handle_session_timer(int tid, bool is_repeat, void* privdata);
+    static void handle_session_timer(int tid, bool is_repeat, void* privdata);
 
    public:
     virtual void on_repeat_timer() override; /* call by parent, 10 times/s on Linux. */
 
    private:
     INet* m_net = nullptr;
-    std::unordered_map<std::string, Session*> m_sessions;
 
-    stCoRoutineAttr_t m_co_attr;
-    std::list<co_timer_t*> m_free_timers;
-    std::unordered_map<std::string, co_timer_t*> m_working_timers;
+    Timers* m_timers;
+    std::list<Session*> m_free_sessions;
+    std::unordered_map<std::string, co_timer_t*> m_sessions;
 };
 
 }  // namespace kim

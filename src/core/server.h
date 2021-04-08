@@ -74,7 +74,7 @@ typedef struct fd_s {
 #define LOG_DEBUG(args...) LOG_FORMAT((kim::Log::LL_DEBUG), ##args)
 #define LOG_TRACE(args...) LOG_FORMAT((kim::Log::LL_TRACE), ##args)
 
-#define SESS_MGR_PTR net()->session_mgr()
+#define SESS_MGR net()->session_mgr()
 
 #define MUDULE_CREATE(module_name)       \
     extern "C" {                         \

@@ -41,7 +41,7 @@ class SafeRef {
 };
 
 #define PROTECT_REF(x) \
-    SafeRef _ref(x);
+    SafeRef x##_ref(x);
 
 }  // namespace kim
 

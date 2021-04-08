@@ -2,9 +2,8 @@
 
 namespace kim {
 
-UserSession::UserSession(
-    Log* logger, INet* net, const std::string& sessid, uint64_t alive)
-    : Session(logger, net, sessid, alive) {
+UserSession::UserSession(Log* logger, INet* net, const std::string& sessid)
+    : Session(logger, net, sessid) {
 }
 
 }  // namespace kim

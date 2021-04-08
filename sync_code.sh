@@ -32,4 +32,5 @@ rsync -avz --exclude="*.o" \
     --exclude="test/test_tcp_pressure/test_tcp_pressure" \
     --exclude="test/test_timer/test_timer" \
     --exclude="test/test_session/test_session" \
+    --exclude="test/test_timers/test_timers" \
     $SRC $DST

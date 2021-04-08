@@ -122,6 +122,7 @@ class Network : public INet, public TimerCron {
     bool load_nodes_conn();
     bool load_mysql_mgr();
     bool load_redis_mgr();
+    bool load_session_mgr();
     bool ensure_files_limit();
 
     /* socket & connection. */

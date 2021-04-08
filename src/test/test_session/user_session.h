@@ -7,8 +7,7 @@ namespace kim {
 
 class UserSession : public Session {
    public:
-    UserSession(Log* logger, INet* net,
-                const std::string& sessid, uint64_t alive = SESSION_TIMEOUT_VAL);
+    UserSession(Log* logger, INet* net, const std::string& sessid);
     virtual ~UserSession() {}
 
     uint64_t user_id() { return m_user_id; }

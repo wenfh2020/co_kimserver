@@ -41,7 +41,7 @@ bool load_config(const std::string& path) {
 bool load_mysql_mgr(Log* logger, CJsonObject& config) {
     g_mysql_mgr = new MysqlMgr(logger);
     if (!g_mysql_mgr->init(&config)) {
-        LOG_ERROR("load db mgr failed!");
+        printf("load db mgr failed!\n");
         return false;
     }
     return true;
@@ -50,7 +50,7 @@ bool load_mysql_mgr(Log* logger, CJsonObject& config) {
 bool load_redis_mgr(Log* logger, CJsonObject& config) {
     g_redis_mgr = new RedisMgr(logger);
     if (!g_redis_mgr->init(&config)) {
-        LOG_ERROR("load redis mgr failed!");
+        printf("load redis mgr failed!\n");
         return false;
     }
     return true;
@@ -59,9 +59,16 @@ bool load_redis_mgr(Log* logger, CJsonObject& config) {
 bool load_session_mgr() {
     g_session_mgr = new SessionMgr(m_logger, nullptr);
     if (g_session_mgr == nullptr) {
-        LOG_ERROR("alloc session mgr failed!");
+        printf("alloc session mgr failed!\n");
         return false;
     }
+
+    if (!g_session_mgr->init()) {
+        SAFE_DELETE(g_session_mgr);
+        printf("init session mgr failed!\n");
+        return false;
+    }
+
     return true;
 }
 

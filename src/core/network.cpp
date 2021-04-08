@@ -764,8 +764,7 @@ bool Network::load_public(const CJsonObject& config) {
         return false;
     }
 
-    m_session_mgr = new SessionMgr(m_logger, this);
-    if (m_session_mgr == nullptr) {
+    if (!load_session_mgr()) {
         LOG_ERROR("alloc session mgr failed!");
         return false;
     }
@@ -857,6 +856,22 @@ bool Network::load_redis_mgr() {
     }
 
     LOG_INFO("load redis pool done!");
+    return true;
+}
+
+bool Network::load_session_mgr() {
+    m_session_mgr = new SessionMgr(m_logger, this);
+    if (m_session_mgr == nullptr) {
+        LOG_ERROR("alloc session mgr failed!");
+        return false;
+    }
+
+    if (!m_session_mgr->init()) {
+        SAFE_DELETE(m_session_mgr);
+        LOG_ERROR("init session mgr failed!\n");
+        return false;
+    }
+
     return true;
 }
 

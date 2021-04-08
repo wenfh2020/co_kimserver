@@ -95,17 +95,19 @@ int MoudleTest::test_redis(const Request* req) {
 int MoudleTest::test_session(const Request* req) {
     print_cmd_info(req);
 
-    CJsonObject data;
-    if (!data.Parse(req->msg_body()->data())) {
+    UserSession* s;
+    std::string sessid;
+    CJsonObject json_data;
+
+    if (!json_data.Parse(req->msg_body()->data())) {
         LOG_ERROR("invalid json data!");
         return net()->send_ack(req, ERR_FAILED, "fail", "invalid json data!");
     }
-
     LOG_DEBUG("user_id: %s, user_name: %s",
-              data("user_id").c_str(), data("user_name").c_str());
+              json_data("user_id").c_str(), json_data("user_name").c_str());
 
-    std::string sessid(data("user_id"));
-    auto s = SESS_MGR_PTR->get_alloc_session<UserSession>(sessid);
+    sessid = json_data("user_id");
+    s = SESS_MGR->get_alloc_session<UserSession>(sessid);
     PROTECT_REF(s);
     if (s == nullptr) {
         LOG_ERROR("get alloc session failed! sessid: %s", sessid.c_str());
@@ -113,10 +115,9 @@ int MoudleTest::test_session(const Request* req) {
     }
 
     s->set_user_id(str_to_int(sessid));
-    s->set_user_name(data("user_name"));
+    s->set_user_name(json_data("user_name"));
 
-    /* delete. */
-    if (!SESS_MGR_PTR->del_session(sessid)) {
+    if (!SESS_MGR->del_session(sessid)) {
         LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());
         return net()->send_ack(req, ERR_FAILED, "fail", "del session failed!");
     }

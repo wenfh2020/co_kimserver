@@ -9,25 +9,18 @@ typedef struct test_task_s {
 
 std::list<test_task_t*> g_free_tasks;
 
+void create_timer_co();
+void test_session_mgr(int cnt);
+bool init(int argc, char** argv);
+
 void* co_timer(void* arg);
 void* co_session(void* arg);
-void test_session_mgr(int cnt);
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        printf("./proc [count]\n");
+    if (!init(argc, argv)) {
         return -1;
     }
-
-    if (!load_logger("./test.log", Log::LL_INFO) ||
-        !load_session_mgr()) {
-        return -1;
-    }
-
-    stCoRoutine_t* co;
-    co_create(&co, NULL, co_timer, nullptr);
-    co_resume(co);
-
+    create_timer_co();
     test_session_mgr(atoi(argv[1]));
     co_eventloop(co_get_epoll_ct(), 0, 0);
     return 0;
@@ -38,8 +31,10 @@ void test_session_mgr(int cnt) {
 
     for (int i = 0; i < cnt; i++) {
         task = (test_task_t*)calloc(1, sizeof(test_task_t));
+        task->id = i;
         co_create(&task->co, nullptr, co_session, (void*)task);
         co_resume(task->co);
+        LOG_DEBUG("create coroutine, id:%d, co: %p", task->id, task->co);
     }
 }
 
@@ -59,11 +54,11 @@ void* co_session(void* arg) {
         s->set_user_id(str_to_int(sessid));
         s->set_user_name(format_str("hello world - %d", task->id));
 
-        if (!g_session_mgr->del_session(sessid)) {
-            LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());
-        }
+        // if (!g_session_mgr->del_session(sessid)) {
+        //     LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());
+        // }
 
-        co_sleep(10000);
+        co_sleep(10 * 1000);
         break;
     }
 
@@ -76,6 +71,7 @@ void* co_timer(void* arg) {
 
     for (;;) {
         co_sleep(100);
+
         if (g_session_mgr != nullptr) {
             g_session_mgr->on_timer();
         }
@@ -85,10 +81,31 @@ void* co_timer(void* arg) {
             SAFE_FREE(v);
         }
         g_free_tasks.clear();
+
 #if !defined(__APPLE__)
         malloc_trim(0);
 #endif
     }
 
     return 0;
+}
+
+bool init(int argc, char** argv) {
+    if (argc != 2) {
+        printf("./proc [cnt]\n");
+        return false;
+    }
+
+    if (!load_logger("./test.log", Log::LL_TRACE) ||
+        !load_session_mgr()) {
+        return false;
+    }
+
+    return true;
+}
+
+void create_timer_co() {
+    stCoRoutine_t* co;
+    co_create(&co, NULL, co_timer, nullptr);
+    co_resume(co);
 }
