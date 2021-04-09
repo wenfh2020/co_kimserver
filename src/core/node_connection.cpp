@@ -15,7 +15,7 @@
 
 namespace kim {
 
-NodeConn::NodeConn(INet* net, Log* log) : Logger(log), m_net(net) {
+NodeConn::NodeConn(INet* net, Log* logger) : Logger(logger), Net(net) {
 }
 
 NodeConn::~NodeConn() {
@@ -27,7 +27,7 @@ void NodeConn::destory() {
         co_array_data_t* ad = it.second;
         for (auto& v : ad->coroutines) {
             clear_co_tasks(v);
-            m_net->close_conn(v->c);
+            net()->close_conn(v->c);
             co_cond_free(v->cond);
             co_free(v->co);
         }
@@ -37,7 +37,7 @@ void NodeConn::destory() {
 
 int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj,
                             MsgHead* head_in, MsgBody* body_in, MsgHead* head_out, MsgBody* body_out) {
-    if (!m_net->is_worker()) {
+    if (!net()->is_worker()) {
         LOG_ERROR("relay_to_node only for worker!");
         return ERR_INVALID_PROCESS_TYPE;
     }
@@ -53,7 +53,7 @@ int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj
     }
 
     /* add task, then wait to handle. */
-    task = new task_t{GetCurrThreadCo(), node_type, obj, head_in, body_in, ERR_OK, head_out, body_out};
+    task = new task_t{co_self(), node_type, obj, head_in, body_in, ERR_OK, head_out, body_out};
     cd->tasks.push(task);
 
     co_cond_signal(cd->cond);
@@ -73,7 +73,7 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
     std::string node_id;
     co_array_data_t* ad;
 
-    node = m_net->nodes()->get_node_in_hash(node_type, obj);
+    node = net()->nodes()->get_node_in_hash(node_type, obj);
     if (node == nullptr) {
         LOG_ERROR("can not find node type: %s", node_type.c_str());
         return nullptr;
@@ -95,13 +95,13 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
     }
 
     cd = new co_data_t;
-    cd->node_type = node_type;
-    cd->host = node->host;
-    cd->port = node->port;
-    cd->worker_index = node->worker_index;
     cd->c = nullptr;
     cd->privdata = this;
+    cd->host = node->host;
+    cd->port = node->port;
+    cd->node_type = node_type;
     cd->cond = co_cond_alloc();
+    cd->worker_index = node->worker_index;
 
     ad->coroutines.push_back(cd);
 
@@ -139,10 +139,10 @@ void* NodeConn::handle_task(void* arg) {
         }
 
         if (cd->tasks.empty()) {
-            if (m_net->now() - cd->c->active_time() < HEART_BEAT_TIME) {
+            if (net()->now() - cd->c->active_time() < HEART_BEAT_TIME) {
                 continue;
             }
-            ret = m_net->sys_cmd()->send_heart_beat(cd->c);
+            ret = net()->sys_cmd()->send_heart_beat(cd->c);
             if (ret == ERR_OK) {
                 ret = recv_data(cd->c, &head, &body);
                 if (ret == ERR_OK) {
@@ -153,7 +153,7 @@ void* NodeConn::handle_task(void* arg) {
             task = cd->tasks.front();
             cd->tasks.pop();
 
-            ret = m_net->send_to(cd->c, *task->head_in, *task->body_in);
+            ret = net()->send_to(cd->c, *task->head_in, *task->body_in);
             if (ret == ERR_OK) {
                 ret = recv_data(cd->c, task->head_out, task->body_out);
             }
@@ -164,7 +164,7 @@ void* NodeConn::handle_task(void* arg) {
 
         if (ret != ERR_OK) {
             LOG_ERROR("conn handle failed! ret: %d, fd: %d", ret, cd->c->fd());
-            m_net->close_conn(cd->c);
+            net()->close_conn(cd->c);
             cd->c = nullptr;
             clear_co_tasks(cd);
             continue;
@@ -175,19 +175,19 @@ void* NodeConn::handle_task(void* arg) {
 }
 
 int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
-    Codec::STATUS codec_res;
+    Codec::STATUS stat;
 
     for (;;) {
-        codec_res = c->conn_read(*head, *body);
-        if (codec_res == Codec::STATUS::OK) {
+        stat = c->conn_read(*head, *body);
+        if (stat == Codec::STATUS::OK) {
             return ERR_OK;
-        } else if (codec_res == Codec::STATUS::PAUSE) {
-            if (m_net->now() - c->active_time() > MAX_RECV_DATA_TIME) {
+        } else if (stat == Codec::STATUS::PAUSE) {
+            if (net()->now() - c->active_time() > MAX_RECV_DATA_TIME) {
                 return ERR_READ_DATA_TIMEOUT;
             }
             co_sleep(500, c->fd(), POLLIN);
             continue;
-        } else if (codec_res == Codec::STATUS::CLOSED) {
+        } else if (stat == Codec::STATUS::CLOSED) {
             return ERR_CONN_CLOSED;
         } else {
             return ERR_READ_DATA_FAILED;
@@ -222,9 +222,9 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
     * https://wenfh2020.com/2020/10/23/kimserver-node-contact/ 
     * */
     if (c->is_try_connect()) {
-        if (m_net->sys_cmd()->send_connect_req_to_worker(c) != ERR_OK) {
+        if (net()->sys_cmd()->send_connect_req_to_worker(c) != ERR_OK) {
             LOG_ERROR("send CMD_REQ_CONNECT_TO_WORKER failed! fd: %d", c->fd());
-            m_net->close_conn(c);
+            net()->close_conn(c);
             return nullptr;
         }
 
@@ -243,7 +243,7 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
                 break;
             }
 
-            if (m_net->now() - c->active_time() > 2000) {
+            if (net()->now() - c->active_time() > 2000) {
                 LOG_ERROR("node connect timeout! node: %s, host: %s, port: %d, index: %d",
                           node_type.c_str(), host.c_str(), port, worker_index);
                 break;
@@ -255,7 +255,7 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
         if (!c->is_connected()) {
             LOG_ERROR("node connect failed! node: %s, host: %s, port: %d, index: %d",
                       node_type.c_str(), host.c_str(), port, worker_index);
-            m_net->close_conn(c);
+            net()->close_conn(c);
             c = nullptr;
         }
     }
@@ -309,10 +309,10 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
     memcpy(&saddr, p->ai_addr, p->ai_addrlen);
     freeaddrinfo(servinfo);
 
-    c = m_net->create_conn(fd);
+    c = net()->create_conn(fd);
     if (c == nullptr) {
         LOG_ERROR("create conn failed! fd: %d", fd);
-        m_net->close_fd(fd);
+        net()->close_fd(fd);
         return nullptr;
     }
 
@@ -333,7 +333,7 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
 
     c->init(Codec::TYPE::PROTOBUF);
     c->set_privdata(this);
-    c->set_active_time(m_net->now());
+    c->set_active_time(net()->now());
     c->set_system(true);
     c->set_state(Connection::STATE::TRY_CONNECT);
 
@@ -363,7 +363,7 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
     return c;
 
 error:
-    m_net->close_conn(c);
+    net()->close_conn(c);
     return nullptr;
 }
 
@@ -371,23 +371,23 @@ error:
 int NodeConn::handle_sys_message(Connection* c) {
     int fd, ret;
     Request* req;
-    Codec::STATUS codec_res;
+    Codec::STATUS stat;
 
     fd = c->fd();
     ret = ERR_OK;
     req = new Request(c->ft());
 
     for (;;) {
-        codec_res = c->conn_read(*req->msg_head(), *req->msg_body());
-        if (codec_res != Codec::STATUS::OK) {
-            if (codec_res == Codec::STATUS::ERR || codec_res == Codec::STATUS::CLOSED) {
+        stat = c->conn_read(*req->msg_head(), *req->msg_body());
+        if (stat != Codec::STATUS::OK) {
+            if (stat == Codec::STATUS::ERR || stat == Codec::STATUS::CLOSED) {
                 ret = ERR_READ_DATA_FAILED;
-                LOG_ERROR("conn read failed. codec res: %d, fd: %d", codec_res, fd);
+                LOG_ERROR("conn read failed. codec res: %d, fd: %d", stat, fd);
             }
             break;
         }
 
-        ret = m_net->sys_cmd()->handle_msg(req);
+        ret = net()->sys_cmd()->handle_msg(req);
         if (ret != ERR_OK) {
             LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
             break;

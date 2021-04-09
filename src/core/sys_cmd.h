@@ -12,7 +12,7 @@
 
 namespace kim {
 
-class SysCmd : Logger, public TimerCron {
+class SysCmd : public Logger, public Net, public TimerCron {
    public:
     SysCmd(Log* logger, INet* net);
     virtual ~SysCmd() {}
@@ -65,9 +65,6 @@ class SysCmd : Logger, public TimerCron {
 
    private:
     int check_rsp(const Request* req);
-
-   protected:
-    INet* m_net = nullptr;
 };
 
 }  // namespace kim

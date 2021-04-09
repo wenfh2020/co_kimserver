@@ -75,6 +75,18 @@ class INet {
     virtual bool add_client_conn(const std::string& node_id, const fd_t& ft) { return false; }
 };
 
+class Net {
+   public:
+    Net(INet* net) : m_net(net) {}
+    virtual ~Net() {}
+
+    INet* net() { return m_net; }
+    void set_net(INet* net) { m_net = net; }
+
+   protected:
+    INet* m_net = nullptr;
+};
+
 }  // namespace kim
 
 #endif  //__KIM_NET_H__

@@ -13,7 +13,7 @@
 
 namespace kim {
 
-class ZkClient : public Bio, public TimerCron {
+class ZkClient : public Bio, public Net, public TimerCron {
    public:
     ZkClient(Log* logger, INet* net);
     virtual ~ZkClient();
@@ -64,7 +64,6 @@ class ZkClient : public Bio, public TimerCron {
     utility::zoo_rc bio_register_node(zk_task_t* task);
 
    private:
-    INet* m_net = nullptr;
     CJsonObject m_config;
 
     /* zk. */

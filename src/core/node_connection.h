@@ -9,7 +9,7 @@
 
 namespace kim {
 
-class NodeConn : Logger {
+class NodeConn : public Logger, public Net {
     /* cmd task. */
     typedef struct task_s {
         stCoRoutine_t* co;     /* user's coroutine. */
@@ -42,7 +42,7 @@ class NodeConn : Logger {
     } co_array_data_t;
 
    public:
-    NodeConn(INet* net, Log* log);
+    NodeConn(INet* net, Log* logger);
     virtual ~NodeConn();
     void destory();
 
@@ -74,7 +74,6 @@ class NodeConn : Logger {
     Connection* node_connect(const std::string& node_type, const std::string& host, int port, int worker_index);
 
    private:
-    INet* m_net = nullptr;
     char m_errstr[ANET_ERR_LEN]; /* error string. */
     std::unordered_map<std::string, co_array_data_t*> m_coroutines;
 };

@@ -268,7 +268,7 @@ Connection* get_connect(const char* host, int port) {
         return nullptr;
     }
 
-    c = new Connection(m_logger, fd, new_seq());
+    c = new Connection(m_logger, nullptr, fd, new_seq());
     if (c == nullptr) {
         close(fd);
         LOG_ERROR("alloc connection failed! fd: %d", fd);

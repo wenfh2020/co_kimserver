@@ -727,7 +727,7 @@ Connection* Network::create_conn(int fd) {
     Connection* c;
 
     id = new_seq();
-    c = new Connection(m_logger, fd, id);
+    c = new Connection(m_logger, this, fd, id);
     if (c == nullptr) {
         LOG_ERROR("new connection failed! fd: %d", fd);
         return nullptr;
@@ -735,7 +735,6 @@ Connection* Network::create_conn(int fd) {
 
     m_conns[id] = c;
     m_fd_conns[fd] = id;
-    c->set_net(this);
     c->set_keep_alive(m_keep_alive);
     LOG_DEBUG("create connection fd: %d, id: %llu", fd, id);
     return c;

@@ -7,7 +7,7 @@
 namespace kim {
 
 ZkClient::ZkClient(Log* logger, INet* net)
-    : Bio(logger), m_net(net), m_zk(nullptr) {
+    : Bio(logger), Net(net), m_zk(nullptr) {
 }
 
 ZkClient::~ZkClient() {
@@ -187,7 +187,7 @@ bool ZkClient::node_register() {
         return false;
     }
     CJsonObject config(m_config);
-    config["old_path"] = m_net->nodes()->get_my_zk_node_path();
+    config["old_path"] = net()->nodes()->get_my_zk_node_path();
     return add_cmd_task("", zk_task_t::CMD::REGISTER, m_config.ToString());
 }
 
@@ -490,8 +490,8 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
     m_is_registered = true;
 
     /* set new. */
-    m_net->nodes()->clear();
-    m_net->nodes()->set_my_zk_node_path(res("my_zk_path"));
+    net()->nodes()->clear();
+    net()->nodes()->set_my_zk_node_path(res("my_zk_path"));
     LOG_TRACE("ack data: %s", res.ToFormattedString().c_str());
 
     zk_node zn;
@@ -506,7 +506,7 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
             continue;
         }
 
-        if (!m_net->nodes()->add_zk_node(zn)) {
+        if (!net()->nodes()->add_zk_node(zn)) {
             LOG_ERROR("add zk node failed! path: %s", json_nodes[i]("path").c_str());
             continue;
         }
@@ -515,15 +515,15 @@ void ZkClient::on_zk_register(const zk_task_t* task) {
         LOG_INFO("add zk node done! path: %s", json_nodes[i]("path").c_str());
     }
 
-    m_net->sys_cmd()->send_reg_zk_node_to_worker(rn);
-    m_net->nodes()->print_debug_nodes_info();
+    net()->sys_cmd()->send_reg_zk_node_to_worker(rn);
+    net()->nodes()->print_debug_nodes_info();
     LOG_INFO("on zk register done! path: %s", task->path.c_str());
 }
 
 void ZkClient::on_zk_node_deleted(const kim::zk_task_t* task) {
     LOG_INFO("zk node: %s deleted!", task->path.c_str());
-    if (m_net->nodes()->del_zk_node(task->path)) {
-        m_net->sys_cmd()->send_del_zk_node_to_worker(task->path);
+    if (net()->nodes()->del_zk_node(task->path)) {
+        net()->sys_cmd()->send_del_zk_node_to_worker(task->path);
     }
 }
 
@@ -543,9 +543,9 @@ void ZkClient::on_zk_get_data(const kim::zk_task_t* task) {
         return;
     }
 
-    if (m_net->nodes()->add_zk_node(node)) {
-        m_net->nodes()->print_debug_nodes_info();
-        m_net->sys_cmd()->send_add_zk_node_to_worker(node);
+    if (net()->nodes()->add_zk_node(node)) {
+        net()->nodes()->print_debug_nodes_info();
+        net()->sys_cmd()->send_add_zk_node_to_worker(node);
     }
 }
 
@@ -574,9 +574,9 @@ void ZkClient::on_zk_data_change(const kim::zk_task_t* task) {
         return;
     }
 
-    if (m_net->nodes()->add_zk_node(node)) {
-        m_net->nodes()->print_debug_nodes_info();
-        m_net->sys_cmd()->send_add_zk_node_to_worker(node);
+    if (net()->nodes()->add_zk_node(node)) {
+        net()->nodes()->print_debug_nodes_info();
+        net()->sys_cmd()->send_add_zk_node_to_worker(node);
     }
 }
 
@@ -602,7 +602,7 @@ void ZkClient::on_zk_child_change(const kim::zk_task_t* task) {
     }
 
     type = task->path.substr(task->path.find_last_of("/") + 1);
-    m_net->nodes()->get_zk_diff_nodes(type, children, new_paths, del_paths);
+    net()->nodes()->get_zk_diff_nodes(type, children, new_paths, del_paths);
 
     /* add new nodes. */
     if (new_paths.size() > 0) {
@@ -614,12 +614,12 @@ void ZkClient::on_zk_child_change(const kim::zk_task_t* task) {
 
     /* delete paths. */
     for (size_t i = 0; i < del_paths.size(); i++) {
-        if (m_net->nodes()->del_zk_node(del_paths[i])) {
-            m_net->sys_cmd()->send_del_zk_node_to_worker(del_paths[i]);
+        if (net()->nodes()->del_zk_node(del_paths[i])) {
+            net()->sys_cmd()->send_del_zk_node_to_worker(del_paths[i]);
         }
     }
 
-    m_net->nodes()->print_debug_nodes_info();
+    net()->nodes()->print_debug_nodes_info();
 }
 
 bool ZkClient::set_payload_data(const std::string& data) {
@@ -633,7 +633,7 @@ bool ZkClient::set_payload_data(const std::string& data) {
 
 void ZkClient::close_my_node() {
     if (m_zk != nullptr) {
-        std::string node = m_net->nodes()->get_my_zk_node_path();
+        std::string node = net()->nodes()->get_my_zk_node_path();
         if (!node.empty()) {
             add_cmd_task(node, zk_task_t::CMD::DELETE);
         }

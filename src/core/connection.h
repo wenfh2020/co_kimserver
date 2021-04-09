@@ -9,7 +9,7 @@
 
 namespace kim {
 
-class Connection : Logger {
+class Connection : public Logger, public Net {
    public:
     enum class STATE {
         UNKOWN = 0,
@@ -20,7 +20,7 @@ class Connection : Logger {
         ERROR
     };
 
-    Connection(Log* logger, int fd, uint64_t id);
+    Connection(Log* logger, INet* net, int fd, uint64_t id);
     virtual ~Connection();
 
     bool init(Codec::TYPE codec);
@@ -33,9 +33,7 @@ class Connection : Logger {
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
-
-    void set_net(INet* net) { m_net = net; }
-    long long now() { return (m_net != nullptr) ? m_net->now() : mstime(); }
+    int64_t now() { return (m_net != nullptr) ? m_net->now() : mstime(); }
 
     void set_state(STATE state) { m_state = state; }
     STATE state() const { return m_state; }
@@ -52,11 +50,11 @@ class Connection : Logger {
     struct sockaddr* sockaddr();
     size_t saddr_len() { return m_saddr_len; }
 
-    void set_node_id(const std::string& node_id) { m_node_id = node_id; }
     const std::string& get_node_id() const { return m_node_id; }
+    void set_node_id(const std::string& node_id) { m_node_id = node_id; }
 
-    void set_system(bool is_sys) { m_is_system = is_sys; }
     bool is_system() { return m_is_system; }
+    void set_system(bool is_sys) { m_is_system = is_sys; }
 
     Codec::STATUS conn_read(HttpMsg& msg);
     Codec::STATUS conn_write(const HttpMsg& msg);
@@ -112,8 +110,6 @@ class Connection : Logger {
 
     uint64_t m_active_time = 0;  // connection last active (read/write) time.
     uint64_t m_keep_alive = 0;
-
-    INet* m_net = nullptr;
 };
 
 }  // namespace kim
