@@ -7,13 +7,13 @@ namespace kim {
 // Session
 ////////////////////////////////////////////////
 Session::Session(Log* logger, INet* net, const std::string& sessid)
-    : Logger(logger), m_net(net), m_sessid(sessid) {
+    : Logger(logger), Net(net), m_sessid(sessid) {
 }
 
 // SessionMgr
 ////////////////////////////////////////////////
 
-SessionMgr::SessionMgr(Log* logger, INet* net) : Logger(logger), m_net(net) {
+SessionMgr::SessionMgr(Log* logger, INet* net) : Logger(logger), Net(net) {
 }
 
 SessionMgr::~SessionMgr() {
@@ -80,7 +80,7 @@ bool SessionMgr::del_session(const std::string& sessid) {
     ct = it->second;
     del_timer(ct->tid);
     if (ct->s->is_running()) {
-        m_free_sessions.push_back(ct->s);
+        m_free_sessions.push(ct->s);
     }
     SAFE_FREE(ct);
     m_sessions.erase(it);
@@ -132,13 +132,13 @@ void SessionMgr::on_repeat_timer() {
     run_with_period(1000) {
         while (!m_free_sessions.empty() && cnt < size && cnt < FREE_CO_CNT) {
             s = m_free_sessions.front();
-            m_free_sessions.pop_front();
+            m_free_sessions.pop();
 
             if (!s->is_running()) {
                 LOG_DEBUG("free timer, sessid: %s", s->sessid());
                 SAFE_DELETE(s);
             } else {
-                m_free_sessions.push_back(s);
+                m_free_sessions.push(s);
                 LOG_DEBUG("delay release session. sessid: %s", s->sessid());
             }
 
@@ -153,8 +153,9 @@ void SessionMgr::on_repeat_timer() {
 }
 
 void SessionMgr::destory() {
-    for (auto& v : m_free_sessions) {
-        SAFE_DELETE(v);
+    while (!m_free_sessions.empty()) {
+        SAFE_DELETE(m_free_sessions.front());
+        m_free_sessions.pop();
     }
 
     for (auto& it : m_sessions) {
@@ -163,7 +164,6 @@ void SessionMgr::destory() {
     }
 
     m_sessions.clear();
-    m_free_sessions.clear();
     SAFE_DELETE(m_timers);
 }
 

@@ -13,7 +13,7 @@ namespace kim {
 // Session
 ////////////////////////////////////////////////
 
-class Session : public Logger, public Reference {
+class Session : public Logger, public Net, public Reference {
    public:
     Session(Log* logger, INet* net, const std::string& sessid);
     virtual ~Session() {}
@@ -28,7 +28,6 @@ class Session : public Logger, public Reference {
     virtual void on_timeout() {}
 
    protected:
-    INet* m_net = nullptr;
     std::string m_sessid;
     void* m_privdata = nullptr;
 };
@@ -36,10 +35,10 @@ class Session : public Logger, public Reference {
 // SessionMgr
 ////////////////////////////////////////////////
 
-class SessionMgr : public Logger, public TimerCron {
+class SessionMgr : public Logger, public Net, public TimerCron {
    public:
     typedef struct co_timer_s {
-        int tid; /* tiemr id. */
+        int tid; /* timer id. */
         Session* s;
         void* privdata;
     } co_timer_t;
@@ -53,8 +52,7 @@ class SessionMgr : public Logger, public TimerCron {
     bool add_session(Session* s, uint64_t after, uint64_t repeat = 0);
 
     template <typename T>
-    T* get_alloc_session(const std::string& sessid,
-                         uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
+    T* get_alloc_session(const std::string& sessid, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
         auto s = dynamic_cast<T*>(get_session(sessid));
         if (s == nullptr) {
             s = new T(m_logger, m_net, sessid);
@@ -79,10 +77,8 @@ class SessionMgr : public Logger, public TimerCron {
     virtual void on_repeat_timer() override; /* call by parent, 10 times/s on Linux. */
 
    private:
-    INet* m_net = nullptr;
-
     Timers* m_timers;
-    std::list<Session*> m_free_sessions;
+    std::queue<Session*> m_free_sessions;
     std::unordered_map<std::string, co_timer_t*> m_sessions;
 };
 
