@@ -21,7 +21,7 @@ class MoudleTest : public Module {
     void print_cmd_info(const Request* req);
 
    private:
-    /* cmd handler. */
+    /* request's handler. */
     int test_hello(const Request* req);
     int test_mysql(const Request* req);
     int test_redis(const Request* req);

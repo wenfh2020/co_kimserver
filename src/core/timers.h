@@ -7,10 +7,13 @@
 namespace kim {
 
 /* timer's group id (first: due time, second: timer id)*/
-typedef std::pair<int64_t, uint32_t> TimerGrpID;
+typedef std::pair<uint64_t, int> TimerGrpID;
 
 /* timer's callback function. 
-   first arg: timer's id, second arg: is repeat, third: privdata. */
+ * first arg: timer's id. 
+ * second arg: is repeat.
+ * third arg: privdata.
+ */
 typedef std::function<void(int, bool, void*)> TimerEvent;
 
 // Timer

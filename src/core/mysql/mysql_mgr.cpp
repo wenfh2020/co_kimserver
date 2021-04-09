@@ -115,7 +115,7 @@ void* MysqlMgr::co_handle_task(void* arg) {
 
 void* MysqlMgr::handle_task(void* arg) {
     task_t* task;
-    long long spend;
+    int64_t spend;
     co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
@@ -238,7 +238,7 @@ MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
 }
 
 void MysqlMgr::on_repeat_timer() {
-    long long now;
+    int64_t now;
     int task_cnt = 0;
     int busy_conn_cnt = 0;
 

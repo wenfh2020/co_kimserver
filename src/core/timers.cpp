@@ -51,7 +51,7 @@ bool Timers::del_timer(int id) {
 void Timers::on_repeat_timer() {
     uint64_t now = mstime();
 
-    while (!m_timers.empty() && (m_timers.begin()->first.first < (uint64_t)now)) {
+    while (!m_timers.empty() && (m_timers.begin()->first.first < now)) {
         auto it = m_timers.begin();
         auto gid = it->first;
         auto timer = it->second;
