@@ -16,7 +16,7 @@ typedef struct co_task_s {
     stCoRoutine_t* co;
 } co_task_t;
 
-class Coroutines : public TimerCron {
+class Coroutines : public Logger, public TimerCron {
    public:
     Coroutines(Log* logger);
     virtual ~Coroutines();
@@ -37,13 +37,12 @@ class Coroutines : public TimerCron {
     virtual void on_repeat_timer() override;
 
    private:
-    Log* m_logger = nullptr;
     bool m_is_exit = false; /* exit libco. */
 
     stCoRoutineAttr_t m_co_attr;
     int m_max_co_cnt = MAX_CO_CNT;
-    std::set<co_task_t*> m_co_free;
-    std::set<co_task_t*> m_coroutines;
+    std::set<co_task_t*> m_work_coroutines;
+    std::queue<co_task_t*> m_free_coroutines;
 };
 
 }  // namespace kim
