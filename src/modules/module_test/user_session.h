@@ -17,6 +17,9 @@ class UserSession : public Session {
     const std::string& user_name() const { return m_user_name; }
     void set_user_name(const std::string& name) { m_user_name = name; }
 
+   public:
+    virtual void on_timeout() override;
+
    protected:
     uint64_t m_user_id;
     std::string m_user_name;
