@@ -21,7 +21,7 @@ typedef struct node_s {
     std::vector<uint32_t> vnodes; /* virtual nodes which point to me. */
 } node_t;
 
-class Nodes {
+class Nodes : public Logger {
    public:
     enum class HASH_ALGORITHM {
         FNV1A_64 = 0,
@@ -61,7 +61,6 @@ class Nodes {
     std::vector<uint32_t> gen_vnodes(const std::string& node_id);
 
    private:
-    Log* m_logger = nullptr;
     int m_vnode_cnt = 200;
     HASH_ALGORITHM m_ha = HASH_ALGORITHM::FNV1A_64;
 

@@ -27,7 +27,7 @@ class Session : public Logger, public Net, public Reference {
    public:
     virtual void on_timeout() {}
 
-   protected:
+   private:
     std::string m_sessid;
     void* m_privdata = nullptr;
 };

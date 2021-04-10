@@ -126,7 +126,7 @@ void SessionMgr::on_handle_session_timer(int tid, bool is_repeat, void* privdata
 
 void SessionMgr::on_repeat_timer() {
     Session* s;
-    int cnt = 0;
+    size_t cnt = 0;
     size_t size = m_free_sessions.size();
 
     run_with_period(1000) {

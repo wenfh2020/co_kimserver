@@ -6,7 +6,7 @@
 namespace kim {
 
 Nodes::Nodes(Log* logger, int vnode_cnt, HASH_ALGORITHM ha)
-    : m_logger(logger), m_vnode_cnt(vnode_cnt), m_ha(ha) {
+    : Logger(logger), m_vnode_cnt(vnode_cnt), m_ha(ha) {
 }
 
 Nodes::~Nodes() {

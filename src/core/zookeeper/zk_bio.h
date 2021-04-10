@@ -15,7 +15,7 @@
 
 namespace kim {
 
-class Bio {
+class Bio : public Logger {
    public:
     Bio(Log* logger);
     virtual ~Bio();
@@ -43,8 +43,6 @@ class Bio {
     void handle_acks();
 
    protected:
-    Log* m_logger = nullptr;
-
     pthread_t m_thread;
     pthread_cond_t m_cond;
     pthread_mutex_t m_mutex;

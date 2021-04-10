@@ -15,7 +15,7 @@ namespace kim {
  * in the main thread. */
 #define REDIS_THREAD_STACK_SIZE (1024 * 1024 * 4)
 
-Bio::Bio(Log* logger) : m_logger(logger) {
+Bio::Bio(Log* logger) : Logger(logger) {
     pthread_cond_init(&m_cond, NULL);
     pthread_mutex_init(&m_mutex, NULL);
 }

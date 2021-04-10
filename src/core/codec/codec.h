@@ -9,7 +9,7 @@
 
 namespace kim {
 
-class Codec {
+class Codec : public Logger {
    public:
     enum class TYPE {
         UNKNOWN = 0,
@@ -26,12 +26,14 @@ class Codec {
         CLOSED = 3,
     };
 
-    Codec() {}
-    Codec(Log* logger, Codec::TYPE codec) : m_logger(logger), m_codec(codec) {}
+    Codec(Log* logger, Codec::TYPE codec) : Logger(logger), m_codec(codec) {}
     virtual ~Codec() {}
 
-    virtual Codec::STATUS encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf);
+    Codec(const Codec&) = delete;
+    Codec& operator=(const Codec&) = delete;
+
     virtual Codec::STATUS decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& body);
+    virtual Codec::STATUS encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf);
 
     bool set_codec(Codec::TYPE codec);
     Codec::TYPE codec() { return m_codec; }
@@ -41,7 +43,6 @@ class Codec {
     bool ungzip(const std::string& src, std::string& dst);
 
    protected:
-    Log* m_logger = nullptr;
     Codec::TYPE m_codec = Codec::TYPE::PROTOBUF;
 };
 
