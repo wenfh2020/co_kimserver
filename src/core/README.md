@@ -60,7 +60,6 @@
   - zk_task.cpp            # ~
   - zk.h                   # 封装 zookeeper-client-c 中间件。(https://wenfh2020.com/2020/10/17/zookeeper-c-client/)
   - zk.cpp                 # ~
-- base.h                   # 封装了基础类数据。对象 id，日志对象，网络对象。
 - connection.h             # 连接对象。封装 socket 的网络数据读写。
 - connection.cpp           # ~
 - coroutines.h             # 协程池，主要是客户端接入的协程管理，但不包括 mysql, redis 等少量的协程管理。
@@ -90,6 +89,8 @@
 - session.cpp              # ~
 - sys_cmd.h                # 系统内部通信协议处理。
 - sys_cmd.cpp              # ~
+- sys_config.h             # 配置文件信息。
+- sys_config.cpp           # ~
 - timer.h                  # 时钟，通过协程实现。
 - timers.h                 # 多定时器，通过 map 实现。
 - timers.cpp               # ~

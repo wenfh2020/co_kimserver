@@ -1,22 +1,6 @@
 syntax = "proto3";
 package kim;
 
-message addr_info{
-    string node_host = 1; /* host for inner server. */
-    uint32 node_port = 2; /* port for inner server. */
-    string gate_host = 3; /* host for user client. */
-    uint32 gate_port = 4; /* port for user client. */
-}
-
-message node_info {
-    string name = 1;         /* read from config and register to zk. */
-    addr_info addr_info = 2; /* network addr info. */
-    string node_type = 3;    /* node type in cluster. */
-    string conf_path = 4;    /* config path. */
-    string work_path = 5;    /* process work path. */
-    int32 worker_cnt = 6;    /* number of worker's processes. */
-}
-
 /* 
  * zk_node_info
  * manager send to zookeeper, which will be notified to other zk's watchers.

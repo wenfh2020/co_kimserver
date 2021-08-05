@@ -18,25 +18,47 @@ Worker::Worker(const std::string& name) {
 
 Worker::~Worker() {
     SAFE_DELETE(m_net);
+    SAFE_DELETE(m_conf);
     SAFE_DELETE(m_logger);
 }
 
-bool Worker::init(const worker_info_t* info, const CJsonObject& config) {
+bool Worker::load_sys_config(const std::string& conf_path) {
+    m_conf = new SysConfig;
+    if (!m_conf->init(conf_path)) {
+        SAFE_DELETE(m_conf);
+        return false;
+    }
+    return true;
+}
+
+bool Worker::init(const worker_info_t* info, const std::string& conf_path) {
+    if (info == nullptr || conf_path.empty()) {
+        std::cerr << "invalid param!" << std::endl;
+        return false;
+    }
+
+    if (!load_sys_config(conf_path)) {
+        std::cerr << "load sys config failed! config path: "
+                  << conf_path
+                  << std::endl;
+        return false;
+    }
+
+    if (!load_logger()) {
+        std::cerr << "init log failed!" << std::endl;
+        return false;
+    }
+
     m_worker_info.work_path = info->work_path;
     m_worker_info.fctrl = info->fctrl;
     m_worker_info.fdata = info->fdata;
     m_worker_info.index = info->index;
     m_worker_info.pid = getpid();
 
-    m_config = config;
-
-    if (!load_logger()) {
-        LOG_ERROR("init log failed!");
-        return false;
-    }
-
     LOG_INFO("init worker, index: %d, fctrl fd: %d, fdata: %d",
              info->index, info->fctrl.fd, info->fdata.fd);
+
+    load_signals();
 
     if (!load_network()) {
         LOG_ERROR("create network failed!");
@@ -48,21 +70,22 @@ bool Worker::init(const worker_info_t* info, const CJsonObject& config) {
 }
 
 bool Worker::load_logger() {
-    char path[MAX_PATH] = {0};
-    snprintf(path, sizeof(path), "%s/%s", m_worker_info.work_path.c_str(),
-             m_config("log_path").c_str());
-
-    m_logger = new Log;
-    if (m_logger == nullptr) {
+    if (m_conf == nullptr) {
+        std::cerr << "pls init config firstly!" << std::endl;
         return false;
     }
 
+    char path[MAX_PATH] = {0};
+    snprintf(path, sizeof(path), "%s/%s", m_conf->work_path().c_str(),
+             m_conf->log_path().c_str());
+
+    m_logger = new Log;
     if (!m_logger->set_log_path(path)) {
         LOG_ERROR("set log path failed! path: %s", path);
         return false;
     }
 
-    if (!m_logger->set_level(m_config("log_level").c_str())) {
+    if (!m_logger->set_level(m_conf->log_level().c_str())) {
         LOG_ERROR("invalid log level!");
         return false;
     }
@@ -70,7 +93,6 @@ bool Worker::load_logger() {
     m_logger->set_process_type(false);
     m_logger->set_worker_index(m_worker_info.index);
 
-    load_signals();
     LOG_INFO("init logger done!");
     return true;
 }
@@ -84,7 +106,7 @@ bool Worker::load_network() {
         return false;
     }
 
-    if (!m_net->create_w(m_config, m_worker_info.fctrl.fd, m_worker_info.fdata.fd,
+    if (!m_net->create_w(m_conf, m_worker_info.fctrl.fd, m_worker_info.fdata.fd,
                          m_worker_info.index)) {
         LOG_ERROR("init network failed!");
         SAFE_DELETE(m_net);
@@ -108,10 +130,6 @@ void Worker::on_repeat_timer() {
     }
 }
 
-std::string Worker::worker_name(int index) {
-    return format_str("%s_w_%d", m_config("server_name").c_str(), index);
-}
-
 void Worker::load_signals() {
     struct sigaction act;
     sigemptyset(&act.sa_mask);
@@ -133,7 +151,7 @@ void Worker::signal_handler(int sig) {
 }
 
 void Worker::signal_handler_event(int sig) {
-    std::string name = worker_name(m_worker_info.index);
+    std::string name = m_conf->worker_name(m_worker_info.index);
     if (sig == SIGUSR1 || sig == SIGINT) {
         LOG_INFO("%s terminated by signal %d!", name.c_str(), sig);
     } else {

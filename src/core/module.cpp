@@ -6,7 +6,7 @@
 namespace kim {
 
 Module::Module(Log* logger, INet* net, uint64_t id, const std::string& name)
-    : Base(logger, net, id, name) {
+    : Logger(logger), Net(net), m_id(id), m_name(name) {
     register_handle_func();
 }
 

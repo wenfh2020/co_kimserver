@@ -14,7 +14,7 @@ class Worker : CoTimer {
     Worker(const std::string& name);
     virtual ~Worker();
 
-    bool init(const worker_info_t* info, const CJsonObject& config);
+    bool init(const worker_info_t* info, const std::string& conf_path);
     void run();
 
     virtual void on_repeat_timer() override;
@@ -22,8 +22,7 @@ class Worker : CoTimer {
    private:
     bool load_logger();
     bool load_network();
-
-    std::string worker_name(int index);
+    bool load_sys_config(const std::string& conf_path);
 
     /* signals. */
     void load_signals();
@@ -32,8 +31,8 @@ class Worker : CoTimer {
 
    private:
     Log* m_logger = nullptr;     /* logger. */
+    SysConfig* m_conf = nullptr; /* system config data. */
     Network* m_net = nullptr;    /* network. */
-    CJsonObject m_config;        /* config */
     worker_info_t m_worker_info; /* current worker info. */
     static void* m_signal_user_data;
 };

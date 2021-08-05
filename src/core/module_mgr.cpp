@@ -11,7 +11,8 @@ namespace kim {
 
 typedef Module* CreateModule();
 
-ModuleMgr::ModuleMgr(Log* logger, INet* net) : Base(logger, net) {
+ModuleMgr::ModuleMgr(Log* log, INet* net)
+    : Logger(log), Net(net) {
 }
 
 ModuleMgr::~ModuleMgr() {
@@ -27,9 +28,9 @@ ModuleMgr::~ModuleMgr() {
     m_modules.clear();
 }
 
-bool ModuleMgr::init(CJsonObject& config) {
+bool ModuleMgr::init(CJsonObject* config) {
     std::string name, path;
-    CJsonObject& array = config["modules"];
+    CJsonObject& array = (*config)["modules"];
 
     for (int i = 0; i < array.GetArraySize(); i++) {
         name = array(i);

@@ -1,7 +1,6 @@
 #ifndef __KIM_MODULE_H__
 #define __KIM_MODULE_H__
 
-#include "base.h"
 #include "error.h"
 #include "protobuf/proto/msg.pb.h"
 #include "request.h"
@@ -12,12 +11,19 @@ namespace kim {
 
 /* Module is a container, which is used for cmd's route.*/
 
-class Module : public Base, public So {
+class Module : public Logger, public Net, public So {
    public:
     Module() {}
     Module(Log* logger, INet* net, uint64_t id, const std::string& name);
     virtual ~Module();
     bool init(Log* logger, INet* net, uint64_t id, const std::string& name = "");
+
+    void set_id(uint64_t id) { m_id = id; }
+    uint64_t id() { return m_id; }
+
+    void set_name(const std::string& name) { m_name = name; }
+    const std::string& name() const { return m_name; }
+    const char* name() { return m_name.c_str(); }
 
     virtual void register_handle_func() {}
     virtual int handle_request(const Request* req) {
@@ -26,6 +32,10 @@ class Module : public Base, public So {
     virtual int filter_request(const Request* req) {
         return ERR_UNKOWN_CMD;
     }
+
+   protected:
+    uint64_t m_id = 0;
+    std::string m_name;
 };
 
 #define REGISTER_HANDLER(class_name)                                                  \

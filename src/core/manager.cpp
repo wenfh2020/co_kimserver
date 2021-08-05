@@ -21,6 +21,7 @@ Manager::~Manager() {
 
 void Manager::destory() {
     SAFE_DELETE(m_net);
+    SAFE_DELETE(m_conf);
     SAFE_DELETE(m_logger);
 }
 
@@ -31,22 +32,21 @@ void Manager::run() {
 }
 
 bool Manager::init(const char* conf_path) {
-    char work_path[MAX_PATH];
-    if (!getcwd(work_path, sizeof(work_path))) {
+    if (!load_sys_config(conf_path)) {
+        std::cerr << "load sys config failed! config path: "
+                  << conf_path
+                  << std::endl;
         return false;
     }
-    m_node_info.set_work_path(work_path);
-
-    if (!load_config(conf_path)) {
-        LOG_ERROR("load config failed! %s", conf_path);
-        return false;
-    }
-    set_proc_title("%s", m_config("server_name").c_str());
 
     if (!load_logger()) {
-        LOG_ERROR("init log failed!");
+        std::cerr << "load logger failed!" << std::endl;
         return false;
     }
+
+    LOG_DEBUG("conf ********* : %p", m_conf);
+
+    set_proc_title("%s", (*m_conf->config())("server_name").c_str());
 
     if (!load_network()) {
         LOG_ERROR("create network failed!");
@@ -73,22 +73,22 @@ void Manager::on_repeat_timer() {
 }
 
 bool Manager::load_logger() {
-    char path[MAX_PATH];
-    snprintf(path, sizeof(path), "%s/%s",
-             m_node_info.work_path().c_str(), m_config("log_path").c_str());
-
-    m_logger = new Log;
-    if (m_logger == nullptr) {
-        LOG_ERROR("new log failed!");
+    if (m_conf == nullptr) {
+        std::cerr << "pls init config firstly!" << std::endl;
         return false;
     }
 
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%s/%s",
+             m_conf->work_path().c_str(), m_conf->log_path().c_str());
+
+    m_logger = new Log;
     if (!m_logger->set_log_path(path)) {
         LOG_ERROR("set log path failed! path: %s", path);
         return false;
     }
 
-    if (!m_logger->set_level(m_config("log_level").c_str())) {
+    if (!m_logger->set_level(m_conf->log_level().c_str())) {
         LOG_ERROR("invalid log level!");
         return false;
     }
@@ -107,7 +107,7 @@ bool Manager::load_network() {
         return false;
     }
 
-    if (!m_net->create_m(m_node_info.mutable_addr_info(), m_config)) {
+    if (!m_net->create_m(m_conf)) {
         LOG_ERROR("init network failed!");
         SAFE_DELETE(m_net);
         return false;
@@ -117,33 +117,20 @@ bool Manager::load_network() {
     return true;
 }
 
-bool Manager::load_config(const char* path) {
-    CJsonObject config;
-    if (!config.Load(path)) {
-        LOG_ERROR("load json config failed! %s", path);
+bool Manager::load_sys_config(const std::string& conf_path) {
+    m_conf = new SysConfig;
+    if (!m_conf->init(conf_path)) {
+        SAFE_DELETE(m_conf);
         return false;
     }
-
-    m_old_config = m_config;
-    m_config = config;
-    m_node_info.set_conf_path(path);
-
-    if (m_old_config.ToString() != m_config.ToString()) {
-        if (m_old_config.ToString().empty()) {
-            m_node_info.set_worker_cnt(str_to_int(m_config("worker_cnt")));
-            m_node_info.set_node_type(m_config("node_type"));
-            m_node_info.mutable_addr_info()->set_node_host(m_config("node_host"));
-            m_node_info.mutable_addr_info()->set_node_port(str_to_int(m_config("node_port")));
-            m_node_info.mutable_addr_info()->set_gate_host(m_config("gate_host"));
-            m_node_info.mutable_addr_info()->set_gate_port(str_to_int(m_config("gate_port")));
-        }
-    }
-
     return true;
 }
 
 bool Manager::create_worker(int worker_index) {
     int pid, data_fds[2], ctrl_fds[2];
+    std::string conf_path = m_conf->conf_path();
+    std::string work_path = m_conf->work_path();
+    std::string worker_name = m_conf->worker_name(worker_index);
 
     if (socketpair(PF_UNIX, SOCK_STREAM, 0, ctrl_fds) < 0) {
         LOG_ERROR("create socket pair failed! %d: %s", errno, strerror(errno));
@@ -166,9 +153,9 @@ bool Manager::create_worker(int worker_index) {
         fd_t fctrl{ctrl_fds[1], 0};
         fd_t fdata{data_fds[1], 0};
 
-        worker_info_t info{0, worker_index, fctrl, fdata, m_node_info.work_path()};
-        Worker worker(worker_name(worker_index));
-        if (!worker.init(&info, m_config)) {
+        worker_info_t info{0, worker_index, fctrl, fdata, work_path};
+        Worker worker(worker_name);
+        if (!worker.init(&info, conf_path)) {
             _exit(EXIT_CHILD_INIT_FAIL);
         }
         worker.run();
@@ -200,15 +187,11 @@ bool Manager::create_worker(int worker_index) {
 }
 
 void Manager::create_workers() {
-    for (int i = 1; i <= m_node_info.worker_cnt(); i++) {
+    for (int i = 1; i <= m_conf->worker_cnt(); i++) {
         if (!create_worker(i)) {
             LOG_ERROR("create worker failed! index: %d", i);
         }
     }
-}
-
-std::string Manager::worker_name(int index) {
-    return format_str("%s_w_%d", m_config("server_name").c_str(), index);
 }
 
 void Manager::restart_workers() {
@@ -299,7 +282,8 @@ void Manager::signal_handler_event(int sig) {
             restart_worker(pid);
         }
     } else {
-        LOG_CRIT("%s terminated by signal %d!", m_config("server_name").c_str(), sig);
+        LOG_CRIT("%s terminated by signal %d!",
+                 m_conf->server_name().c_str(), sig);
 
         close_workers();
 

@@ -3,16 +3,15 @@
 #define __KIM_MODULE_MGR_H__
 
 #include "module.h"
-#include "util/json/CJsonObject.hpp"
 
 namespace kim {
 
-class ModuleMgr : Base {
+class ModuleMgr : public Logger, public Net {
    public:
     ModuleMgr(Log* logger, INet* net);
     virtual ~ModuleMgr();
 
-    bool init(CJsonObject& config);
+    bool init(CJsonObject* config);
     Module* get_module(uint64_t id);
     bool reload_so(const std::string& name);
 

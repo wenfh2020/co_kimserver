@@ -77,6 +77,7 @@ class INet {
 
 class Net {
    public:
+    Net() {}
     Net(INet* net) : m_net(net) {}
     virtual ~Net() {}
 

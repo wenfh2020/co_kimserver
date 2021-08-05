@@ -50,6 +50,7 @@ class Log {
 
 class Logger {
    public:
+    Logger() {}
     Logger(Log* logger) : m_logger(logger) {}
     virtual ~Logger() {}
 

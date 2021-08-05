@@ -22,8 +22,8 @@ Network::~Network() {
 }
 
 /* parent. */
-bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
-    if (ai == nullptr) {
+bool Network::create_m(SysConfig* conf) {
+    if (conf == nullptr) {
         return false;
     }
 
@@ -31,7 +31,9 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     Connection* c;
     co_task_t* task;
 
-    if (!load_public(config)) {
+    m_conf = conf;
+
+    if (!load_public(conf)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -47,16 +49,14 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     }
 
     /* inner listen. */
-    if (!ai->node_host().empty()) {
-        fd = listen_to_port(ai->node_host().c_str(), ai->node_port());
+    if (!conf->node_host().empty()) {
+        fd = listen_to_port(conf->node_host().c_str(), conf->node_port());
         if (fd == -1) {
-            LOG_ERROR("listen to port failed! %s:%d", ai->node_host().c_str(), ai->node_port());
+            LOG_ERROR("listen to port failed! %s:%d", conf->node_host().c_str(), conf->node_port());
             return false;
         }
 
         m_node_fd = fd;
-        m_node_host = ai->node_host();
-        m_node_port = ai->node_port();
         LOG_INFO("node fd: %d", m_node_fd);
 
         c = create_conn(m_node_fd, Codec::TYPE::PROTOBUF);
@@ -76,19 +76,17 @@ bool Network::create_m(const addr_info* ai, const CJsonObject& config) {
     }
 
     /* gate listen. */
-    if (!ai->gate_host().empty()) {
-        fd = listen_to_port(ai->gate_host().c_str(), ai->gate_port());
+    if (!conf->gate_host().empty()) {
+        fd = listen_to_port(conf->gate_host().c_str(), conf->gate_port());
         if (fd == -1) {
             LOG_ERROR("listen to gate failed! %s:%d",
-                      ai->gate_host().c_str(), ai->gate_port());
+                      conf->gate_host().c_str(), conf->gate_port());
             return false;
         }
 
         m_gate_fd = fd;
-        m_gate_host = ai->gate_host();
-        m_gate_port = ai->gate_port();
         LOG_INFO("gate fd: %d, host: %s, port: %d",
-                 m_gate_fd, m_gate_host.c_str(), m_gate_port);
+                 m_gate_fd, conf->gate_host().c_str(), conf->gate_port());
 
         c = create_conn(m_gate_fd, m_gate_codec);
         if (c == nullptr) {
@@ -149,8 +147,10 @@ bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
 }
 
 /* worker. */
-bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index) {
-    if (!load_public(config)) {
+bool Network::create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index) {
+    m_conf = conf;
+
+    if (!load_public(conf)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -185,19 +185,16 @@ bool Network::create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int 
 
     conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
     if (conn_ctrl == nullptr) {
-        close_fd(ctrl_fd);
         LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
         return false;
     }
 
     conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
     if (conn_data == nullptr) {
-        close_fd(data_fd);
         LOG_ERROR("add read event failed, fd: %d", data_fd);
         return false;
     }
 
-    m_config = config;
     m_worker_index = index;
     m_manager_fctrl = conn_ctrl->ft();
     m_manager_fdata = conn_data->ft();
@@ -227,7 +224,7 @@ bool Network::ensure_files_limit() {
     int file_limit = 0;
     int max_clients = 0;
 
-    max_clients = str_to_int(m_config("max_clients"));
+    max_clients = m_conf->max_clients();
     if (max_clients == 0) {
         return false;
     }
@@ -337,8 +334,8 @@ bool Network::report_payload_to_zookeeper() {
     node->set_node_type(node_type());
     node->set_node_host(node_host());
     node->set_node_port(node_port());
-    node->set_gate_host(m_gate_host);
-    node->set_gate_port(m_gate_port);
+    node->set_gate_host(m_conf->gate_host());
+    node->set_gate_port(m_conf->gate_port());
     node->set_worker_cnt(workers.size());
 
     /* worker payload infos. */
@@ -740,8 +737,8 @@ Connection* Network::create_conn(int fd) {
     return c;
 }
 
-bool Network::load_public(const CJsonObject& config) {
-    if (!load_config(config)) {
+bool Network::load_public(SysConfig* conf) {
+    if (!load_config(conf)) {
         LOG_ERROR("load config failed!");
         return false;
     }
@@ -774,7 +771,7 @@ bool Network::load_public(const CJsonObject& config) {
 
 bool Network::load_modules() {
     m_module_mgr = new ModuleMgr(m_logger, this);
-    if (m_module_mgr == nullptr || !m_module_mgr->init(m_config)) {
+    if (m_module_mgr == nullptr || !m_module_mgr->init(m_conf->config())) {
         return false;
     }
     LOG_INFO("load modules mgr sucess!");
@@ -786,12 +783,11 @@ bool Network::load_corotines() {
     return (m_coroutines != nullptr);
 }
 
-bool Network::load_config(const CJsonObject& config) {
+bool Network::load_config(SysConfig* conf) {
     int secs;
-    m_config = config;
     std::string codec;
 
-    codec = m_config("gate_codec");
+    codec = conf->gate_codec();
     if (!codec.empty()) {
         if (!set_gate_codec(codec)) {
             LOG_ERROR("invalid codec: %s", codec.c_str());
@@ -800,12 +796,12 @@ bool Network::load_config(const CJsonObject& config) {
         LOG_DEBUG("gate codec: %s", codec.c_str());
     }
 
-    if (m_config.Get("keep_alive", secs)) {
+    secs = conf->keep_alive();
+    if (secs > 0) {
         set_keep_alive(secs);
     }
 
-    m_node_type = m_config("node_type");
-    if (m_node_type.empty()) {
+    if (conf->node_type().empty()) {
         LOG_ERROR("invalid inner node info!");
         return false;
     }
@@ -825,7 +821,7 @@ bool Network::load_zk_mgr() {
         return false;
     }
 
-    if (m_zk_cli->init(m_config)) {
+    if (m_zk_cli->init(m_conf->config())) {
         LOG_INFO("load zk client done!");
     }
     return true;
@@ -838,7 +834,7 @@ bool Network::load_nodes_conn() {
 
 bool Network::load_mysql_mgr() {
     m_mysql_mgr = new MysqlMgr(m_logger);
-    if (!m_mysql_mgr->init(&m_config["database"])) {
+    if (!m_mysql_mgr->init(&(*m_conf->config())["database"])) {
         LOG_ERROR("load database mgr failed!");
         return false;
     }
@@ -849,7 +845,7 @@ bool Network::load_mysql_mgr() {
 
 bool Network::load_redis_mgr() {
     m_redis_mgr = new RedisMgr(m_logger);
-    if (!m_redis_mgr->init(&m_config["redis"])) {
+    if (!m_redis_mgr->init(&(*m_conf->config())["redis"])) {
         LOG_ERROR("load redis mgr failed!");
         return false;
     }

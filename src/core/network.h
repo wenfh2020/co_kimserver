@@ -12,6 +12,7 @@
 #include "nodes.h"
 #include "session.h"
 #include "sys_cmd.h"
+#include "sys_config.h"
 #include "util/json/CJsonObject.hpp"
 #include "worker_data_mgr.h"
 #include "zk_client.h"
@@ -33,9 +34,9 @@ class Network : public INet, public TimerCron {
     Network& operator=(const Network&) = delete;
 
     /* for manager. */
-    bool create_m(const addr_info* ainfo, const CJsonObject& config);
+    bool create_m(SysConfig* conf);
     /* for worker.  */
-    bool create_w(const CJsonObject& config, int ctrl_fd, int data_fd, int index);
+    bool create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index);
 
     bool init_manager_channel(fd_t& fctrl, fd_t& fdata);
 
@@ -51,16 +52,16 @@ class Network : public INet, public TimerCron {
 
     virtual uint64_t now(bool force = false) override;
     virtual uint64_t new_seq() override { return ++m_seq; }
-    virtual CJsonObject* config() override { return &m_config; }
+    virtual CJsonObject* config() override { return m_conf->config(); }
 
     /* pro's type. */
     virtual bool is_worker() override { return m_type == TYPE::WORKER; }
     virtual bool is_manager() override { return m_type == TYPE::MANAGER; }
 
     virtual int worker_index() override { return m_worker_index; }
-    virtual int node_port() override { return m_node_port; }
-    virtual std::string node_type() override { return m_node_type; }
-    virtual std::string node_host() override { return m_node_host; }
+    virtual int node_port() override { return m_conf->gate_port(); }
+    virtual std::string node_type() override { return m_conf->node_type(); }
+    virtual std::string node_host() override { return m_conf->node_host(); }
 
     virtual Nodes* nodes() override { return m_nodes; }
     virtual SysCmd* sys_cmd() override { return m_sys_cmd; }
@@ -113,8 +114,8 @@ class Network : public INet, public TimerCron {
     bool report_payload_to_zookeeper();
 
    private:
-    bool load_config(const CJsonObject& config);
-    bool load_public(const CJsonObject& config);
+    bool load_config(SysConfig* conf);
+    bool load_public(SysConfig* conf);
     bool load_worker_data_mgr();
     bool load_modules();
     bool load_corotines();
@@ -143,8 +144,8 @@ class Network : public INet, public TimerCron {
     void on_handle_requests(void*);
 
    private:
-    Log* m_logger;                                   /* logger. */
-    CJsonObject m_config;                            /* config. */
+    Log* m_logger = nullptr;                         /* logger. */
+    SysConfig* m_conf = nullptr;                     /* system config data. */
     Codec::TYPE m_gate_codec = Codec::TYPE::UNKNOWN; /* gate codec type. */
 
     std::unordered_map<int, uint64_t> m_fd_conns;              /* key fd, value: conn id. */
@@ -162,19 +163,13 @@ class Network : public INet, public TimerCron {
     WorkerDataMgr* m_worker_data_mgr = nullptr; /* manager handle worker data. */
 
     /* node for inner servers. */
-    std::string m_node_host;
-    int m_node_port = 0;
     int m_node_fd = -1;
 
     int m_max_clients = (1024 - CONFIG_MIN_RESERVED_FDS);
 
     /* gate for client. */
-    std::string m_gate_host;
-    int m_gate_port = 0;
     int m_gate_fd = -1;
-
-    std::string m_node_type; /* current server node type. */
-    int m_worker_index = 0;  /* current process index number. */
+    int m_worker_index = 0; /* current process index number. */
 
     /* manager/workers communicate, used by worker. */
     fd_t m_manager_fctrl; /* channel for send message. */
