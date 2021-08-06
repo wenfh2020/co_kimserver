@@ -33,4 +33,5 @@ rsync -avz --exclude="*.o" \
     --exclude="test/test_timer/test_timer" \
     --exclude="test/test_session/test_session" \
     --exclude="test/test_timers/test_timers" \
+    --exclude="test/test_json/test_json" \
     $SRC $DST
