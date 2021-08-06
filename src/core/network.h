@@ -34,9 +34,9 @@ class Network : public INet, public TimerCron {
     Network& operator=(const Network&) = delete;
 
     /* for manager. */
-    bool create_m(SysConfig* conf);
+    bool create_m(SysConfig* cf);
     /* for worker.  */
-    bool create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index);
+    bool create_w(SysConfig* cf, int ctrl_fd, int data_fd, int index);
 
     bool init_manager_channel(fd_t& fctrl, fd_t& fdata);
 
@@ -114,8 +114,8 @@ class Network : public INet, public TimerCron {
     bool report_payload_to_zookeeper();
 
    private:
-    bool load_config(SysConfig* conf);
-    bool load_public(SysConfig* conf);
+    bool load_config(SysConfig* cf);
+    bool load_public(SysConfig* cf);
     bool load_worker_data_mgr();
     bool load_modules();
     bool load_corotines();
@@ -127,7 +127,7 @@ class Network : public INet, public TimerCron {
     bool ensure_files_limit();
 
     /* socket & connection. */
-    int listen_to_port(const char* host, int port);
+    int listen_to_port(const char* host, int port, bool is_reuseport = false);
 
     int process_msg(Connection* c);
     int process_tcp_msg(Connection* c);

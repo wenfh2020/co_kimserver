@@ -44,8 +44,6 @@ bool Manager::init(const char* conf_path) {
         return false;
     }
 
-    LOG_DEBUG("conf ********* : %p", m_conf);
-
     set_proc_title("%s", (*m_conf->config())("server_name").c_str());
 
     if (!load_network()) {

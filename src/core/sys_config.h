@@ -2,7 +2,6 @@
 #define __SYS_CONFIG_H__
 
 #include "util/json/CJsonObject.hpp"
-#include "util/log.h"
 #include "util/util.h"
 
 namespace kim {
@@ -41,6 +40,12 @@ class SysConfig {
     int gate_port() { return str_to_int((*m_config)("gate_port")); }
 
     int max_clients() { return str_to_int((*m_config)("max_clients")); }
+
+    bool is_reuseport() {
+        bool ret = false;
+        m_config->Get("is_reuseport", ret);
+        return ret;
+    }
 
    protected:
     CJsonObject* m_config = nullptr;

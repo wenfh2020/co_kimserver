@@ -96,6 +96,7 @@
     "log_path": "kimserver.log",            # 日志文件。
     "log_level": "info",                    # 日志等级。(trace/debug/warn/info/notice/error/alert/crit)
     "max_clients": 10000,                   # 最大支持用户数量。
+    "is_reuseport": false,                  # 支持 so_reuseport 选项。
     "modules": [                            # 业务功能插件，动态库数组。
         "module_test.so"
     ],

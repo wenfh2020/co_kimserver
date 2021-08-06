@@ -22,8 +22,8 @@ Network::~Network() {
 }
 
 /* parent. */
-bool Network::create_m(SysConfig* conf) {
-    if (conf == nullptr) {
+bool Network::create_m(SysConfig* cf) {
+    if (cf == nullptr) {
         return false;
     }
 
@@ -31,9 +31,9 @@ bool Network::create_m(SysConfig* conf) {
     Connection* c;
     co_task_t* task;
 
-    m_conf = conf;
+    m_conf = cf;
 
-    if (!load_public(conf)) {
+    if (!load_public(cf)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -49,10 +49,11 @@ bool Network::create_m(SysConfig* conf) {
     }
 
     /* inner listen. */
-    if (!conf->node_host().empty()) {
-        fd = listen_to_port(conf->node_host().c_str(), conf->node_port());
+    if (!cf->node_host().empty()) {
+        fd = listen_to_port(cf->node_host().c_str(), cf->node_port());
         if (fd == -1) {
-            LOG_ERROR("listen to port failed! %s:%d", conf->node_host().c_str(), conf->node_port());
+            LOG_ERROR("listen to port failed! %s:%d",
+                      cf->node_host().c_str(), cf->node_port());
             return false;
         }
 
@@ -76,32 +77,34 @@ bool Network::create_m(SysConfig* conf) {
     }
 
     /* gate listen. */
-    if (!conf->gate_host().empty()) {
-        fd = listen_to_port(conf->gate_host().c_str(), conf->gate_port());
-        if (fd == -1) {
-            LOG_ERROR("listen to gate failed! %s:%d",
-                      conf->gate_host().c_str(), conf->gate_port());
-            return false;
-        }
+    if (!cf->is_reuseport()) {
+        if (!cf->gate_host().empty()) {
+            fd = listen_to_port(cf->gate_host().c_str(), cf->gate_port());
+            if (fd == -1) {
+                LOG_ERROR("listen to gate failed! %s:%d",
+                          cf->gate_host().c_str(), cf->gate_port());
+                return false;
+            }
 
-        m_gate_fd = fd;
-        LOG_INFO("gate fd: %d, host: %s, port: %d",
-                 m_gate_fd, conf->gate_host().c_str(), conf->gate_port());
+            m_gate_fd = fd;
+            LOG_INFO("gate fd: %d, host: %s, port: %d",
+                     m_gate_fd, cf->gate_host().c_str(), cf->gate_port());
 
-        c = create_conn(m_gate_fd, m_gate_codec);
-        if (c == nullptr) {
-            close_fd(m_gate_fd);
-            LOG_ERROR("add read event failed, fd: %d", m_gate_fd);
-            return false;
-        }
+            c = create_conn(m_gate_fd, m_gate_codec);
+            if (c == nullptr) {
+                close_fd(m_gate_fd);
+                LOG_ERROR("add read event failed, fd: %d", m_gate_fd);
+                return false;
+            }
 
-        task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
-        if (task == nullptr) {
-            LOG_ERROR("create new corotines failed!");
-            close_conn(c);
-            return false;
+            task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
+            if (task == nullptr) {
+                LOG_ERROR("create new corotines failed!");
+                close_conn(c);
+                return false;
+            }
+            co_resume(task->co);
         }
-        co_resume(task->co);
     }
 
     return true;
@@ -147,10 +150,10 @@ bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
 }
 
 /* worker. */
-bool Network::create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index) {
-    m_conf = conf;
+bool Network::create_w(SysConfig* cf, int ctrl_fd, int data_fd, int index) {
+    m_conf = cf;
 
-    if (!load_public(conf)) {
+    if (!load_public(cf)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -180,8 +183,9 @@ bool Network::create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index) {
         return false;
     }
 
+    int fd;
     co_task_t* task;
-    Connection *conn_ctrl, *conn_data;
+    Connection *conn_ctrl, *conn_data, *c;
 
     conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
     if (conn_ctrl == nullptr) {
@@ -214,6 +218,37 @@ bool Network::create_w(SysConfig* conf, int ctrl_fd, int data_fd, int index) {
         return false;
     }
     co_resume(task->co);
+
+    /* gate listen. */
+    if (cf->is_reuseport()) {
+        if (!cf->gate_host().empty()) {
+            fd = listen_to_port(cf->gate_host().c_str(), cf->gate_port(), true);
+            if (fd == -1) {
+                LOG_ERROR("listen to gate failed! %s:%d",
+                          cf->gate_host().c_str(), cf->gate_port());
+                return false;
+            }
+
+            m_gate_fd = fd;
+            LOG_INFO("gate fd: %d, host: %s, port: %d",
+                     fd, cf->gate_host().c_str(), cf->gate_port());
+
+            c = create_conn(fd, m_gate_codec);
+            if (c == nullptr) {
+                close_fd(fd);
+                LOG_ERROR("add read event failed, fd: %d", fd);
+                return false;
+            }
+
+            task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
+            if (task == nullptr) {
+                LOG_ERROR("create new corotines failed!");
+                close_conn(c);
+                return false;
+            }
+            co_resume(task->co);
+        }
+    }
 
     LOG_INFO("create network done!");
     return true;
@@ -259,10 +294,10 @@ void Network::exit_libco() {
     }
 }
 
-int Network::listen_to_port(const char* host, int port) {
+int Network::listen_to_port(const char* host, int port, bool is_reuseport) {
     int fd = -1;
 
-    fd = anet_tcp_server(m_errstr, host, port, TCP_BACK_LOG);
+    fd = anet_tcp_server(m_errstr, host, port, TCP_BACK_LOG, is_reuseport);
     if (fd == -1) {
         LOG_ERROR("bind tcp ipv4 failed! %s", m_errstr);
         return -1;
@@ -455,6 +490,7 @@ void* Network::co_handle_accept_gate_conn(void* d) {
 
 void* Network::handle_accept_gate_conn(void* d) {
     channel_t ch;
+    Connection* c;
     char ip[NET_IP_STR_LEN] = {0};
     int fd, port, family, channel_fd, err;
 
@@ -470,31 +506,57 @@ void* Network::handle_accept_gate_conn(void* d) {
 
         LOG_INFO("accepted client: %s:%d, fd: %d", ip, port, fd);
 
-        /* transfer fd from manager to worker. */
-        channel_fd = m_worker_data_mgr->get_next_worker_data_fd();
-        if (channel_fd <= 0) {
-            LOG_ERROR("find next worker channel failed!");
-            break;
-        }
-
-        ch = {fd, family, static_cast<int>(m_gate_codec), 0};
-
-        for (;;) {
-            err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
-            if (err == ERR_OK) {
-                LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
-                break;
-            } else if (err == EAGAIN) {
-                LOG_DEBUG("wait to write again, fd: %d, errno: %d", fd, err);
-                co_sleep(1000, channel_fd, POLLOUT);
-                continue;
-            } else {
-                LOG_ERROR("write channel failed! errno: %d", err);
+        if (!m_conf->is_reuseport()) {
+            /* transfer fd from manager to worker. */
+            channel_fd = m_worker_data_mgr->get_next_worker_data_fd();
+            if (channel_fd <= 0) {
+                LOG_ERROR("find next worker channel failed!");
                 break;
             }
-        }
 
-        close_fd(fd);
+            ch = {fd, family, static_cast<int>(m_gate_codec), 0};
+
+            for (;;) {
+                err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
+                if (err == ERR_OK) {
+                    LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
+                    break;
+                } else if (err == EAGAIN) {
+                    LOG_DEBUG("wait to write again, fd: %d, errno: %d", fd, err);
+                    co_sleep(1000, channel_fd, POLLOUT);
+                    continue;
+                } else {
+                    LOG_ERROR("write channel failed! errno: %d", err);
+                    break;
+                }
+            }
+
+            close_fd(fd);
+        } else {
+            if ((int)m_conns.size() > m_max_clients) {
+                LOG_WARN("max number of clients reached! %d", m_max_clients);
+                close_fd(fd);
+                co_sleep(10);
+                continue;
+            }
+
+            c = create_conn(fd, m_gate_codec);
+            if (c == nullptr) {
+                close_fd(fd);
+                LOG_ERROR("add data fd read event failed, fd: %d", fd);
+                continue;
+            }
+
+            LOG_INFO("accept client: fd: %d", fd);
+
+            co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
+            if (co_task == nullptr) {
+                LOG_ERROR("create new corotines failed!");
+                close_conn(c);
+                continue;
+            }
+            co_resume(co_task->co);
+        }
     }
 
     return 0;
@@ -737,8 +799,8 @@ Connection* Network::create_conn(int fd) {
     return c;
 }
 
-bool Network::load_public(SysConfig* conf) {
-    if (!load_config(conf)) {
+bool Network::load_public(SysConfig* cf) {
+    if (!load_config(cf)) {
         LOG_ERROR("load config failed!");
         return false;
     }
@@ -783,11 +845,11 @@ bool Network::load_corotines() {
     return (m_coroutines != nullptr);
 }
 
-bool Network::load_config(SysConfig* conf) {
+bool Network::load_config(SysConfig* cf) {
     int secs;
     std::string codec;
 
-    codec = conf->gate_codec();
+    codec = cf->gate_codec();
     if (!codec.empty()) {
         if (!set_gate_codec(codec)) {
             LOG_ERROR("invalid codec: %s", codec.c_str());
@@ -796,12 +858,12 @@ bool Network::load_config(SysConfig* conf) {
         LOG_DEBUG("gate codec: %s", codec.c_str());
     }
 
-    secs = conf->keep_alive();
+    secs = cf->keep_alive();
     if (secs > 0) {
         set_keep_alive(secs);
     }
 
-    if (conf->node_type().empty()) {
+    if (cf->node_type().empty()) {
         LOG_ERROR("invalid inner node info!");
         return false;
     }

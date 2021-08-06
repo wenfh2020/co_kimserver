@@ -89,7 +89,8 @@ static int anet_v6_only(char *err, int s) {
     return ANET_OK;
 }
 
-int anet_tcp_server(char *err, const char *bindaddr, int port, int backlog) {
+int anet_tcp_server(char *err, const char *bindaddr, int port, int backlog,
+                    bool is_reuseport) {
     int s = -1, rv;
     char _port[6]; /* strlen("65535") */
     struct addrinfo hints, *servinfo, *p;
@@ -111,6 +112,11 @@ int anet_tcp_server(char *err, const char *bindaddr, int port, int backlog) {
 
         if (p->ai_family == AF_INET6 && anet_v6_only(err, s) == ANET_ERR) goto error;
         if (anet_set_reuse_addr(err, s) == ANET_ERR) goto error;
+        if (is_reuseport) {
+            if (anet_set_tcp_reuseport(err, s) == ANET_ERR) {
+                goto error;
+            }
+        }
         if (anet_listen(err, s, p->ai_addr, p->ai_addrlen, backlog) == ANET_ERR)
             s = ANET_ERR;
         goto end;
@@ -220,6 +226,16 @@ int anet_keep_alive(char *err, int fd, int interval) {
 int anet_set_tcp_no_delay(char *err, int fd, int val) {
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val)) == -1) {
         anet_set_error(err, "setsockopt TCP_NODELAY: %s", strerror(errno));
+        return ANET_ERR;
+    }
+    return ANET_OK;
+}
+
+int anet_set_tcp_reuseport(char *err, int fd) {
+    int reuseport = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT,
+                   (const void *)&reuseport, sizeof(int)) == -1) {
+        anet_set_error(err, "setsockopt SO_REUSEPORT: %s", strerror(errno));
         return ANET_ERR;
     }
     return ANET_OK;

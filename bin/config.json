@@ -11,6 +11,7 @@
     "log_path": "kimserver.log",
     "log_level": "info",
     "max_clients": 20000,
+    "is_reuseport": false,
     "modules": [
         "module_test.so"
     ],

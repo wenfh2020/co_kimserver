@@ -44,11 +44,6 @@ bool Worker::init(const worker_info_t* info, const std::string& conf_path) {
         return false;
     }
 
-    if (!load_logger()) {
-        std::cerr << "init log failed!" << std::endl;
-        return false;
-    }
-
     m_worker_info.work_path = info->work_path;
     m_worker_info.fctrl = info->fctrl;
     m_worker_info.fdata = info->fdata;
@@ -57,6 +52,11 @@ bool Worker::init(const worker_info_t* info, const std::string& conf_path) {
 
     LOG_INFO("init worker, index: %d, fctrl fd: %d, fdata: %d",
              info->index, info->fctrl.fd, info->fdata.fd);
+
+    if (!load_logger()) {
+        std::cerr << "init log failed!" << std::endl;
+        return false;
+    }
 
     load_signals();
 
