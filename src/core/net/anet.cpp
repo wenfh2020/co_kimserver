@@ -143,6 +143,9 @@ static int anet_generic_accept(char *err, int s, struct sockaddr *sa,
         fd = accept(s, sa, len);
         if (fd == -1) {
             if (errno == EINTR) {
+                /* https://man7.org/linux/man-pages/man2/accept.2.html
+                 * The system call was interrupted by a signal that was
+                 * caught before a valid connection arrived; */
                 continue;
             } else {
                 anet_set_error(err, "accept: %s", strerror(errno));

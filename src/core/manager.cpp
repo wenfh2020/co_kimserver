@@ -267,6 +267,7 @@ void Manager::signal_handler(int sig) {
 void Manager::signal_handler_event(int sig) {
     if (sig == SIGCHLD) {
         int pid, status, ret;
+        /* use 'while' for recovering as many signals as possible each time. */
         while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
             if (WIFEXITED(status)) {
                 ret = WEXITSTATUS(status);
