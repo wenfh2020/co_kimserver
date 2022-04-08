@@ -42,18 +42,18 @@ run() {
     echo '<------------------'
 }
 
-if [ $1x == 'help'x ]; then
+if [ $1x = 'help'x ]; then
     echo './run.sh'
     echo './run.sh all'
     echo './run.sh kill <process name>'
     echo './run.sh compile'
     echo './run.sh compile all'
     exit 1
-elif [ $1x == 'kill'x ]; then
+elif [ $1x = 'kill'x ]; then
     kill_process $2
     exit 1
-elif [ $1x == 'compile'x ]; then
-    if [ $2x == 'all'x ]; then
+elif [ $1x = 'compile'x ]; then
+    if [ $2x = 'all'x ]; then
         gen_proto
         cd $work_src
         make clean && make
@@ -62,7 +62,7 @@ elif [ $1x == 'compile'x ]; then
         make
     fi
     exit 1
-elif [ $1x == 'all'x ]; then
+elif [ $1x = 'all'x ]; then
     gen_proto
     cd $work_src
     make clean && make
