@@ -1,25 +1,26 @@
 #ifndef __KIM_SESSION_H__
 #define __KIM_SESSION_H__
 
+#include <memory>
+
 #include "libco/co_routine.h"
 #include "libco/co_routine_inner.h"
 #include "net.h"
 #include "server.h"
 #include "timers.h"
-#include "util/reference.h"
 
 namespace kim {
 
 // Session
 ////////////////////////////////////////////////
 
-class Session : public Logger, public Net, public Reference {
+class Session : public Logger, public Net {
    public:
     Session(Log* logger, INet* net, const std::string& sessid);
-    virtual ~Session() {}
+    virtual ~Session() { LOG_TRACE("~Session, session id: %s", m_sessid.c_str()); }
 
-    const char* sessid() { return m_sessid.c_str(); }
-    const std::string& sessid() const { return m_sessid; }
+    const char* id() { return m_sessid.c_str(); }
+    const std::string& id() const { return m_sessid; }
 
     void* privdata() { return m_privdata; }
     void set_privdata(void* privdata) { m_privdata = privdata; }
@@ -35,51 +36,44 @@ class Session : public Logger, public Net, public Reference {
 // SessionMgr
 ////////////////////////////////////////////////
 
-class SessionMgr : public Logger, public Net, public TimerCron {
+class SessionMgr : public Logger, public Net {
    public:
-    typedef struct co_timer_s {
-        int tid; /* timer id. */
-        Session* s;
+    typedef struct tm_session_s {
+        int timer_id; /* timer id. */
+        std::shared_ptr<Session> session;
         void* privdata;
-    } co_timer_t;
+    } tm_session_t;
 
     SessionMgr(Log* logger, INet* net);
-    virtual ~SessionMgr();
+    virtual ~SessionMgr() {}
 
     bool init();
     bool del_session(const std::string& sessid);
-    Session* get_session(const std::string& sessid);
-    bool add_session(Session* s, uint64_t after, uint64_t repeat = 0);
+    std::shared_ptr<Session> get_session(const std::string& sessid);
+    bool add_session(std::shared_ptr<Session> s, uint64_t after, uint64_t repeat = 0);
 
+    /* add an new obj, if find by session id failed. */
     template <typename T>
-    T* get_alloc_session(const std::string& sessid, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
-        auto s = dynamic_cast<T*>(get_session(sessid));
-        if (s == nullptr) {
-            s = new T(m_logger, m_net, sessid);
-            if (!add_session(s, after, repeat)) {
-                SAFE_DELETE(s);
+    std::shared_ptr<T> get_alloc_session(
+        const std::string& sessid, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
+        std::shared_ptr<T> session = std::dynamic_pointer_cast<T>(get_session(sessid));
+        if (session == nullptr) {
+            session = std::make_shared<T>(m_logger, m_net, sessid);
+            if (!add_session(session, after, repeat)) {
                 return nullptr;
             }
         }
-        return s;
+        return session;
     }
 
    private:
-    void destory();
-
-    bool del_timer(int tid);
-    co_timer_t* add_timer(Session* s, uint64_t after, uint64_t repeat);
-
-    void on_handle_session_timer(int tid, bool is_repeat, void* privdata);
-    static void handle_session_timer(int tid, bool is_repeat, void* privdata);
-
-   public:
-    virtual void on_repeat_timer() override; /* call by parent, 10 times/s on Linux. */
+    bool del_timer(int id);
+    std::shared_ptr<tm_session_t> add_timer(
+        std::shared_ptr<Session> session, uint64_t after, uint64_t repeat);
 
    private:
-    Timers* m_timers;
-    std::queue<Session*> m_free_sessions;
-    std::unordered_map<std::string, co_timer_t*> m_sessions;
+    std::shared_ptr<Timers> m_timers;
+    std::unordered_map<std::string, std::shared_ptr<tm_session_t>> m_sessions;
 };
 
 }  // namespace kim

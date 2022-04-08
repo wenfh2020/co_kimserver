@@ -1,20 +1,22 @@
 #ifndef __KIM_TIMERS_H__
 #define __KIM_TIMERS_H__
 
+#include <memory>
+
 #include "server.h"
 #include "timer.h"
 
 namespace kim {
 
 /* timer's group id (first: due time, second: timer id)*/
-typedef std::pair<uint64_t, int> TimerGrpID;
+using TimerGrpID = std::pair<uint64_t, int>;
 
-/* timer's callback function. 
- * first arg: timer's id. 
+/* timer's callback function.
+ * first arg: timer's id.
  * second arg: is repeat.
  * third arg: privdata.
  */
-typedef std::function<void(int, bool, void*)> TimerEvent;
+using TimerCallback = std::function<void(int, bool, void*)>;
 
 // Timer
 ////////////////////////////////////////////////
@@ -22,7 +24,7 @@ typedef std::function<void(int, bool, void*)> TimerEvent;
 class Timer {
    public:
     Timer() {}
-    Timer(int id, const TimerEvent& fn, uint64_t after, uint64_t repeat, void* privdata);
+    Timer(int id, const TimerCallback& fn, uint64_t after, uint64_t repeat, void* privdata);
     virtual ~Timer() {}
 
     int id() { return m_id; }
@@ -37,15 +39,15 @@ class Timer {
     uint64_t repeat_time() { return m_repeat_time; }
     void set_repeat_time(uint64_t repeat) { m_repeat_time = repeat; }
 
-    TimerEvent& callback_fn() { return m_callback_fn; }
-    void set_callback_fn(const TimerEvent& fn) { m_callback_fn = fn; }
+    TimerCallback& callback() { return m_callback; }
+    void set_callback(const TimerCallback& fn) { m_callback = fn; }
 
    protected:
     int m_id = 0;               /* timer's id. */
     uint64_t m_after_time = 0;  /* timeout in `after` milliseconds. */
     uint64_t m_repeat_time = 0; /* repeat milliseconds. */
     void* m_privdata = nullptr; /* user's data. */
-    TimerEvent m_callback_fn;   /* callback function. */
+    TimerCallback m_callback;   /* callback function. */
 };
 
 // Timers
@@ -54,14 +56,14 @@ class Timer {
 class Timers : public Logger, public CoTimer {
    public:
     Timers(Log* logger) : Logger(logger) {}
-    virtual ~Timers();
+    virtual ~Timers() {}
 
     Timers(const Timers&) = delete;
     Timers& operator=(const Timers&) = delete;
 
    public:
     bool del_timer(int id);
-    int add_timer(const TimerEvent& fn, uint64_t after, uint64_t repeat = 0, void* privdata = nullptr);
+    int add_timer(const TimerCallback& fn, uint64_t after, uint64_t repeat = 0, void* privdata = nullptr);
 
    public:
     /* call by CoTimer's coroutine. */
@@ -72,7 +74,7 @@ class Timers : public Logger, public CoTimer {
 
    protected:
     int m_last_timer_id = 0;
-    std::map<TimerGrpID, Timer*> m_timers;
+    std::map<TimerGrpID, std::shared_ptr<Timer>> m_timers;
     std::unordered_map<int, TimerGrpID> m_ids; /* key: timer's id. */
 };
 

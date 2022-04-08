@@ -8,7 +8,7 @@ UserSession::UserSession(Log* logger, INet* net, const std::string& sessid)
 
 void UserSession::on_timeout() {
     LOG_DEBUG("session timeout, sessid: %s, user id: %d",
-              sessid(), m_user_id);
+              id(), m_user_id);
 }
 
 }  // namespace kim

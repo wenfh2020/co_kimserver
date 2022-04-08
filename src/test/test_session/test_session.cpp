@@ -1,6 +1,5 @@
 #include "../common/common.h"
 #include "user_session.h"
-#include "util/reference.h"
 
 typedef struct test_task_s {
     int id;
@@ -44,18 +43,19 @@ void* co_session(void* arg) {
 
     for (;;) {
         std::string sessid(format_str("%d", task->id));
-        auto s = g_session_mgr->get_alloc_session<UserSession>(sessid);
-        PROTECT_REF(s);
-        if (s == nullptr) {
-            LOG_ERROR("get session failed! sessid: %s", sessid.c_str());
+        auto sess = g_session_mgr->get_alloc_session<UserSession>(sessid);
+        if (sess == nullptr) {
+            LOG_ERROR("get sess failed! sessid: %s", sessid.c_str());
             break;
         }
 
-        s->set_user_id(str_to_int(sessid));
-        s->set_user_name(format_str("hello world - %d", task->id));
+        sess->set_user_id(str_to_int(sessid));
+        sess->set_user_name(format_str("hello world - %d", task->id));
+        LOG_DEBUG("session info, session id: %s, userid: %d,name: %s",
+                  sess->id(), sess->user_id(), sess->user_name().c_str())
 
         // if (!g_session_mgr->del_session(sessid)) {
-        //     LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());
+        //     LOG_ERROR("delete sess failed! sessid: %s", sessid.c_str());
         // }
 
         co_sleep(10 * 1000);
@@ -71,10 +71,6 @@ void* co_timer(void* arg) {
 
     for (;;) {
         co_sleep(100);
-
-        if (g_session_mgr != nullptr) {
-            g_session_mgr->on_timer();
-        }
 
         for (auto& v : g_free_tasks) {
             co_release(v->co);

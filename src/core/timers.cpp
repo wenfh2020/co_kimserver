@@ -5,27 +5,21 @@ namespace kim {
 // Timer
 ////////////////////////////////////////////////
 
-Timer::Timer(int id, const TimerEvent& fn, uint64_t after, uint64_t repeat, void* privdata)
-    : m_id(id), m_after_time(after), m_repeat_time(repeat), m_privdata(privdata), m_callback_fn(fn) {
+Timer::Timer(int id, const TimerCallback& fn, uint64_t after, uint64_t repeat, void* privdata)
+    : m_id(id), m_after_time(after), m_repeat_time(repeat), m_privdata(privdata), m_callback(fn) {
 }
 
 // Timers
 ////////////////////////////////////////////////
 
-Timers::~Timers() {
-    for (auto& it : m_timers) {
-        SAFE_DELETE(it.second);
-    }
-    m_ids.clear();
-    m_timers.clear();
-}
-
-int Timers::add_timer(const TimerEvent& fn, uint64_t after, uint64_t repeat, void* privdata) {
+int Timers::add_timer(const TimerCallback& fn,
+                      uint64_t after, uint64_t repeat, void* privdata) {
     int id = new_tid();
     TimerGrpID gid = {mstime() + after, id};
+    auto timer = std::make_shared<Timer>(id, fn, after, repeat, privdata);
 
+    m_timers[gid] = timer;
     m_ids[id] = gid;
-    m_timers[gid] = (new Timer(id, fn, after, repeat, privdata));
 
     LOG_DEBUG("add timer done! id: %d", id);
     return id;
@@ -37,10 +31,9 @@ bool Timers::del_timer(int id) {
         return false;
     }
 
-    auto itr = m_timers.find(it->second);
-    if (itr != m_timers.end()) {
-        SAFE_DELETE(itr->second);
-        m_timers.erase(itr);
+    auto it_timer = m_timers.find(it->second);
+    if (it_timer != m_timers.end()) {
+        m_timers.erase(it_timer);
     }
     m_ids.erase(it);
 
@@ -55,12 +48,12 @@ void Timers::on_repeat_timer() {
         auto it = m_timers.begin();
         auto gid = it->first;
         auto timer = it->second;
-        auto fn = timer->callback_fn();
+        auto callback = timer->callback();
 
         m_timers.erase(it);
 
-        if (fn) {
-            fn(timer->id(), timer->repeat_time() != 0, timer->privdata());
+        if (callback != nullptr) {
+            callback(timer->id(), timer->repeat_time() != 0, timer->privdata());
         }
 
         if (timer->repeat_time() != 0) {
@@ -70,8 +63,7 @@ void Timers::on_repeat_timer() {
             m_timers[new_gid] = timer;
             m_ids[gid.second] = new_gid;
         } else {
-            LOG_TRACE("timer hit, delete timer, id: %d", gid.second);
-            SAFE_DELETE(timer);
+            LOG_TRACE("no repeat timer hit, delete timer, id: %d", gid.second);
             auto itr = m_ids.find(gid.first);
             if (itr != m_ids.end()) {
                 m_ids.erase(itr);

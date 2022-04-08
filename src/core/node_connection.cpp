@@ -68,18 +68,16 @@ int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj
 
 NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const std::string& obj) {
     int hash;
-    node_t* node;
     co_data_t* cd;
-    std::string node_id;
     co_array_data_t* ad;
 
-    node = net()->nodes()->get_node_in_hash(node_type, obj);
+    auto node = net()->nodes()->get_node_in_hash(node_type, obj);
     if (node == nullptr) {
         LOG_ERROR("can not find node type: %s", node_type.c_str());
         return nullptr;
     }
 
-    node_id = format_nodes_id(node->host, node->port, node->worker_index);
+    auto node_id = format_nodes_id(node->host, node->port, node->worker_index);
 
     auto it = m_coroutines.find(node_id);
     if (it == m_coroutines.end()) {
@@ -217,10 +215,10 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
         return nullptr;
     }
 
-    /* 
-    * A1 worker connects to B0's worker (A1 --> B1). 
-    * https://wenfh2020.com/2020/10/23/kimserver-node-contact/ 
-    * */
+    /*
+     * A1 worker connects to B0's worker (A1 --> B1).
+     * https://wenfh2020.com/2020/10/23/kimserver-node-contact/
+     * */
     if (c->is_try_connect()) {
         if (net()->sys_cmd()->send_connect_req_to_worker(c) != ERR_OK) {
             LOG_ERROR("send CMD_REQ_CONNECT_TO_WORKER failed! fd: %d", c->fd());
@@ -291,8 +289,8 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
 
     for (p = servinfo; p != NULL; p = p->ai_next) {
         /* Try to create the socket and to connect it.
-             * If we fail in the socket() call, or on connect(), we retry with
-             * the next entry in servinfo. */
+         * If we fail in the socket() call, or on connect(), we retry with
+         * the next entry in servinfo. */
         fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (fd != -1) {
             break;

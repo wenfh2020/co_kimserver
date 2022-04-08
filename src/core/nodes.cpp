@@ -9,17 +9,13 @@ Nodes::Nodes(Log* logger, int vnode_cnt, HASH_ALGORITHM ha)
     : Logger(logger), m_vnode_cnt(vnode_cnt), m_ha(ha) {
 }
 
-Nodes::~Nodes() {
-    clear();
-}
-
 bool Nodes::is_valid_zk_node(const zk_node& znode) {
     return !(znode.path().empty() || znode.host().empty() || znode.port() == 0 ||
              znode.type().empty() || znode.worker_cnt() == 0 || znode.active_time() == 0);
 }
 
 bool Nodes::check_zk_node_host(const zk_node& cur) {
-    std::string host = format_str("%s:%d", cur.host().c_str(), cur.port());
+    auto host = format_str("%s:%d", cur.host().c_str(), cur.port());
     auto it = m_host_zk_paths.find(host);
     if (it == m_host_zk_paths.end()) {
         return true;
@@ -101,7 +97,7 @@ bool Nodes::del_zk_node(const std::string& path) {
     }
 
     /* delete host & path info. */
-    std::string host = format_str("%s:%d", znode.host().c_str(), znode.port());
+    auto host = format_str("%s:%d", znode.host().c_str(), znode.port());
     auto itr = m_host_zk_paths.find(host);
     if (itr != m_host_zk_paths.end()) {
         m_host_zk_paths.erase(itr);
@@ -133,7 +129,7 @@ bool Nodes::add_node(const std::string& node_type, const std::string& host, int 
     LOG_INFO("add node, node type: %s, host: %s, port: %d, worker: %d",
              node_type.c_str(), host.c_str(), port, worker);
 
-    std::string node_id = format_nodes_id(host, port, worker);
+    auto node_id = format_nodes_id(host, port, worker);
     if (m_nodes.find(node_id) != m_nodes.end()) {
         LOG_DEBUG("node (%s) has been added!", node_id.c_str());
         return true;
@@ -141,15 +137,14 @@ bool Nodes::add_node(const std::string& node_type, const std::string& host, int 
 
     m_version++;
 
-    node_t* node;
     std::vector<uint32_t> vnodes;
     VNODE2NODE_MAP& vnode2node = m_vnodes[node_type];
-    size_t old_vnode_cnt = vnode2node.size();
+    auto old_vnode_cnt = vnode2node.size();
 
     vnodes = gen_vnodes(node_id);
-    node = new node_t{node_id, node_type, host, port, worker, vnodes};
+    std::shared_ptr<node_t> node(new node_t{node_id, node_type, host, port, worker, vnodes});
 
-    for (auto& v : vnodes) {
+    for (auto v : vnodes) {
         if (!vnode2node.insert({v, node}).second) {
             LOG_WARN(
                 "duplicate virtual nodes! "
@@ -162,7 +157,6 @@ bool Nodes::add_node(const std::string& node_type, const std::string& host, int 
     if (vnode2node.size() == old_vnode_cnt) {
         LOG_ERROR("add virtual nodes failed! node id: %s, node type: %s",
                   node->id.c_str(), node->type.c_str());
-        SAFE_DELETE(node);
         return false;
     }
 
@@ -181,7 +175,7 @@ bool Nodes::del_node(const std::string& node_id) {
     m_version++;
 
     /* clear vnode. */
-    node_t* node = it->second;
+    auto node = it->second;
     auto itr = m_vnodes.find(node->type);
     if (itr != m_vnodes.end()) {
         for (auto& v : node->vnodes) {
@@ -189,7 +183,6 @@ bool Nodes::del_node(const std::string& node_id) {
         }
     }
 
-    delete node;
     m_nodes.erase(it);
     return true;
 }
@@ -200,11 +193,11 @@ int Nodes::get_node_worker_index(const std::string& node_id) {
     return (it != m_nodes.end()) ? it->second->worker_index : -1;
 }
 
-node_t* Nodes::get_node_in_hash(const std::string& node_type, int obj) {
+std::shared_ptr<node_t> Nodes::get_node_in_hash(const std::string& node_type, int obj) {
     return get_node_in_hash(node_type, std::to_string(obj));
 }
 
-node_t* Nodes::get_node_in_hash(const std::string& node_type, const std::string& obj) {
+std::shared_ptr<node_t> Nodes::get_node_in_hash(const std::string& node_type, const std::string& obj) {
     auto it = m_vnodes.find(node_type);
     if (it == m_vnodes.end()) {
         return nullptr;
@@ -280,7 +273,7 @@ void Nodes::print_debug_nodes_info() {
     /* nodes */
     LOG_DEBUG("nodes (%lu):", m_nodes.size());
     for (auto& v : m_nodes) {
-        node_t* node = v.second;
+        auto node = v.second;
         LOG_DEBUG("id: %s, node type: %s, host: %s, port: %d, worker index: %d",
                   v.first.c_str(), node->type.c_str(),
                   node->host.c_str(), node->port, node->worker_index);
@@ -292,11 +285,7 @@ void Nodes::clear() {
     m_my_zk_node.clear();
     m_host_zk_paths.clear();
     m_zk_nodes.clear();
-    for (auto& it : m_nodes) {
-        delete it.second;
-    }
     m_nodes.clear();
     m_vnodes.clear();
 }
-
 }  // namespace kim

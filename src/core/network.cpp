@@ -344,10 +344,6 @@ void Network::on_repeat_timer() {
     if (m_coroutines != nullptr) {
         m_coroutines->on_timer();
     }
-
-    if (m_session_mgr != nullptr) {
-        m_session_mgr->on_timer();
-    }
 }
 
 bool Network::report_payload_to_zookeeper() {
@@ -361,7 +357,7 @@ bool Network::report_payload_to_zookeeper() {
     PayloadStats pls;
     Payload *manager_pl, *worker_pl;
     int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0, read_bytes = 0, write_bytes = 0;
-    const std::unordered_map<int, worker_info_t*>& workers = m_worker_data_mgr->get_infos();
+    const auto& workers = m_worker_data_mgr->get_infos();
 
     /* node info. */
     node = pls.mutable_node();
@@ -713,15 +709,20 @@ int Network::process_tcp_msg(Connection* c) {
         }
 
         if (ret == ERR_UNKOWN_CMD) {
-            ret = m_module_mgr->handle_request(req);
-            if (ret != ERR_OK) {
-                if (ret == ERR_UNKOWN_CMD) {
-                    LOG_WARN("can not find cmd handler! ret: %d, fd: %d, cmd: %d",
-                             ret, fd, req->msg_head()->cmd());
-                } else {
-                    LOG_DEBUG("handler cmd failed! ret: %d, fd: %d, cmd: %d",
-                              ret, fd, req->msg_head()->cmd());
+            if (is_worker()) {
+                ret = m_module_mgr->handle_request(req);
+                if (ret != ERR_OK) {
+                    if (ret == ERR_UNKOWN_CMD) {
+                        LOG_WARN("can not find cmd handler! ret: %d, fd: %d, cmd: %d",
+                                 ret, fd, req->msg_head()->cmd());
+                    } else {
+                        LOG_DEBUG("handler cmd failed! ret: %d, fd: %d, cmd: %d",
+                                  ret, fd, req->msg_head()->cmd());
+                    }
+                    break;
                 }
+            } else {
+                send_ack(req, ERR_UNKOWN_CMD, "invalid cmd!");
                 break;
             }
         }
@@ -1063,10 +1064,8 @@ int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
     }
 
     /* manger and workers communicate through socketpair. */
-    const std::unordered_map<int, worker_info_t*>& workers =
-        m_worker_data_mgr->get_infos();
-
-    for (auto& v : workers) {
+    const auto& workers = m_worker_data_mgr->get_infos();
+    for (const auto& v : workers) {
         auto it = m_conns.find(v.second->fctrl.id);
         if (it == m_conns.end() || it->second->is_invalid()) {
             LOG_ALERT("ctrl fd is invalid! fd: %d", v.second->fctrl.fd);

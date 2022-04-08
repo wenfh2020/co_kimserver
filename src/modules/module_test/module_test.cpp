@@ -95,7 +95,6 @@ int MoudleTest::test_redis(const Request* req) {
 int MoudleTest::test_session(const Request* req) {
     print_cmd_info(req);
 
-    UserSession* s;
     std::string sessid;
     CJsonObject json_data;
 
@@ -107,8 +106,7 @@ int MoudleTest::test_session(const Request* req) {
               json_data("user_id").c_str(), json_data("user_name").c_str());
 
     sessid = json_data("user_id");
-    s = SESS_MGR->get_alloc_session<UserSession>(sessid);
-    PROTECT_REF(s);
+    auto s = SESS_MGR->get_alloc_session<UserSession>(sessid);
     if (s == nullptr) {
         LOG_ERROR("get alloc session failed! sessid: %s", sessid.c_str());
         return net()->send_ack(req, ERR_FAILED, "fail", "get alloc session failed!");
