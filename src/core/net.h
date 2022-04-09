@@ -1,5 +1,4 @@
-#ifndef __KIM_NET_H__
-#define __KIM_NET_H__
+#pragma once
 
 #include "error.h"
 #include "mysql/mysql_mgr.h"
@@ -89,5 +88,3 @@ class Net {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_NET_H__

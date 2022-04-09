@@ -1,7 +1,5 @@
 /* refer: https://github.com/yandaren/zk_cpp */
-
-#ifndef __KIM_ZK_H__
-#define __KIM_ZK_H__
+#pragma once
 
 /** use the lib zookeeper as static lib */
 #ifndef USE_STATIC_LIB
@@ -25,9 +23,9 @@ enum zoo_rc {
     z_ok = 0, /*!< Everything is OK */
 
     /** System and server-side errors.
-    * This is never thrown by the server, it shouldn't be used other than
-    * to indicate a range. Specifically error codes greater than this
-    * value, but lesser than {@link #api_error}, are system errors. */
+     * This is never thrown by the server, it shouldn't be used other than
+     * to indicate a range. Specifically error codes greater than this
+     * value, but lesser than {@link #api_error}, are system errors. */
     z_system_error = -1,
     z_runtime_inconsistency = -2, /*!< A runtime inconsistency was found */
     z_data_inconsistency = -3,    /*!< A data inconsistency was found */
@@ -39,11 +37,11 @@ enum zoo_rc {
     z_invliad_state = -9,         /*!< Invliad zhandle state */
 
     /** API errors.
-    * This is never thrown by the server, it shouldn't be used other than
-    * to indicate a range. Specifically error codes greater than this
-    * value are API errors (while values less than this indicate a
-    * {@link #system_error}).
-    */
+     * This is never thrown by the server, it shouldn't be used other than
+     * to indicate a range. Specifically error codes greater than this
+     * value are API errors (while values less than this indicate a
+     * {@link #system_error}).
+     */
     z_api_error = -100,
     z_no_node = -101,                   /*!< Node does not exist */
     z_no_auth = -102,                   /*!< Not authenticated */
@@ -118,25 +116,25 @@ struct zoo_state_t {
 };
 
 class noncopyable {
-protected:
+   protected:
     noncopyable() {}
     ~noncopyable() {}
 
-private:
+   private:
     noncopyable(const noncopyable&);
     noncopyable& operator=(const noncopyable&);
 };
 
 class zk_cpp : public noncopyable {
-protected:
+   protected:
     void* m_zh;         // zhandle_t
     std::string m_url;  // zookeeper server urls
 
-public:
+   public:
     zk_cpp();
     ~zk_cpp();
 
-public:
+   public:
     /**
      * @brief get the errocode string
      */
@@ -190,7 +188,7 @@ public:
      */
     static zoo_acl_t create_ip_acl(int32_t perms, const std::string& ip_info);
 
-public:
+   public:
     /**
      * @brief try connect zookeeper servers and attach notify calllback fn.
      *
@@ -217,7 +215,7 @@ public:
      */
     bool unrecoverable();
 
-public:
+   public:
     /** events */
 
     /** event sesion connected */
@@ -238,7 +236,7 @@ public:
     /** event path child change */
     void on_path_child_change(const char* path);
 
-protected:
+   protected:
     /**
      * @brief   try create a node synchronously
      *
@@ -267,7 +265,7 @@ protected:
      */
     zoo_rc create_node(const char* path, const std::string& value, const std::vector<zoo_acl_t>& acl, int32_t create_flags, char* path_buffer, int32_t path_buffer_len);
 
-public:
+   public:
     /** synchronous apis */
 
     /**
@@ -468,13 +466,11 @@ public:
      */
     zoo_rc watch_children_event(const char* path, std::vector<std::string>& out_children);
 
-public:
+   public:
     /*  asynchronous apis */
 
-protected:
+   protected:
     void close();
 };
 
 }  // namespace utility
-
-#endif  // __KIM_ZK_H__

@@ -1,5 +1,4 @@
-#ifndef __KIM_HASH_H__
-#define __KIM_HASH_H__
+#pragma once
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -15,5 +14,3 @@ uint32_t murmur3_32(const char* key, uint32_t len, uint32_t seed);
 #ifdef __cplusplus
 }
 #endif
-
-#endif  //__KIM_HASH_H__

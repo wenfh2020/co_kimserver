@@ -1,5 +1,4 @@
-#ifndef __KIM_MYSQL_RESULT_H__
-#define __KIM_MYSQL_RESULT_H__
+#pragma once
 
 #include <mysql/errmsg.h>
 #include <mysql/mysql.h>
@@ -46,5 +45,3 @@ class MysqlResult {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_MYSQL_RESULT_H__

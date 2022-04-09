@@ -1,7 +1,4 @@
-#ifndef __KIM_SESSION_H__
-#define __KIM_SESSION_H__
-
-#include <memory>
+#pragma once
 
 #include "libco/co_routine.h"
 #include "libco/co_routine_inner.h"
@@ -16,7 +13,7 @@ namespace kim {
 
 class Session : public Logger, public Net {
    public:
-    Session(Log* logger, INet* net, const std::string& sessid);
+    Session(Log* logger, INet* net, const std::string& id);
     virtual ~Session() { LOG_TRACE("~Session, session id: %s", m_sessid.c_str()); }
 
     const char* id() { return m_sessid.c_str(); }
@@ -48,17 +45,17 @@ class SessionMgr : public Logger, public Net {
     virtual ~SessionMgr() {}
 
     bool init();
-    bool del_session(const std::string& sessid);
-    std::shared_ptr<Session> get_session(const std::string& sessid);
+    bool del_session(const std::string& id);
+    std::shared_ptr<Session> get_session(const std::string& id);
     bool add_session(std::shared_ptr<Session> s, uint64_t after, uint64_t repeat = 0);
 
     /* add an new obj, if find by session id failed. */
     template <typename T>
     std::shared_ptr<T> get_alloc_session(
-        const std::string& sessid, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
-        std::shared_ptr<T> session = std::dynamic_pointer_cast<T>(get_session(sessid));
+        const std::string& id, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
+        std::shared_ptr<T> session = std::dynamic_pointer_cast<T>(get_session(id));
         if (session == nullptr) {
-            session = std::make_shared<T>(m_logger, m_net, sessid);
+            session = std::make_shared<T>(m_logger, m_net, id);
             if (!add_session(session, after, repeat)) {
                 return nullptr;
             }
@@ -77,5 +74,3 @@ class SessionMgr : public Logger, public Net {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_SESSION_H__

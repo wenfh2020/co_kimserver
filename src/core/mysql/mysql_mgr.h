@@ -1,5 +1,4 @@
-#ifndef __KIM_MYSQL_MGR_H__
-#define __KIM_MYSQL_MGR_H__
+#pragma once
 
 #include "../libco/co_routine.h"
 #include "../libco/co_routine_inner.h"
@@ -60,21 +59,21 @@ class MysqlMgr : Logger, public TimerCron {
 
     /**
      * @brief mysql write interface.
-     * 
+     *
      * @param node: define in config.json {"database":{"node":{...}}}
      * @param sql: mysql commnad string.
-     * 
+     *
      * @return error.h / enum E_ERROR.
      */
     int sql_write(const std::string& node, const std::string& sql);
 
     /**
      * @brief mysql read interface.
-     * 
+     *
      * @param node: define in config.json {"database":{"node":{...}}}
      * @param sql: mysql commnad string.
      * @param rows: query result.
-     * 
+     *
      * @return error.h / enum E_ERROR.
      */
     int sql_read(const std::string& node, const std::string& sql, vec_row_t& rows);
@@ -119,5 +118,3 @@ class MysqlMgr : Logger, public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_MYSQL_MGR_H__

@@ -1,5 +1,4 @@
-#ifndef __KIM_MANAGER_H__
-#define __KIM_MANAGER_H__
+#pragma once
 
 #include "network.h"
 #include "timer.h"
@@ -41,5 +40,3 @@ class Manager : CoTimer {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_MANAGER_H__

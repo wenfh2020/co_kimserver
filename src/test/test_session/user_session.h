@@ -1,5 +1,4 @@
-#ifndef __KIM_USER_SESSION_H__
-#define __KIM_USER_SESSION_H__
+#pragma once
 
 #include "session.h"
 
@@ -7,7 +6,7 @@ namespace kim {
 
 class UserSession : public Session {
    public:
-    UserSession(Log* logger, INet* net, const std::string& sessid);
+    UserSession(Log* logger, INet* net, const std::string& id);
     virtual ~UserSession() {}
 
     uint64_t user_id() { return m_user_id; }
@@ -23,5 +22,3 @@ class UserSession : public Session {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_USER_SESSION_H__

@@ -1,5 +1,4 @@
-#ifndef __KIM_CODEC_PROTO_H__
-#define __KIM_CODEC_PROTO_H__
+#pragma once
 
 #include "../server.h"
 #include "codec.h"
@@ -16,5 +15,3 @@ class CodecProto : public Codec {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_CODEC_PROTO_H__

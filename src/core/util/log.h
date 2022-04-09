@@ -1,5 +1,4 @@
-#ifndef __KIM_LOG_H__
-#define __KIM_LOG_H__
+#pragma once
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -62,5 +61,3 @@ class Logger {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_LOG_H__

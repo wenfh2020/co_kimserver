@@ -1,5 +1,4 @@
-#ifndef __KIM_CODEC_H__
-#define __KIM_CODEC_H__
+#pragma once
 
 #include "../protobuf/proto/http.pb.h"
 #include "../protobuf/proto/msg.pb.h"
@@ -47,5 +46,3 @@ class Codec : public Logger {
 };
 
 };  // namespace kim
-
-#endif  //__KIM_CODEC_H__

@@ -1,5 +1,4 @@
-#ifndef __KIM_REQUEST_H__
-#define __KIM_REQUEST_H__
+#pragma once
 
 #include "connection.h"
 #include "protobuf/proto/http.pb.h"
@@ -37,5 +36,3 @@ class Request {
 };
 
 };  // namespace kim
-
-#endif  // __KIM_REQUEST_H__

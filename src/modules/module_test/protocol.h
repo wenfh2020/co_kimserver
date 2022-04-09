@@ -1,5 +1,4 @@
-#ifndef __KIM_PROTOCOL_H__
-#define __KIM_PROTOCOL_H__
+#pragma once
 
 namespace kim {
 
@@ -15,5 +14,3 @@ enum {
 };
 
 }
-
-#endif  //__KIM_PROTOCOL_H__

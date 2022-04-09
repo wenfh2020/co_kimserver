@@ -1,7 +1,4 @@
-#ifndef __KIM_NODES_H__
-#define __KIM_NODES_H__
-
-#include <memory>
+#pragma once
 
 #include "protobuf/sys/nodes.pb.h"
 #include "server.h"
@@ -86,5 +83,3 @@ class Nodes : public Logger {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_NODES_H__

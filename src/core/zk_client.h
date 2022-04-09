@@ -1,7 +1,6 @@
 /* https://wenfh2020.com/2020/10/24/kimserver-nodes-discovery/ */
 
-#ifndef __KIM_ZOOKEEPER_CLIENT_H__
-#define __KIM_ZOOKEEPER_CLIENT_H__
+#pragma once
 
 #include "net.h"
 #include "nodes.h"
@@ -76,5 +75,3 @@ class ZkClient : public Bio, public Net, public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_ZOOKEEPER_CLIENT_H__

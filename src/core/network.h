@@ -1,5 +1,4 @@
-#ifndef __KIM_NETWORK_H__
-#define __KIM_NETWORK_H__
+#pragma once
 
 #include "codec/codec.h"
 #include "connection.h"
@@ -188,5 +187,3 @@ class Network : public INet, public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  // __KIM_NETWORK_H__

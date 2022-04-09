@@ -22,8 +22,8 @@ Network::~Network() {
 }
 
 /* parent. */
-bool Network::create_m(SysConfig* cf) {
-    if (cf == nullptr) {
+bool Network::create_m(SysConfig* config) {
+    if (config == nullptr) {
         return false;
     }
 
@@ -31,9 +31,9 @@ bool Network::create_m(SysConfig* cf) {
     Connection* c;
     co_task_t* task;
 
-    m_conf = cf;
+    m_conf = config;
 
-    if (!load_public(cf)) {
+    if (!load_public(config)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -49,11 +49,11 @@ bool Network::create_m(SysConfig* cf) {
     }
 
     /* inner listen. */
-    if (!cf->node_host().empty()) {
-        fd = listen_to_port(cf->node_host().c_str(), cf->node_port());
+    if (!config->node_host().empty()) {
+        fd = listen_to_port(config->node_host().c_str(), config->node_port());
         if (fd == -1) {
             LOG_ERROR("listen to port failed! %s:%d",
-                      cf->node_host().c_str(), cf->node_port());
+                      config->node_host().c_str(), config->node_port());
             return false;
         }
 
@@ -77,18 +77,18 @@ bool Network::create_m(SysConfig* cf) {
     }
 
     /* gate listen. */
-    if (!cf->is_reuseport()) {
-        if (!cf->gate_host().empty()) {
-            fd = listen_to_port(cf->gate_host().c_str(), cf->gate_port());
+    if (!config->is_reuseport()) {
+        if (!config->gate_host().empty()) {
+            fd = listen_to_port(config->gate_host().c_str(), config->gate_port());
             if (fd == -1) {
                 LOG_ERROR("listen to gate failed! %s:%d",
-                          cf->gate_host().c_str(), cf->gate_port());
+                          config->gate_host().c_str(), config->gate_port());
                 return false;
             }
 
             m_gate_fd = fd;
             LOG_INFO("gate fd: %d, host: %s, port: %d",
-                     m_gate_fd, cf->gate_host().c_str(), cf->gate_port());
+                     m_gate_fd, config->gate_host().c_str(), config->gate_port());
 
             c = create_conn(m_gate_fd, m_gate_codec);
             if (c == nullptr) {
@@ -150,10 +150,10 @@ bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
 }
 
 /* worker. */
-bool Network::create_w(SysConfig* cf, int ctrl_fd, int data_fd, int index) {
-    m_conf = cf;
+bool Network::create_w(SysConfig* config, int ctrl_fd, int data_fd, int index) {
+    m_conf = config;
 
-    if (!load_public(cf)) {
+    if (!load_public(config)) {
         LOG_ERROR("load public failed!");
         return false;
     }
@@ -220,18 +220,18 @@ bool Network::create_w(SysConfig* cf, int ctrl_fd, int data_fd, int index) {
     co_resume(task->co);
 
     /* gate listen. */
-    if (cf->is_reuseport()) {
-        if (!cf->gate_host().empty()) {
-            fd = listen_to_port(cf->gate_host().c_str(), cf->gate_port(), true);
+    if (config->is_reuseport()) {
+        if (!config->gate_host().empty()) {
+            fd = listen_to_port(config->gate_host().c_str(), config->gate_port(), true);
             if (fd == -1) {
                 LOG_ERROR("listen to gate failed! %s:%d",
-                          cf->gate_host().c_str(), cf->gate_port());
+                          config->gate_host().c_str(), config->gate_port());
                 return false;
             }
 
             m_gate_fd = fd;
             LOG_INFO("gate fd: %d, host: %s, port: %d",
-                     fd, cf->gate_host().c_str(), cf->gate_port());
+                     fd, config->gate_host().c_str(), config->gate_port());
 
             c = create_conn(fd, m_gate_codec);
             if (c == nullptr) {
@@ -800,8 +800,8 @@ Connection* Network::create_conn(int fd) {
     return c;
 }
 
-bool Network::load_public(SysConfig* cf) {
-    if (!load_config(cf)) {
+bool Network::load_public(SysConfig* config) {
+    if (!load_config(config)) {
         LOG_ERROR("load config failed!");
         return false;
     }
@@ -846,11 +846,11 @@ bool Network::load_corotines() {
     return (m_coroutines != nullptr);
 }
 
-bool Network::load_config(SysConfig* cf) {
+bool Network::load_config(SysConfig* config) {
     int secs;
     std::string codec;
 
-    codec = cf->gate_codec();
+    codec = config->gate_codec();
     if (!codec.empty()) {
         if (!set_gate_codec(codec)) {
             LOG_ERROR("invalid codec: %s", codec.c_str());
@@ -859,12 +859,12 @@ bool Network::load_config(SysConfig* cf) {
         LOG_DEBUG("gate codec: %s", codec.c_str());
     }
 
-    secs = cf->keep_alive();
+    secs = config->keep_alive();
     if (secs > 0) {
         set_keep_alive(secs);
     }
 
-    if (cf->node_type().empty()) {
+    if (config->node_type().empty()) {
         LOG_ERROR("invalid inner node info!");
         return false;
     }

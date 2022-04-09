@@ -1,5 +1,4 @@
-#ifndef __KIM_TIMER_H__
-#define __KIM_TIMER_H__
+#pragma once
 
 #include "libco/co_routine_inner.h"
 #include "server.h"
@@ -62,5 +61,3 @@ class CoTimer : public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_TIMER_H__

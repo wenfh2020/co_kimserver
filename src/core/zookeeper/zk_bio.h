@@ -1,9 +1,8 @@
-/* 
- * create a new thread to handle the zk sync commands in the background, 
+/*
+ * create a new thread to handle the zk sync commands in the background,
  * and callback for async.
  */
-#ifndef __KIM_ZK_BIO_H__
-#define __KIM_ZK_BIO_H__
+#pragma once
 
 #include <pthread.h>
 
@@ -53,5 +52,3 @@ class Bio : public Logger {
 };
 
 }  // namespace kim
-
-#endif  // __KIM_ZK_BIO_H__

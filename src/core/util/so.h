@@ -1,5 +1,4 @@
-#ifndef __KIM_SO_H__
-#define __KIM_SO_H__
+#pragma once
 
 #include <iostream>
 
@@ -22,5 +21,3 @@ class So {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_SO_H__

@@ -1,13 +1,9 @@
+#pragma once
 
-/* redis pool. */
-
-#ifndef __KIM_REDIS_MGR_H__
-#define __KIM_REDIS_MGR_H__
-
+#include "../error.h"
 #include "../libco/co_routine.h"
 #include "../libco/co_routine_inner.h"
 #include "../server.h"
-#include "../error.h"
 
 namespace kim {
 
@@ -49,19 +45,19 @@ class RedisMgr : Logger {
     virtual ~RedisMgr();
 
    public:
-    /** 
-     * ./bin/config json: 
+    /**
+     * ./bin/config json:
      * {"redis":{"test":{"host":"127.0.0.1","port":6379,"max_conn_cnt":1}}}
      */
     bool init(CJsonObject* config);
 
     /**
      * @brief redis read/write interface.
-     * 
+     *
      * @param node: define in config.json {"redis":{"node":{...}}}
      * @param cmd: redis's commnad string.
      * @param r: redisReply result.
-     * 
+     *
      * @return error.h / enum E_ERROR.
      */
     int exec_cmd(const std::string& node, const std::string& cmd, redisReply** r);
@@ -86,5 +82,3 @@ class RedisMgr : Logger {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_REDIS_MGR_H__

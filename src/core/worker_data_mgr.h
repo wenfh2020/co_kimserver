@@ -1,5 +1,4 @@
-#ifndef __KIM_WORKER_DATA_MGR_H__
-#define __KIM_WORKER_DATA_MGR_H__
+#pragma once
 
 #include "nodes.h"
 #include "protobuf/sys/payload.pb.h"
@@ -42,5 +41,3 @@ class WorkerDataMgr : public Logger {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_WORKER_DATA_MGR_H__

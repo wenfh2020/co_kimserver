@@ -2,8 +2,8 @@
 
 namespace kim {
 
-UserSession::UserSession(Log* logger, INet* net, const std::string& sessid)
-    : Session(logger, net, sessid) {
+UserSession::UserSession(Log* logger, INet* net, const std::string& id)
+    : Session(logger, net, id) {
 }
 
 void UserSession::on_timeout() {

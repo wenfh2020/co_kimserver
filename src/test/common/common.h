@@ -1,5 +1,4 @@
-#ifndef __KIM_COMMON_H__
-#define __KIM_COMMON_H__
+#pragma once
 
 #include "./libco/co_routine.h"
 #include "mysql/mysql_mgr.h"
@@ -71,5 +70,3 @@ bool load_session_mgr() {
 
     return true;
 }
-
-#endif  //__KIM_COMMON_H__

@@ -1,5 +1,4 @@
-#ifndef __KIM_SERVER__
-#define __KIM_SERVER__
+#pragma once
 
 #include <hiredis/hiredis.h>
 #include <stdarg.h>
@@ -13,6 +12,7 @@
 #include <iosfwd>
 #include <iostream>
 #include <list>
+#include <memory>
 #include <queue>
 #include <set>
 #include <sstream>
@@ -54,7 +54,7 @@ typedef struct fd_s {
 #define NET_IP_STR_LEN 46 /* INET6_ADDRSTRLEN is 46, but we need to be sure */
 #define MAX_ACCEPTS_PER_CALL 1000
 
-/* file descriptors: listen, log, channel(socketpair), mysql, 
+/* file descriptors: listen, log, channel(socketpair), mysql,
  * redis, nodes connections... */
 #define CONFIG_MIN_RESERVED_FDS 128
 
@@ -110,5 +110,3 @@ typedef struct fd_s {
 #define CHECK_NEW(v, def) (v == nullptr) ? (v = new def) : (v)
 
 }  // namespace kim
-
-#endif  //__KIM_SERVER__

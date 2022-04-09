@@ -1,7 +1,5 @@
 /* doc: https://wenfh2020.com/2020/10/23/kimserver-node-contact/ */
-
-#ifndef __KIM_SYS_CMD_H__
-#define __KIM_SYS_CMD_H__
+#pragma once
 
 #include "net.h"
 #include "nodes.h"
@@ -68,5 +66,3 @@ class SysCmd : public Logger, public Net, public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_SYS_CMD_H__

@@ -1,6 +1,5 @@
 
-#ifndef __KIM_MODULE_MGR_H__
-#define __KIM_MODULE_MGR_H__
+#pragma once
 
 #include "module.h"
 
@@ -27,5 +26,3 @@ class ModuleMgr : public Logger, public Net {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_MODULE_MGR_H__

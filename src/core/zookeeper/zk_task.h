@@ -1,5 +1,4 @@
-#ifndef __KIM_ZK_TASK_H__
-#define __KIM_ZK_TASK_H__
+#pragma once
 
 #include <iostream>
 #include <vector>
@@ -71,5 +70,3 @@ static const char* zk_cmd_to_string(zk_task_t::CMD cmd) {
 }
 
 }  // namespace kim
-
-#endif  //__KIM_ZK_TASK_H__

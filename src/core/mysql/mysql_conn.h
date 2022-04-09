@@ -1,5 +1,4 @@
-#ifndef __KIM_MYSQL_CONN_H__
-#define __KIM_MYSQL_CONN_H__
+#pragma once
 
 #include "../server.h"
 #include "mysql_result.h"
@@ -34,5 +33,3 @@ class MysqlConn : Logger {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_MYSQL_CONN_H__

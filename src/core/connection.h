@@ -1,5 +1,4 @@
-#ifndef __KIM_CONNECTION_H__
-#define __KIM_CONNECTION_H__
+#pragma once
 
 #include "codec/codec.h"
 #include "net.h"
@@ -113,5 +112,3 @@ class Connection : public Logger, public Net {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_CONNECTION_H__

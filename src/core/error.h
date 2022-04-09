@@ -1,5 +1,4 @@
-#ifndef __KIM_ERROR_H__
-#define __KIM_ERROR_H__
+#pragma once
 
 namespace kim {
 
@@ -52,5 +51,3 @@ enum E_ERROR {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_ERROR_H__

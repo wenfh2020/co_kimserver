@@ -1,5 +1,4 @@
-#ifndef __KIM_WORKER_H__
-#define __KIM_WORKER_H__
+#pragma once
 
 #include "network.h"
 #include "nodes.h"
@@ -38,5 +37,3 @@ class Worker : CoTimer {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_WORKER_H__

@@ -6,8 +6,8 @@ namespace kim {
 
 // Session
 ////////////////////////////////////////////////
-Session::Session(Log* logger, INet* net, const std::string& sessid)
-    : Logger(logger), Net(net), m_sessid(sessid) {
+Session::Session(Log* logger, INet* net, const std::string& id)
+    : Logger(logger), Net(net), m_sessid(id) {
 }
 
 // SessionMgr
@@ -53,22 +53,22 @@ bool SessionMgr::add_session(std::shared_ptr<Session> session, uint64_t after, u
     return true;
 }
 
-std::shared_ptr<Session> SessionMgr::get_session(const std::string& sessid) {
-    auto it = m_sessions.find(sessid);
+std::shared_ptr<Session> SessionMgr::get_session(const std::string& id) {
+    auto it = m_sessions.find(id);
     if (it != m_sessions.end()) {
         return it->second->session;
     }
     return nullptr;
 }
 
-bool SessionMgr::del_session(const std::string& sessid) {
-    auto it = m_sessions.find(sessid);
+bool SessionMgr::del_session(const std::string& id) {
+    auto it = m_sessions.find(id);
     if (it == m_sessions.end()) {
         return false;
     }
     del_timer(it->second->timer_id);
     m_sessions.erase(it);
-    LOG_DEBUG("delete session done! sessid: %s", sessid.c_str());
+    LOG_DEBUG("delete session done! sessid: %s", id.c_str());
     return true;
 }
 

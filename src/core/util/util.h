@@ -1,5 +1,4 @@
-#ifndef __KIM_UTIL_H__
-#define __KIM_UTIL_H__
+#pragma once
 
 #include <google/protobuf/util/json_util.h>
 
@@ -47,5 +46,3 @@ double decimal_rand();  // [0, 1.0) double random.
 #ifdef __cplusplus
 }
 #endif
-
-#endif  //__KIM_UTIL_H__

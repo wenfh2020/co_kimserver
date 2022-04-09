@@ -1,5 +1,4 @@
-#ifndef __KIM_PROTOCOL_H__
-#define __KIM_PROTOCOL_H__
+#pragma once
 
 /* system cmd. */
 
@@ -29,5 +28,3 @@ enum E_CMD {
 
     CMD_SYS_END = 999,
 };
-
-#endif  //__KIM_PROTOCOL_H__

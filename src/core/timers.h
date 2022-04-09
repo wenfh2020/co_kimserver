@@ -1,7 +1,4 @@
-#ifndef __KIM_TIMERS_H__
-#define __KIM_TIMERS_H__
-
-#include <memory>
+#pragma once
 
 #include "server.h"
 #include "timer.h"
@@ -79,5 +76,3 @@ class Timers : public Logger, public CoTimer {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_TIEMRS_H__

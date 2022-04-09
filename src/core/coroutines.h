@@ -1,5 +1,4 @@
-#ifndef __KIM_COROUTINES_H__
-#define __KIM_COROUTINES_H__
+#pragma once
 
 #include "connection.h"
 #include "libco/co_routine.h"
@@ -46,5 +45,3 @@ class Coroutines : public Logger, public TimerCron {
 };
 
 }  // namespace kim
-
-#endif  //__KIM_COROUTINES_H__

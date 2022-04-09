@@ -1,5 +1,4 @@
-#ifndef __MODULE_TEST_H__
-#define __MODULE_TEST_H__
+#pragma once
 
 #include "module.h"
 #include "protocol.h"
@@ -11,10 +10,10 @@ class MoudleTest : public Module {
 
    public:
     void register_handle_func() {
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::test_hello);
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_MYSQL, MoudleTest::test_mysql);
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_REDIS, MoudleTest::test_redis);
-        HANDLE_PROTO_FUNC(KP_REQ_TEST_SESSION, MoudleTest::test_session);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_HELLO, MoudleTest::on_test_hello);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_MYSQL, MoudleTest::on_test_mysql);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_REDIS, MoudleTest::on_test_redis);
+        HANDLE_PROTO_FUNC(KP_REQ_TEST_SESSION, MoudleTest::on_test_session);
     }
 
    protected:
@@ -22,12 +21,10 @@ class MoudleTest : public Module {
 
    private:
     /* request's handler. */
-    int test_hello(const Request* req);
-    int test_mysql(const Request* req);
-    int test_redis(const Request* req);
-    int test_session(const Request* req);
+    int on_test_hello(const Request* req);
+    int on_test_mysql(const Request* req);
+    int on_test_redis(const Request* req);
+    int on_test_session(const Request* req);
 };
 
 }  // namespace kim
-
-#endif  //__MODULE_TEST_H__

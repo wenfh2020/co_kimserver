@@ -13,18 +13,18 @@ void MoudleTest::print_cmd_info(const Request* req) {
               req->msg_head()->len(), req->msg_body()->data().c_str());
 }
 
-int MoudleTest::test_hello(const Request* req) {
+int MoudleTest::on_test_hello(const Request* req) {
     print_cmd_info(req);
     return net()->send_ack(req, ERR_OK, "ok", "good job!");
 }
 
-int MoudleTest::test_mysql(const Request* req) {
+int MoudleTest::on_test_mysql(const Request* req) {
     print_cmd_info(req);
 
     int ret;
     vec_row_t* rows;
-    const char* read_sql = "select value from mytest.test_async_mysql where id = 1;";
-    const char* write_sql = "insert into mytest.test_async_mysql (value) values ('hello world');";
+    const char* read_sql = "select value from mytest.on_test_async_mysql where id = 1;";
+    const char* write_sql = "insert into mytest.on_test_async_mysql (value) values ('hello world');";
 
     ret = net()->mysql_mgr()->sql_write("test", write_sql);
     if (ret != ERR_OK) {
@@ -54,7 +54,7 @@ int MoudleTest::test_mysql(const Request* req) {
     return net()->send_ack(req, ERR_OK, "ok", "test mysql done!");
 }
 
-int MoudleTest::test_redis(const Request* req) {
+int MoudleTest::on_test_redis(const Request* req) {
     print_cmd_info(req);
 
     int ret;
@@ -92,7 +92,7 @@ int MoudleTest::test_redis(const Request* req) {
     return net()->send_ack(req, ERR_OK, "ok", "test redis done!");
 }
 
-int MoudleTest::test_session(const Request* req) {
+int MoudleTest::on_test_session(const Request* req) {
     print_cmd_info(req);
 
     std::string sessid;
@@ -106,14 +106,14 @@ int MoudleTest::test_session(const Request* req) {
               json_data("user_id").c_str(), json_data("user_name").c_str());
 
     sessid = json_data("user_id");
-    auto s = SESS_MGR->get_alloc_session<UserSession>(sessid);
-    if (s == nullptr) {
+    auto session = SESS_MGR->get_alloc_session<UserSession>(sessid);
+    if (session == nullptr) {
         LOG_ERROR("get alloc session failed! sessid: %s", sessid.c_str());
         return net()->send_ack(req, ERR_FAILED, "fail", "get alloc session failed!");
     }
 
-    s->set_user_id(str_to_int(sessid));
-    s->set_user_name(json_data("user_name"));
+    session->set_user_id(str_to_int(sessid));
+    session->set_user_name(json_data("user_name"));
 
     if (!SESS_MGR->del_session(sessid)) {
         LOG_ERROR("delete session failed! sessid: %s", sessid.c_str());

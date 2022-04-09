@@ -1,5 +1,4 @@
-#ifndef __KIM_MODULE_H__
-#define __KIM_MODULE_H__
+#pragma once
 
 #include "error.h"
 #include "protobuf/proto/msg.pb.h"
@@ -60,5 +59,3 @@ class Module : public Logger, public Net, public So {
     m_cmd_funcs[id] = &func;
 
 }  // namespace kim
-
-#endif  //__KIM_MODULE_H__
