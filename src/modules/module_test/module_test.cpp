@@ -21,18 +21,16 @@ int MoudleTest::on_test_hello(std::shared_ptr<Request> req) {
 int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
     print_cmd_info(req);
 
-    int ret;
-    vec_row_t* rows;
     const char* read_sql = "select value from mytest.on_test_async_mysql where id = 1;";
     const char* write_sql = "insert into mytest.on_test_async_mysql (value) values ('hello world');";
 
-    ret = net()->mysql_mgr()->sql_write("test", write_sql);
+    auto ret = net()->mysql_mgr()->sql_write("test", write_sql);
     if (ret != ERR_OK) {
         LOG_ERROR("write mysql failed! ret: %d", ret);
         return net()->send_ack(req, ret, "write mysql failed!");
     }
 
-    rows = new vec_row_t;
+    vec_row_t* rows = new vec_row_t;
 
     /* read mysql. */
     ret = net()->mysql_mgr()->sql_read("test", read_sql, *rows);
@@ -57,7 +55,6 @@ int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
 int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
     print_cmd_info(req);
 
-    int ret;
     int id = 1;
     char cmd[1024];
     const char* node = "test";
@@ -67,7 +64,7 @@ int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
 
     /* write redis. */
     snprintf(cmd, sizeof(cmd), "set %s %s:%d", key, val, id);
-    ret = net()->redis_mgr()->exec_cmd(node, cmd, &reply);
+    auto ret = net()->redis_mgr()->exec_cmd(node, cmd, &reply);
     if (ret != REDIS_OK || reply == nullptr) {
         ret = ERR_REDIS_WRITE_FAILED;
         LOG_ERROR("write redis failed!");
@@ -95,9 +92,7 @@ int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
 int MoudleTest::on_test_session(std::shared_ptr<Request> req) {
     print_cmd_info(req);
 
-    std::string sessid;
     CJsonObject json_data;
-
     if (!json_data.Parse(req->msg_body()->data())) {
         LOG_ERROR("invalid json data!");
         return net()->send_ack(req, ERR_FAILED, "fail", "invalid json data!");
@@ -105,7 +100,7 @@ int MoudleTest::on_test_session(std::shared_ptr<Request> req) {
     LOG_DEBUG("user_id: %s, user_name: %s",
               json_data("user_id").c_str(), json_data("user_name").c_str());
 
-    sessid = json_data("user_id");
+    auto sessid = json_data("user_id");
     auto session = SESS_MGR->get_alloc_session<UserSession>(sessid);
     if (session == nullptr) {
         LOG_ERROR("get alloc session failed! sessid: %s", sessid.c_str());

@@ -6,7 +6,8 @@ namespace kim {
 
 class UserSession : public Session {
    public:
-    UserSession(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, const std::string& id);
+    UserSession(std::shared_ptr<Log> logger, std::shared_ptr<INet> net,
+                const std::string& id);
     virtual ~UserSession() {}
 
     uint64_t user_id() { return m_user_id; }
