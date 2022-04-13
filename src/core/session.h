@@ -13,7 +13,7 @@ namespace kim {
 
 class Session : public Logger, public Net {
    public:
-    Session(Log* logger, INet* net, const std::string& id);
+    Session(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, const std::string& id);
     virtual ~Session() { LOG_TRACE("~Session, session id: %s", m_sessid.c_str()); }
 
     const char* id() { return m_sessid.c_str(); }
@@ -33,21 +33,21 @@ class Session : public Logger, public Net {
 // SessionMgr
 ////////////////////////////////////////////////
 
-class SessionMgr : public Logger, public Net {
+class SessionMgr : public Logger, public Net, public std::enable_shared_from_this<SessionMgr> {
    public:
     typedef struct tm_session_s {
-        int timer_id; /* timer id. */
-        std::shared_ptr<Session> session;
-        void* privdata;
+        int timer_id = -1;
+        std::shared_ptr<Session> session = nullptr;
+        void* privdata = nullptr; /* user's data. */
     } tm_session_t;
 
-    SessionMgr(Log* logger, INet* net);
+    SessionMgr(std::shared_ptr<Log> logger, std::shared_ptr<INet> net);
     virtual ~SessionMgr() {}
 
     bool init();
     bool del_session(const std::string& id);
     std::shared_ptr<Session> get_session(const std::string& id);
-    bool add_session(std::shared_ptr<Session> s, uint64_t after, uint64_t repeat = 0);
+    bool add_session(std::shared_ptr<Session> session, uint64_t after, uint64_t repeat = 0);
 
     /* add an new obj, if find by session id failed. */
     template <typename T>
@@ -55,7 +55,7 @@ class SessionMgr : public Logger, public Net {
         const std::string& id, uint64_t after = SESSION_TIMEOUT_VAL, uint64_t repeat = 0) {
         std::shared_ptr<T> session = std::dynamic_pointer_cast<T>(get_session(id));
         if (session == nullptr) {
-            session = std::make_shared<T>(m_logger, m_net, id);
+            session = std::make_shared<T>(m_logger, net(), id);
             if (!add_session(session, after, repeat)) {
                 return nullptr;
             }

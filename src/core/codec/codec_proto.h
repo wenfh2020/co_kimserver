@@ -7,7 +7,7 @@ namespace kim {
 
 class CodecProto : public Codec {
    public:
-    CodecProto(Log* logger, Codec::TYPE codec);
+    CodecProto(std::shared_ptr<Log> logger, Codec::TYPE codec);
     virtual ~CodecProto() {}
 
     virtual Codec::STATUS encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf) override;

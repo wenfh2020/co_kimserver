@@ -10,14 +10,14 @@ class Manager : CoTimer {
     Manager();
     virtual ~Manager();
 
-    bool init(const char* conf_path);
+    bool init(const char* config_path);
     void destory();
     void run();
 
    private:
     bool load_logger();
     bool load_network();
-    bool load_sys_config(const std::string& conf_path);
+    bool load_sys_config(const std::string& config_path);
 
     void create_workers();                /* fork children. */
     bool create_worker(int worker_index); /* creates the specified index process. */
@@ -32,9 +32,9 @@ class Manager : CoTimer {
     static void signal_handler(int sig);
 
    private:
-    Log* m_logger = nullptr;     /* logger. */
-    SysConfig* m_conf = nullptr; /* system config data. */
-    Network* m_net = nullptr;    /* net work. */
+    std::shared_ptr<Log> m_logger = nullptr;       /* logger. */
+    std::shared_ptr<Network> m_net = nullptr;      /* net work. */
+    std::shared_ptr<SysConfig> m_config = nullptr; /* system config data. */
     static void* m_signal_user_data;
     std::queue<int> m_restart_workers; /* workers waiting to restart. restore worker's index. */
 };

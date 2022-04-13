@@ -41,7 +41,7 @@ class RedisMgr : Logger {
     } co_array_data_t;
 
    public:
-    RedisMgr(Log* log);
+    RedisMgr(std::shared_ptr<Log> log);
     virtual ~RedisMgr();
 
    public:
@@ -67,8 +67,7 @@ class RedisMgr : Logger {
     co_data_t* get_co_data(const std::string& node);
     redisContext* connect(const std::string& host, int port);
 
-    void* handle_task(void* arg);
-    static void* co_handle_task(void* arg);
+    void* on_handle_task(void* arg);
     int send_task(const std::string& node, const std::string& cmd, redisReply** r);
     void clear_co_tasks(co_data_t* cd);
 

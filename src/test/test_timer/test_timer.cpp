@@ -2,7 +2,7 @@
 #include "./libco/co_routine.h"
 #include "server.h"
 
-/* 
+/*
 int ret = co_epoll_wait(ctx->iEpollFd, result, stCoEpoll_t::_EPOLL_SIZE, 1);
 
 // linux
@@ -20,20 +20,17 @@ int co_epoll_wait(int epfd, struct co_epoll_res *events, int maxevents, int time
 }
 */
 
-void* co_handle_timer(void* arg) {
+void co_handle_timer() {
     co_enable_hook_sys();
-
     for (;;) {
         co_sleep(1000);
     }
-
-    return 0;
 }
 
 int main() {
     stCoRoutine_t* co;
-    co_create(&co, NULL, co_handle_timer, nullptr);
+    co_create(&co, NULL, [](void*) { co_handle_timer(); });
     co_resume(co);
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }

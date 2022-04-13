@@ -4,7 +4,7 @@
 
 namespace kim {
 
-MysqlConn::MysqlConn(Log* logger) : Logger(logger) {
+MysqlConn::MysqlConn(std::shared_ptr<Log> logger) : Logger(logger) {
 }
 
 MysqlConn::~MysqlConn() {

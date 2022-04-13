@@ -19,7 +19,7 @@ class Request;
 class Connection;
 class SessionMgr;
 
-class INet {
+class INet : public std::enable_shared_from_this<INet> {
    public:
     INet() {}
     virtual ~INet() {}
@@ -28,15 +28,15 @@ class INet {
     virtual uint64_t now(bool force = false) { return mstime(); }
 
     virtual CJsonObject* config() { return nullptr; }
-    virtual MysqlMgr* mysql_mgr() { return nullptr; }
-    virtual RedisMgr* redis_mgr() { return nullptr; }
-    virtual SysCmd* sys_cmd() { return nullptr; }
-    virtual ZkClient* zk_client() { return nullptr; }
-    virtual WorkerDataMgr* worker_data_mgr() { return nullptr; }
-    virtual SessionMgr* session_mgr() { return nullptr; }
+    virtual std::shared_ptr<MysqlMgr> mysql_mgr() { return nullptr; }
+    virtual std::shared_ptr<RedisMgr> redis_mgr() { return nullptr; }
+    virtual std::shared_ptr<SysCmd> sys_cmd() { return nullptr; }
+    virtual std::shared_ptr<ZkClient> zk_client() { return nullptr; }
+    virtual std::shared_ptr<WorkerDataMgr> worker_data_mgr() { return nullptr; }
+    virtual std::shared_ptr<SessionMgr> session_mgr() { return nullptr; }
 
     /* for cluster. */
-    virtual Nodes* nodes() { return nullptr; }
+    virtual std::shared_ptr<Nodes> nodes() { return nullptr; }
 
     /* pro’s type (manager/worker). */
     virtual bool is_worker() { return false; }
@@ -49,15 +49,15 @@ class INet {
 
     virtual void close_fd(int fd) {}
     virtual bool close_conn(uint64_t id) { return false; }
-    virtual bool close_conn(Connection* c) { return false; }
-    virtual Connection* create_conn(int fd) { return nullptr; }
+    virtual bool close_conn(std::shared_ptr<Connection> c) { return false; }
+    virtual std::shared_ptr<Connection> create_conn(int fd) { return nullptr; }
 
     /* tcp send. */
-    virtual int send_to(Connection* c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
+    virtual int send_to(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
     virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
-    virtual int send_ack(const Request* req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
-    virtual int send_ack(const Request* req, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
-    virtual int send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
+    virtual int send_ack(std::shared_ptr<Request> req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
+    virtual int send_ack(std::shared_ptr<Request> req, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
+    virtual int send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
     virtual int send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
 
     /* send to other node. */
@@ -77,14 +77,14 @@ class INet {
 class Net {
    public:
     Net() {}
-    Net(INet* net) : m_net(net) {}
+    Net(std::shared_ptr<INet> net) : m_net(net) {}
     virtual ~Net() {}
 
-    INet* net() { return m_net; }
-    void set_net(INet* net) { m_net = net; }
+    std::shared_ptr<INet> net() { return m_net.lock(); }
+    void set_net(std::shared_ptr<INet> net) { m_net = net; }
 
    protected:
-    INet* m_net = nullptr;
+    std::weak_ptr<INet> m_net;
 };
 
 }  // namespace kim

@@ -5,7 +5,7 @@
 
 namespace kim {
 
-Nodes::Nodes(Log* logger, int vnode_cnt, HASH_ALGORITHM ha)
+Nodes::Nodes(std::shared_ptr<Log> logger, int vnode_cnt, HASH_ALGORITHM ha)
     : Logger(logger), m_vnode_cnt(vnode_cnt), m_ha(ha) {
 }
 

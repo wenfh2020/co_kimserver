@@ -1,9 +1,9 @@
 // ngx_channel.c
 
+#include "channel.h"
+
 #include <string.h>
 #include <sys/socket.h>
-
-#include "channel.h"
 
 namespace kim {
 
@@ -13,7 +13,7 @@ namespace kim {
 #define LOG_DEBUG(args...) LOG_FORMAT((Log::LL_DEBUG), ##args)
 #define LOG_TRACE(args...) LOG_FORMAT((Log::LL_TRACE), ##args)
 
-int write_channel(int fd, channel_t* ch, size_t size, Log* logger) {
+int write_channel(int fd, channel_t* ch, size_t size, std::shared_ptr<Log> logger) {
     LOG_TRACE("write to channel, fd: %d, family: %d, codec: %d",
               ch->fd, ch->family, ch->codec);
     ssize_t n;
@@ -47,7 +47,7 @@ int write_channel(int fd, channel_t* ch, size_t size, Log* logger) {
          *
          * Fortunately, gcc with -O1 compiles this ngx_memcpy()
          * in the same simple assignment as in the code above
-         * 
+         *
          * ngx_memcpy(CMSG_DATA(&cmsg.cm), &ch->fd, sizeof(int));
          */
         *(int*)CMSG_DATA(&cmsg.cm) = ch->fd;
@@ -79,7 +79,7 @@ int write_channel(int fd, channel_t* ch, size_t size, Log* logger) {
     return 0;
 }
 
-int read_channel(int fd, channel_t* ch, size_t size, Log* logger) {
+int read_channel(int fd, channel_t* ch, size_t size, std::shared_ptr<Log> logger) {
     // LOG_TRACE("read from channel, channel fd: %d", fd);
     ssize_t n;
     int err = 0;

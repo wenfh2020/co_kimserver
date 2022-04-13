@@ -8,10 +8,10 @@ SysConfig::~SysConfig() {
     SAFE_DELETE(m_config);
 }
 
-bool SysConfig::init(const std::string& conf_path) {
-    if (access(conf_path.c_str(), W_OK) == -1) {
+bool SysConfig::init(const std::string& config_path) {
+    if (access(config_path.c_str(), W_OK) == -1) {
         std::cerr << "invalid config path: "
-                  << conf_path
+                  << config_path
                   << std::endl;
         return false;
     }
@@ -24,23 +24,23 @@ bool SysConfig::init(const std::string& conf_path) {
     m_work_path = work_path;
 
     /* init config. */
-    if (!load_config(conf_path)) {
+    if (!load_config(config_path)) {
         std::cerr << "load config failed! conf path: "
-                  << conf_path
+                  << config_path
                   << std::endl;
         return false;
     }
 
-    m_conf_path = conf_path;
+    m_conf_path = config_path;
     return true;
 }
 
-bool SysConfig::load_config(const std::string& conf_path) {
+bool SysConfig::load_config(const std::string& config_path) {
     m_config = new CJsonObject;
-    if (!m_config->Load(conf_path)) {
+    if (!m_config->Load(config_path)) {
         SAFE_DELETE(m_config);
         std::cerr << "load config json failed! path: "
-                  << conf_path
+                  << config_path
                   << std::endl;
         return false;
     }

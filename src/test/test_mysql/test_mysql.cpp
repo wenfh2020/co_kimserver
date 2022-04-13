@@ -65,7 +65,7 @@ int show_mysql_query_data(MYSQL* mysql, MYSQL_RES* res) {
     return row_cnt;
 }
 
-void* co_handler_mysql_query(void* arg) {
+void co_handler_mysql_query(void* arg) {
     co_enable_hook_sys();
 
     int i;
@@ -95,7 +95,7 @@ void* co_handler_mysql_query(void* arg) {
                 db->port,
                 NULL, 0)) {
             show_mysql_error(task->mysql);
-            return nullptr;
+            return;
         }
     }
 
@@ -131,7 +131,6 @@ void* co_handler_mysql_query(void* arg) {
     /* close mysql. */
     mysql_close(task->mysql);
     delete task;
-    return nullptr;
 }
 
 void* test_co(void* arg) {
@@ -156,12 +155,15 @@ int main(int argc, char** argv) {
 
     for (i = 0; i < g_co_cnt; i++) {
         task = new task_t{i, db, nullptr, nullptr};
-        co_create(&(task->co), NULL, co_handler_mysql_query, task);
+        co_create(
+            &(task->co), nullptr,
+            [](void* arg) { co_handler_mysql_query(arg); },
+            task);
         // co_create(&(task->co), NULL, test_co, task);
         co_resume(task->co);
     }
 
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     delete db;
     return 0;
 }

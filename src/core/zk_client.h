@@ -14,7 +14,7 @@ namespace kim {
 
 class ZkClient : public Bio, public Net, public TimerCron {
    public:
-    ZkClient(Log* logger, INet* net);
+    ZkClient(std::shared_ptr<Log> logger, std::shared_ptr<INet> net);
     virtual ~ZkClient();
 
     bool init(const CJsonObject& config);

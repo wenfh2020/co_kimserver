@@ -14,7 +14,7 @@ typedef struct db_info_s {
 
 class MysqlConn : Logger {
    public:
-    MysqlConn(Log* logger);
+    MysqlConn(std::shared_ptr<Log> logger);
     virtual ~MysqlConn();
 
     int sql_write(const std::string& sql);

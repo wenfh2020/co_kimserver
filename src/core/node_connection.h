@@ -24,15 +24,15 @@ class NodeConn : public Logger, public Net {
 
     /* coroutine's arg data.  */
     typedef struct co_data_s {
-        std::string node_type;     /* node type in system. */
-        std::string host;          /* node host. */
-        int port;                  /* node port. */
-        int worker_index;          /* node worker index. */
-        Connection* c;             /* connection. */
-        stCoCond_t* cond;          /* coroutine cond. */
-        stCoRoutine_t* co;         /* redis conn's coroutine. */
-        std::queue<task_t*> tasks; /* tasks wait to be handled. */
-        void* privdata;            /* user's data. */
+        std::string node_type;         /* node type in system. */
+        std::string host;              /* node host. */
+        int port;                      /* node port. */
+        int worker_index;              /* node worker index. */
+        std::shared_ptr<Connection> c; /* connection. */
+        stCoCond_t* cond;              /* coroutine cond. */
+        stCoRoutine_t* co;             /* redis conn's coroutine. */
+        std::queue<task_t*> tasks;     /* tasks wait to be handled. */
+        void* privdata;                /* user's data. */
     } co_data_t;
 
     /* connections to node. */
@@ -42,20 +42,20 @@ class NodeConn : public Logger, public Net {
     } co_array_data_t;
 
    public:
-    NodeConn(INet* net, Log* logger);
+    NodeConn(std::shared_ptr<INet> net, std::shared_ptr<Log> logger);
     virtual ~NodeConn();
     void destory();
 
     /**
      * @brief send data from cur node to others.
-     * 
+     *
      * @param node_type: gate, logic, ... which fill in config.json --> "node_type"
      * @param obj: obj for hash to get the right node.
      * @param head_in: packet head, which send to obj node.
      * @param body_in: packet body, which send to obj node.
      * @param head_out: ack msg head, recv from obj node.
      * @param body_out: ack msg body, recv from obj node.
-     * 
+     *
      * @return error.h / enum E_ERROR.
      */
     int relay_to_node(const std::string& node_type, const std::string& obj,
@@ -63,15 +63,14 @@ class NodeConn : public Logger, public Net {
 
    protected:
     co_data_t* get_co_data(const std::string& node_type, const std::string& obj);
-    static void* co_handle_task(void* arg);
-    void* handle_task(void* arg);
+    void on_handle_task(void* arg);
     void clear_co_tasks(co_data_t* co_data);
 
     /* for nodes connect. */
-    int handle_sys_message(Connection* c);
-    int recv_data(Connection* c, MsgHead* head, MsgBody* body);
-    Connection* auto_connect(const std::string& host, int port, int worker_index);
-    Connection* node_connect(const std::string& node_type, const std::string& host, int port, int worker_index);
+    int handle_sys_message(std::shared_ptr<Connection> c);
+    int recv_data(std::shared_ptr<Connection> c, MsgHead* head, MsgBody* body);
+    std::shared_ptr<Connection> auto_connect(const std::string& host, int port, int worker_index);
+    std::shared_ptr<Connection> node_connect(const std::string& node_type, const std::string& host, int port, int worker_index);
 
    private:
     char m_errstr[ANET_ERR_LEN]; /* error string. */

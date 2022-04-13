@@ -6,7 +6,7 @@
 
 namespace kim {
 
-ZkClient::ZkClient(Log* logger, INet* net)
+ZkClient::ZkClient(std::shared_ptr<Log> logger, std::shared_ptr<INet> net)
     : Bio(logger), Net(net), m_zk(nullptr) {
 }
 
@@ -224,7 +224,7 @@ utility::zoo_rc ZkClient::bio_create_parent(const std::string& parent) {
 
     return ret;
 }
-/* 
+/*
     json_value: config.json
 
     json_res:

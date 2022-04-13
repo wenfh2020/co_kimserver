@@ -31,7 +31,7 @@ class Nodes : public Logger {
     };
 
    public:
-    Nodes(Log* logger, int vnode_cnt = DEFAULT_NODE_CNT, HASH_ALGORITHM ha = HASH_ALGORITHM::FNV1A_64);
+    Nodes(std::shared_ptr<Log> logger, int vnode_cnt = DEFAULT_NODE_CNT, HASH_ALGORITHM ha = HASH_ALGORITHM::FNV1A_64);
     virtual ~Nodes() {}
 
     /* nodes. */

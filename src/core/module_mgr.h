@@ -7,14 +7,14 @@ namespace kim {
 
 class ModuleMgr : public Logger, public Net {
    public:
-    ModuleMgr(Log* logger, INet* net);
+    ModuleMgr(std::shared_ptr<Log> logger, std::shared_ptr<INet> net);
     virtual ~ModuleMgr();
 
     bool init(CJsonObject* config);
     Module* get_module(uint64_t id);
     bool reload_so(const std::string& name);
 
-    int handle_request(const Request* req);
+    int handle_request(std::shared_ptr<Request> req);
 
    private:
     Module* get_module(const std::string& name);

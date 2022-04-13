@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
     id = g_timers->add_timer(&test_timer2, 3 * 1000, 5 * 1000, data);
     g_datas[id] = data;
 
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }
 

@@ -40,11 +40,11 @@ class Timer {
     void set_callback(const TimerCallback& fn) { m_callback = fn; }
 
    protected:
-    int m_id = 0;               /* timer's id. */
-    uint64_t m_after_time = 0;  /* timeout in `after` milliseconds. */
-    uint64_t m_repeat_time = 0; /* repeat milliseconds. */
-    void* m_privdata = nullptr; /* user's data. */
-    TimerCallback m_callback;   /* callback function. */
+    int m_id = 0;                       /* timer's id. */
+    uint64_t m_after_time = 0;          /* timeout in `after` milliseconds. */
+    uint64_t m_repeat_time = 0;         /* repeat milliseconds. */
+    void* m_privdata = nullptr;         /* user's data. */
+    TimerCallback m_callback = nullptr; /* callback function. */
 };
 
 // Timers
@@ -52,7 +52,7 @@ class Timer {
 
 class Timers : public Logger, public CoTimer {
    public:
-    Timers(Log* logger) : Logger(logger) {}
+    Timers(std::shared_ptr<Log> logger) : Logger(logger) {}
     virtual ~Timers() {}
 
     Timers(const Timers&) = delete;

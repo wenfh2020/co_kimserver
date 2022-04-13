@@ -16,7 +16,6 @@ typedef struct test_co_task_s {
 std::list<test_co_task_t*> g_coroutines;
 
 void destory() {
-    SAFE_FREE(m_logger);
     SAFE_FREE(g_mysql_mgr);
     for (auto& it : g_coroutines) {
         free(it);
@@ -40,7 +39,7 @@ void show_mysql_res(const vec_row_t& rows) {
     }
 }
 
-void* co_handler_mysql(void* arg) {
+void co_handler_mysql(void* arg) {
     co_enable_hook_sys();
 
     int i, ret;
@@ -80,7 +79,7 @@ void* co_handler_mysql(void* arg) {
     //        task->id, g_co_query_cnt, spend);
     if (ret != 0) {
         printf("test failed!\n");
-        return 0;
+        return;
     }
 
     if (g_cur_test_cnt == g_co_cnt * g_co_query_cnt && !g_is_end) {
@@ -89,8 +88,6 @@ void* co_handler_mysql(void* arg) {
         printf("total cnt: %d, total time: %lf, avg: %lf\n",
                g_cur_test_cnt, spend, (g_cur_test_cnt / spend));
     }
-
-    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -118,10 +115,13 @@ int main(int argc, char** argv) {
         task->id = i;
         task->co = nullptr;
         g_coroutines.push_back(task);
-        co_create(&task->co, nullptr, co_handler_mysql, task);
+        co_create(
+            &task->co, nullptr,
+            [](void* arg) { co_handler_mysql(arg); },
+            task);
         co_resume(task->co);
     }
 
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }

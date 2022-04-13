@@ -13,7 +13,7 @@ double g_begin_time = 0.0;
 bool g_is_end = false;
 bool g_is_read = false;
 
-void* co_handler(void* arg) {
+void co_handler() {
     co_enable_hook_sys();
 
     redisReply* r;
@@ -26,11 +26,11 @@ void* co_handler(void* arg) {
     c = redisConnect(REDIS_HOST, REDIS_PORT);
     if (c == nullptr) {
         printf("conn err: can not alloc redis context\n");
-        return 0;
+        return;
     } else if (c->err) {
         printf("connect err: %s\n", c->errstr);
         redisFree(c);
-        return 0;
+        return;
     }
 
     for (int i = 0; i < g_co_cmd_cnt; i++) {
@@ -64,7 +64,6 @@ void* co_handler(void* arg) {
     }
 
     redisFree(c);
-    return 0;
 }
 
 /* ./test_hiredis r 1 1 */
@@ -81,9 +80,9 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < g_co_cnt; i++) {
         stCoRoutine_t* co;
-        co_create(&co, nullptr, co_handler, nullptr);
+        co_create(&co, nullptr, [](void*) { co_handler(); });
         co_resume(co);
     }
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }

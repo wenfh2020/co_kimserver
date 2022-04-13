@@ -4,7 +4,7 @@ MUDULE_CREATE(MoudleGate)
 
 namespace kim {
 
-int MoudleGate::filter_request(const Request* req) {
+int MoudleGate::filter_request(std::shared_ptr<Request> req) {
     int ret;
     MsgHead* head_out = new MsgHead;
     MsgBody* body_out = new MsgBody;

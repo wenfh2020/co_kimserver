@@ -13,7 +13,7 @@
 
 namespace kim {
 
-Network::Network(Log* logger, TYPE type) : m_logger(logger), m_type(type) {
+Network::Network(std::shared_ptr<Log> logger, TYPE type) : Logger(logger), m_type(type) {
     m_now_time = mstime();
 }
 
@@ -22,16 +22,12 @@ Network::~Network() {
 }
 
 /* parent. */
-bool Network::create_m(SysConfig* config) {
+bool Network::create_m(std::shared_ptr<SysConfig> config) {
     if (config == nullptr) {
         return false;
     }
 
-    int fd = -1;
-    Connection* c;
-    co_task_t* task;
-
-    m_conf = config;
+    m_config = config;
 
     if (!load_public(config)) {
         LOG_ERROR("load public failed!");
@@ -50,7 +46,7 @@ bool Network::create_m(SysConfig* config) {
 
     /* inner listen. */
     if (!config->node_host().empty()) {
-        fd = listen_to_port(config->node_host().c_str(), config->node_port());
+        auto fd = listen_to_port(config->node_host().c_str(), config->node_port());
         if (fd == -1) {
             LOG_ERROR("listen to port failed! %s:%d",
                       config->node_host().c_str(), config->node_port());
@@ -60,26 +56,29 @@ bool Network::create_m(SysConfig* config) {
         m_node_fd = fd;
         LOG_INFO("node fd: %d", m_node_fd);
 
-        c = create_conn(m_node_fd, Codec::TYPE::PROTOBUF);
+        auto c = create_conn(m_node_fd, Codec::TYPE::PROTOBUF);
         if (c == nullptr) {
             close_fd(m_node_fd);
             LOG_ERROR("add read event failed, fd: %d", m_node_fd);
             return false;
         }
 
-        task = m_coroutines->create_co_task(c, co_handle_accept_nodes_conn);
-        if (task == nullptr) {
+        auto co = m_coroutines->start_co(
+            [this](void* arg) {
+                on_handle_accept_nodes_conn();
+                m_coroutines->add_free_co((stCoRoutine_t*)arg);
+            });
+        if (co == nullptr) {
             LOG_ERROR("create new corotines failed!");
             close_conn(c);
             return false;
         }
-        co_resume(task->co);
     }
 
     /* gate listen. */
     if (!config->is_reuseport()) {
         if (!config->gate_host().empty()) {
-            fd = listen_to_port(config->gate_host().c_str(), config->gate_port());
+            auto fd = listen_to_port(config->gate_host().c_str(), config->gate_port());
             if (fd == -1) {
                 LOG_ERROR("listen to gate failed! %s:%d",
                           config->gate_host().c_str(), config->gate_port());
@@ -90,20 +89,22 @@ bool Network::create_m(SysConfig* config) {
             LOG_INFO("gate fd: %d, host: %s, port: %d",
                      m_gate_fd, config->gate_host().c_str(), config->gate_port());
 
-            c = create_conn(m_gate_fd, m_gate_codec);
+            auto c = create_conn(m_gate_fd, m_gate_codec);
             if (c == nullptr) {
                 close_fd(m_gate_fd);
                 LOG_ERROR("add read event failed, fd: %d", m_gate_fd);
                 return false;
             }
 
-            task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
-            if (task == nullptr) {
+            auto co = m_coroutines->start_co([this](void* arg) {
+                on_handle_accept_gate_conn();
+                m_coroutines->add_free_co((stCoRoutine_t*)arg);
+            });
+            if (co == nullptr) {
                 LOG_ERROR("create new corotines failed!");
                 close_conn(c);
                 return false;
             }
-            co_resume(task->co);
         }
     }
 
@@ -115,17 +116,14 @@ bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
         return false;
     }
 
-    co_task_t* task;
-    Connection *conn_ctrl, *conn_data;
-
-    conn_ctrl = create_conn(fctrl.fd, Codec::TYPE::PROTOBUF, true);
+    auto conn_ctrl = create_conn(fctrl.fd, Codec::TYPE::PROTOBUF, true);
     if (conn_ctrl == nullptr) {
         close_fd(fctrl.fd);
         LOG_ERROR("add read event failed, fd: %d", fctrl.fd);
         return false;
     }
 
-    conn_data = create_conn(fdata.fd, Codec::TYPE::PROTOBUF, true);
+    auto conn_data = create_conn(fdata.fd, Codec::TYPE::PROTOBUF, true);
     if (conn_data == nullptr) {
         close_fd(fdata.fd);
         close_conn(conn_ctrl);
@@ -137,21 +135,29 @@ bool Network::init_manager_channel(fd_t& fctrl, fd_t& fdata) {
     fdata = m_manager_fdata = conn_data->ft();
 
     /* recv data from worker. */
-    task = m_coroutines->create_co_task(conn_ctrl, co_handle_requests);
-    if (task == nullptr) {
+    auto co = m_coroutines->start_co(
+        [this, conn_ctrl](void* arg) {
+            on_handle_requests(conn_ctrl);
+            m_coroutines->add_free_co((stCoRoutine_t*)arg);
+        });
+    if (co == nullptr) {
         LOG_ERROR("create new corotines failed!");
         close_conn(conn_ctrl);
         close_conn(conn_data);
         return false;
     }
 
-    co_resume(task->co);
     return true;
 }
 
 /* worker. */
-bool Network::create_w(SysConfig* config, int ctrl_fd, int data_fd, int index) {
-    m_conf = config;
+bool Network::create_w(std::shared_ptr<SysConfig> config, int ctrl_fd, int data_fd, int index) {
+    if (config == nullptr) {
+        return false;
+    }
+
+    m_config = config;
+    m_worker_index = index;
 
     if (!load_public(config)) {
         LOG_ERROR("load public failed!");
@@ -183,46 +189,47 @@ bool Network::create_w(SysConfig* config, int ctrl_fd, int data_fd, int index) {
         return false;
     }
 
-    int fd;
-    co_task_t* task;
-    Connection *conn_ctrl, *conn_data, *c;
-
-    conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
+    auto conn_ctrl = create_conn(ctrl_fd, Codec::TYPE::PROTOBUF, true);
     if (conn_ctrl == nullptr) {
         LOG_ERROR("add read event failed, fd: %d", ctrl_fd);
         return false;
     }
 
-    conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
+    auto conn_data = create_conn(data_fd, Codec::TYPE::PROTOBUF, true);
     if (conn_data == nullptr) {
         LOG_ERROR("add read event failed, fd: %d", data_fd);
         return false;
     }
 
-    m_worker_index = index;
     m_manager_fctrl = conn_ctrl->ft();
     m_manager_fdata = conn_data->ft();
 
-    task = m_coroutines->create_co_task(conn_data, co_handle_read_transfer_fd);
-    if (task == nullptr) {
+    auto co = m_coroutines->start_co(
+        [this, data_fd](void* arg) {
+            on_handle_read_transfer_fd(data_fd);
+            m_coroutines->add_free_co((stCoRoutine_t*)arg);
+        });
+    if (co == nullptr) {
         LOG_ERROR("create new corotines failed!");
         close_conn(conn_data);
         return false;
     }
-    co_resume(task->co);
 
-    task = m_coroutines->create_co_task(conn_ctrl, co_handle_requests);
-    if (task == nullptr) {
+    co = m_coroutines->start_co(
+        [this, conn_ctrl](void* arg) {
+            on_handle_requests(conn_ctrl);
+            m_coroutines->add_free_co((stCoRoutine_t*)arg);
+        });
+    if (co == nullptr) {
         LOG_ERROR("create new corotines failed!");
         close_conn(conn_ctrl);
         return false;
     }
-    co_resume(task->co);
 
     /* gate listen. */
     if (config->is_reuseport()) {
         if (!config->gate_host().empty()) {
-            fd = listen_to_port(config->gate_host().c_str(), config->gate_port(), true);
+            auto fd = listen_to_port(config->gate_host().c_str(), config->gate_port(), true);
             if (fd == -1) {
                 LOG_ERROR("listen to gate failed! %s:%d",
                           config->gate_host().c_str(), config->gate_port());
@@ -233,20 +240,23 @@ bool Network::create_w(SysConfig* config, int ctrl_fd, int data_fd, int index) {
             LOG_INFO("gate fd: %d, host: %s, port: %d",
                      fd, config->gate_host().c_str(), config->gate_port());
 
-            c = create_conn(fd, m_gate_codec);
+            auto c = create_conn(fd, m_gate_codec);
             if (c == nullptr) {
                 close_fd(fd);
                 LOG_ERROR("add read event failed, fd: %d", fd);
                 return false;
             }
 
-            task = m_coroutines->create_co_task(c, co_handle_accept_gate_conn);
-            if (task == nullptr) {
+            auto co = m_coroutines->start_co(
+                [this](void* arg) {
+                    on_handle_accept_gate_conn();
+                    m_coroutines->add_free_co((stCoRoutine_t*)arg);
+                });
+            if (co == nullptr) {
                 LOG_ERROR("create new corotines failed!");
                 close_conn(c);
                 return false;
             }
-            co_resume(task->co);
         }
     }
 
@@ -255,16 +265,13 @@ bool Network::create_w(SysConfig* config, int ctrl_fd, int data_fd, int index) {
 }
 
 bool Network::ensure_files_limit() {
-    int error = 0;
-    int file_limit = 0;
-    int max_clients = 0;
-
-    max_clients = m_conf->max_clients();
+    auto max_clients = m_config->max_clients();
     if (max_clients == 0) {
         return false;
     }
 
-    file_limit = adjust_files_limit(max_clients + CONFIG_MIN_RESERVED_FDS, error);
+    int error = 0;
+    auto file_limit = adjust_files_limit(max_clients + CONFIG_MIN_RESERVED_FDS, error);
     file_limit -= CONFIG_MIN_RESERVED_FDS;
 
     if (file_limit < 0) {
@@ -295,9 +302,7 @@ void Network::exit_libco() {
 }
 
 int Network::listen_to_port(const char* host, int port, bool is_reuseport) {
-    int fd = -1;
-
-    fd = anet_tcp_server(m_errstr, host, port, TCP_BACK_LOG, is_reuseport);
+    auto fd = anet_tcp_server(m_errstr, host, port, TCP_BACK_LOG, is_reuseport);
     if (fd == -1) {
         LOG_ERROR("bind tcp ipv4 failed! %s", m_errstr);
         return -1;
@@ -352,21 +357,19 @@ bool Network::report_payload_to_zookeeper() {
         return false;
     }
 
-    NodeData* node;
-    std::string json_data;
     PayloadStats pls;
-    Payload *manager_pl, *worker_pl;
+    std::string json_data;
     int cmd_cnt = 0, conn_cnt = 0, read_cnt = 0, write_cnt = 0, read_bytes = 0, write_bytes = 0;
     const auto& workers = m_worker_data_mgr->get_infos();
 
     /* node info. */
-    node = pls.mutable_node();
+    auto node = pls.mutable_node();
     node->set_zk_path(m_nodes->get_my_zk_node_path());
     node->set_node_type(node_type());
     node->set_node_host(node_host());
     node->set_node_port(node_port());
-    node->set_gate_host(m_conf->gate_host());
-    node->set_gate_port(m_conf->gate_port());
+    node->set_gate_host(m_config->gate_host());
+    node->set_gate_port(m_config->gate_port());
     node->set_worker_cnt(workers.size());
 
     /* worker payload infos. */
@@ -378,7 +381,7 @@ bool Network::report_payload_to_zookeeper() {
         read_bytes += info->payload.read_bytes();
         write_cnt += info->payload.write_cnt();
         write_bytes += info->payload.write_bytes();
-        worker_pl = pls.add_workers();
+        auto worker_pl = pls.add_workers();
         *worker_pl = info->payload;
         if (info->payload.worker_index() == 0) {
             worker_pl->set_worker_index(info->index);
@@ -386,7 +389,7 @@ bool Network::report_payload_to_zookeeper() {
     }
 
     /* manager statistics data results。 */
-    manager_pl = pls.mutable_manager();
+    auto manager_pl = pls.mutable_manager();
     manager_pl->set_worker_index(worker_index());
     manager_pl->set_cmd_cnt(cmd_cnt);
     manager_pl->set_conn_cnt(conn_cnt + m_conns.size());
@@ -430,33 +433,26 @@ bool Network::report_payload_to_manager() {
     return true;
 }
 
-void* Network::co_handle_accept_nodes_conn(void* d) {
+void Network::on_handle_accept_nodes_conn() {
     co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Connection* c = task->c;
-    Network* net = (Network*)c->privdata();
-    return net->handle_accept_nodes_conn(d);
-}
 
-void* Network::handle_accept_nodes_conn(void*) {
-    Connection* c;
     char ip[NET_IP_STR_LEN];
-    int fd, port, family, max = MAX_ACCEPTS_PER_CALL;
+    int port, family, max = MAX_ACCEPTS_PER_CALL;
 
     while (max--) {
-        fd = anet_tcp_accept(m_errstr, m_node_fd, ip, sizeof(ip), &port, &family);
+        auto fd = anet_tcp_accept(m_errstr, m_node_fd, ip, sizeof(ip), &port, &family);
         if (fd == ANET_ERR) {
             if (errno != EWOULDBLOCK) {
                 LOG_ERROR("accepting client connection failed: fd: %d, errstr %s",
                           m_node_fd, m_errstr);
             }
-            co_sleep(1000, m_node_fd, POLLIN);
+            co_sleep(10000, m_node_fd, POLLIN);
             continue;
         }
 
         LOG_INFO("accepted server %s:%d, fd: %d", ip, port, fd);
 
-        c = create_conn(fd, Codec::TYPE::PROTOBUF);
+        auto c = create_conn(fd, Codec::TYPE::PROTOBUF);
         if (c == nullptr) {
             close_fd(fd);
             LOG_ERROR("add data fd read event failed, fd: %d", fd);
@@ -464,45 +460,39 @@ void* Network::handle_accept_nodes_conn(void*) {
         }
         c->set_system(true);
 
-        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
-        if (co_task == nullptr) {
+        auto co = m_coroutines->start_co(
+            [this, c](void* arg) {
+                on_handle_requests(c);
+                m_coroutines->add_free_co((stCoRoutine_t*)arg);
+            });
+        if (co == nullptr) {
             LOG_ERROR("create new corotines failed!");
             close_conn(c);
             continue;
         }
-        co_resume(co_task->co);
     }
-
-    return 0;
 }
 
-void* Network::co_handle_accept_gate_conn(void* d) {
+void Network::on_handle_accept_gate_conn() {
     co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Connection* c = task->c;
-    Network* net = (Network*)c->privdata();
-    return net->handle_accept_gate_conn(d);
-}
 
-void* Network::handle_accept_gate_conn(void* d) {
     channel_t ch;
-    Connection* c;
     char ip[NET_IP_STR_LEN] = {0};
-    int fd, port, family, channel_fd, err;
+    int port, family, channel_fd;
 
     for (;;) {
-        fd = anet_tcp_accept(m_errstr, m_gate_fd, ip, sizeof(ip), &port, &family);
+        auto fd = anet_tcp_accept(m_errstr, m_gate_fd, ip, sizeof(ip), &port, &family);
         if (fd == ANET_ERR) {
             if (errno != EWOULDBLOCK) {
                 LOG_WARN("accepting client connection: %s", m_errstr);
             }
-            co_sleep(1000, m_gate_fd, POLLIN);
+            co_sleep(10000, m_gate_fd, POLLIN);
             continue;
         }
 
         LOG_INFO("accepted client: %s:%d, fd: %d", ip, port, fd);
 
-        if (!m_conf->is_reuseport()) {
+        if (!m_config->is_reuseport()) {
             /* transfer fd from manager to worker. */
             channel_fd = m_worker_data_mgr->get_next_worker_data_fd();
             if (channel_fd <= 0) {
@@ -513,7 +503,7 @@ void* Network::handle_accept_gate_conn(void* d) {
             ch = {fd, family, static_cast<int>(m_gate_codec), 0};
 
             for (;;) {
-                err = write_channel(channel_fd, &ch, sizeof(channel_t), m_logger);
+                auto err = write_channel(channel_fd, &ch, sizeof(channel_t), logger());
                 if (err == ERR_OK) {
                     LOG_DEBUG("send client fd: %d to worker through channel fd %d", fd, channel_fd);
                     break;
@@ -536,7 +526,7 @@ void* Network::handle_accept_gate_conn(void* d) {
                 continue;
             }
 
-            c = create_conn(fd, m_gate_codec);
+            auto c = create_conn(fd, m_gate_codec);
             if (c == nullptr) {
                 close_fd(fd);
                 LOG_ERROR("add data fd read event failed, fd: %d", fd);
@@ -545,50 +535,36 @@ void* Network::handle_accept_gate_conn(void* d) {
 
             LOG_INFO("accept client: fd: %d", fd);
 
-            co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
-            if (co_task == nullptr) {
+            auto co = m_coroutines->start_co(
+                [this, c](void* arg) {
+                    on_handle_requests(c);
+                    m_coroutines->add_free_co((stCoRoutine_t*)arg);
+                });
+            if (co == nullptr) {
                 LOG_ERROR("create new corotines failed!");
                 close_conn(c);
                 continue;
             }
-            co_resume(co_task->co);
         }
     }
-
-    return 0;
 }
 
-void* Network::co_handle_read_transfer_fd(void* d) {
+void Network::on_handle_read_transfer_fd(int fd) {
     co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Network* net = (Network*)task->c->privdata();
-    net->on_handle_read_transfer_fd(d);
-    return 0;
-}
-
-void Network::on_handle_read_transfer_fd(void* d) {
     LOG_TRACE("on_handle_read_transfer_fd....");
 
-    int err;
-    int data_fd;
     channel_t ch;
-    co_task_t* task;
-    Codec::TYPE codec;
-    Connection* c = nullptr;
-
-    task = (co_task_t*)d;
-    data_fd = task->c->fd();
 
     for (;;) {
         /* read fd from parent. */
-        err = read_channel(data_fd, &ch, sizeof(channel_t), m_logger);
+        auto err = read_channel(fd, &ch, sizeof(channel_t), logger());
         if (err != 0) {
             if (err == EAGAIN) {
-                // LOG_TRACE("read channel again next time! channel fd: %d", data_fd);
-                co_sleep(1000, data_fd, POLLIN);
+                // LOG_TRACE("read channel again next time! channel fd: %d", fd);
+                co_sleep(10000, fd, POLLIN);
                 continue;
             } else {
-                LOG_CRIT("read channel failed, exit! channel fd: %d", data_fd);
+                LOG_CRIT("read channel failed, exit! channel fd: %d", fd);
                 _exit(EXIT_FD_TRANSFER);
             }
         }
@@ -600,8 +576,8 @@ void Network::on_handle_read_transfer_fd(void* d) {
             continue;
         }
 
-        codec = static_cast<Codec::TYPE>(ch.codec);
-        c = create_conn(ch.fd, codec);
+        auto codec = static_cast<Codec::TYPE>(ch.codec);
+        auto c = create_conn(ch.fd, codec);
         if (c == nullptr) {
             close_fd(ch.fd);
             LOG_ERROR("add data fd read event failed, fd: %d", ch.fd);
@@ -615,36 +591,25 @@ void Network::on_handle_read_transfer_fd(void* d) {
         LOG_INFO("read from channel, get data: fd: %d, family: %d, codec: %d, system: %d",
                  ch.fd, ch.family, ch.codec, ch.is_system);
 
-        co_task_t* co_task = m_coroutines->create_co_task(c, co_handle_requests);
-        if (co_task == nullptr) {
+        auto co = m_coroutines->start_co(
+            [this, c](void* arg) {
+                on_handle_requests(c);
+                m_coroutines->add_free_co((stCoRoutine_t*)arg);
+            });
+        if (co == nullptr) {
             LOG_ERROR("create new corotines failed!");
             close_conn(c);
             continue;
         }
-        co_resume(co_task->co);
     }
 }
 
-void* Network::co_handle_requests(void* d) {
+void Network::on_handle_requests(std::shared_ptr<Connection> c) {
     co_enable_hook_sys();
-    co_task_t* task = (co_task_t*)d;
-    Network* net = (Network*)task->c->privdata();
-    net->on_handle_requests(d);
-    return 0;
-}
-
-void Network::on_handle_requests(void* d) {
-    int fd;
-    Connection* c;
-    co_task_t* task;
-
-    task = (co_task_t*)d;
-    c = (Connection*)task->c;
-    fd = c->fd();
 
     for (;;) {
         if (!is_valid_conn(c)) {
-            LOG_ERROR("invalid conn: %p", c);
+            LOG_ERROR("invalid conn, id: %llu, fd: %d", c->id(), c->fd());
             break;
         }
 
@@ -652,7 +617,7 @@ void Network::on_handle_requests(void* d) {
             /* check alive. */
             if (now() - c->active_time() > m_keep_alive) {
                 LOG_DEBUG("conn timeout, fd: %d, now: %llu, active: %llu, keep alive: %llu\n",
-                          fd, now(), c->active_time(), m_keep_alive);
+                          c->fd(), now(), c->active_time(), m_keep_alive);
                 break;
             }
         }
@@ -660,42 +625,34 @@ void Network::on_handle_requests(void* d) {
         if (process_msg(c) != ERR_OK) {
             break;
         } else {
-            co_sleep(1000, fd, POLLIN);
+            co_sleep(1000, c->fd(), POLLIN);
         }
     }
 
     close_conn(c);
-    task->c = nullptr;
-    m_coroutines->add_free_co_task(task);
 }
 
-int Network::process_msg(Connection* c) {
+int Network::process_msg(std::shared_ptr<Connection> c) {
     return (c->is_http()) ? process_http_msg(c) : process_tcp_msg(c);
 }
 
-int Network::process_tcp_msg(Connection* c) {
+int Network::process_tcp_msg(std::shared_ptr<Connection> c) {
     // LOG_TRACE("handle tcp msg, fd: %d", c->fd());
+    int fd = c->fd();
+    int ret = ERR_OK;
+    auto old_cnt = c->read_cnt();
+    auto old_bytes = c->read_bytes();
 
-    int fd, ret;
-    Request* req;
-    Codec::STATUS stat;
-    uint32_t old_cnt, old_bytes;
-
-    fd = c->fd();
-    ret = ERR_OK;
-    old_cnt = c->read_cnt();
-    old_bytes = c->read_bytes();
-    req = new Request(c->ft());
-
-    stat = c->conn_read(*req->msg_head(), *req->msg_body());
-    if (stat != Codec::STATUS::ERR) {
+    auto req = std::make_shared<Request>(c->ft());
+    auto status = c->conn_read(*req->msg_head(), *req->msg_body());
+    if (status != Codec::STATUS::ERR) {
         m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
         m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
     }
 
-    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
+    // LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)status);
 
-    while (stat == Codec::STATUS::OK) {
+    while (status == Codec::STATUS::OK) {
         ret = ERR_UNKOWN_CMD;
 
         if (c->is_system()) {
@@ -730,24 +687,23 @@ int Network::process_tcp_msg(Connection* c) {
         req->msg_head()->Clear();
         req->msg_body()->Clear();
 
-        stat = c->fetch_data(*req->msg_head(), *req->msg_body());
-        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)stat);
+        status = c->fetch_data(*req->msg_head(), *req->msg_body());
+        LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)status);
     }
 
-    if (stat == Codec::STATUS::ERR || stat == Codec::STATUS::CLOSED) {
+    if (status == Codec::STATUS::ERR || status == Codec::STATUS::CLOSED) {
         LOG_DEBUG("read failed! fd: %d", c->fd());
         ret = ERR_PACKET_DECODE_FAILED;
     }
 
-    SAFE_DELETE(req);
     return ret;
 }
 
-int Network::process_http_msg(Connection* c) {
+int Network::process_http_msg(std::shared_ptr<Connection> c) {
     return ERR_OK;
 }
 
-Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
+std::shared_ptr<Connection> Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
     if (anet_no_block(m_errstr, fd) != ANET_OK) {
         LOG_ERROR("set socket no block failed! fd: %d, errstr: %s", fd, m_errstr);
         return nullptr;
@@ -764,13 +720,13 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
         }
     }
 
-    Connection* c = create_conn(fd);
+    auto c = create_conn(fd);
     if (c == nullptr) {
         LOG_ERROR("add channel event failed! fd: %d", fd);
         return nullptr;
     }
     c->init(codec);
-    c->set_privdata(this);
+    // c->set_privdata(this);
     c->set_active_time(now());
     c->set_state(Connection::STATE::CONNECTED);
 
@@ -782,12 +738,9 @@ Connection* Network::create_conn(int fd, Codec::TYPE codec, bool is_channel) {
     return c;
 }
 
-Connection* Network::create_conn(int fd) {
-    uint64_t id;
-    Connection* c;
-
-    id = new_seq();
-    c = new Connection(m_logger, this, fd, id);
+std::shared_ptr<Connection> Network::create_conn(int fd) {
+    auto id = new_seq();
+    auto c = std::make_shared<Connection>(logger(), shared_from_this(), fd, id);
     if (c == nullptr) {
         LOG_ERROR("new connection failed! fd: %d", fd);
         return nullptr;
@@ -800,7 +753,7 @@ Connection* Network::create_conn(int fd) {
     return c;
 }
 
-bool Network::load_public(SysConfig* config) {
+bool Network::load_public(std::shared_ptr<SysConfig> config) {
     if (!load_config(config)) {
         LOG_ERROR("load config failed!");
         return false;
@@ -811,13 +764,13 @@ bool Network::load_public(SysConfig* config) {
         return false;
     }
 
-    m_sys_cmd = new SysCmd(m_logger, this);
+    m_sys_cmd = std::make_shared<SysCmd>(logger(), shared_from_this());
     if (m_sys_cmd == nullptr) {
         LOG_ERROR("alloc sys cmd failed!");
         return false;
     }
 
-    m_nodes = new Nodes(m_logger);
+    m_nodes = std::make_shared<Nodes>(logger());
     if (m_nodes == nullptr) {
         LOG_ERROR("alloc nodes failed!");
         return false;
@@ -833,24 +786,32 @@ bool Network::load_public(SysConfig* config) {
 }
 
 bool Network::load_modules() {
-    m_module_mgr = new ModuleMgr(m_logger, this);
-    if (m_module_mgr == nullptr || !m_module_mgr->init(m_conf->config())) {
+    m_module_mgr = std::unique_ptr<ModuleMgr>(new ModuleMgr(logger(), shared_from_this()));
+    if (m_module_mgr == nullptr) {
+        LOG_ERROR("alloc modules mgr failed!");
         return false;
     }
+
+    if (!m_module_mgr->init(m_config->config())) {
+        LOG_ERROR("modules mgr init failed!");
+        return false;
+    }
+
     LOG_INFO("load modules mgr sucess!");
     return true;
 }
 
 bool Network::load_corotines() {
-    m_coroutines = new Coroutines(m_logger);
-    return (m_coroutines != nullptr);
+    m_coroutines = std::unique_ptr<Coroutines>(new Coroutines(logger()));
+    if (m_coroutines == nullptr) {
+        LOG_ERROR("alloc coroutines failed!");
+        return false;
+    }
+    return true;
 }
 
-bool Network::load_config(SysConfig* config) {
-    int secs;
-    std::string codec;
-
-    codec = config->gate_codec();
+bool Network::load_config(std::shared_ptr<SysConfig> config) {
+    auto codec = config->gate_codec();
     if (!codec.empty()) {
         if (!set_gate_codec(codec)) {
             LOG_ERROR("invalid codec: %s", codec.c_str());
@@ -859,7 +820,7 @@ bool Network::load_config(SysConfig* config) {
         LOG_DEBUG("gate codec: %s", codec.c_str());
     }
 
-    secs = config->keep_alive();
+    auto secs = config->keep_alive();
     if (secs > 0) {
         set_keep_alive(secs);
     }
@@ -873,31 +834,47 @@ bool Network::load_config(SysConfig* config) {
 }
 
 bool Network::load_worker_data_mgr() {
-    m_worker_data_mgr = new WorkerDataMgr(m_logger);
-    return (m_worker_data_mgr != nullptr);
+    m_worker_data_mgr = std::make_shared<WorkerDataMgr>(logger());
+    if (m_worker_data_mgr == nullptr) {
+        LOG_ERROR("load worker data mgr failed!");
+        return false;
+    }
+    return true;
 }
 
 bool Network::load_zk_mgr() {
-    m_zk_cli = new ZkClient(m_logger, this);
+    m_zk_cli = std::make_shared<ZkClient>(logger(), shared_from_this());
     if (m_zk_cli == nullptr) {
         LOG_ERROR("new zk mgr failed!");
         return false;
     }
 
-    if (m_zk_cli->init(m_conf->config())) {
-        LOG_INFO("load zk client done!");
+    if (!m_zk_cli->init(m_config->config())) {
+        LOG_ERROR("load zk client failed!");
+        return false;
     }
+
+    LOG_INFO("load zk client done!");
     return true;
 }
 
 bool Network::load_nodes_conn() {
-    m_nodes_conn = new NodeConn(this, m_logger);
+    m_nodes_conn = std::unique_ptr<NodeConn>(new NodeConn(shared_from_this(), logger()));
+    if (m_nodes_conn == nullptr) {
+        LOG_ERROR("alloc nodes conn failed!");
+        return true;
+    }
     return true;
 }
 
 bool Network::load_mysql_mgr() {
-    m_mysql_mgr = new MysqlMgr(m_logger);
-    if (!m_mysql_mgr->init(&(*m_conf->config())["database"])) {
+    m_mysql_mgr = std::make_shared<MysqlMgr>(logger());
+    if (m_mysql_mgr == nullptr) {
+        LOG_ERROR("alloc mysql mgr failed!");
+        return false;
+    }
+
+    if (!m_mysql_mgr->init(&(*m_config->config())["database"])) {
         LOG_ERROR("load database mgr failed!");
         return false;
     }
@@ -907,8 +884,13 @@ bool Network::load_mysql_mgr() {
 }
 
 bool Network::load_redis_mgr() {
-    m_redis_mgr = new RedisMgr(m_logger);
-    if (!m_redis_mgr->init(&(*m_conf->config())["redis"])) {
+    m_redis_mgr = std::make_shared<RedisMgr>(logger());
+    if (m_redis_mgr == nullptr) {
+        LOG_ERROR("alloc redis mgr failed!");
+        return false;
+    }
+
+    if (!m_redis_mgr->init(&(*m_config->config())["redis"])) {
         LOG_ERROR("load redis mgr failed!");
         return false;
     }
@@ -918,28 +900,21 @@ bool Network::load_redis_mgr() {
 }
 
 bool Network::load_session_mgr() {
-    m_session_mgr = new SessionMgr(m_logger, this);
-    if (m_session_mgr == nullptr) {
-        LOG_ERROR("alloc session mgr failed!");
-        return false;
-    }
-
+    m_session_mgr = std::make_shared<SessionMgr>(logger(), shared_from_this());
     if (!m_session_mgr->init()) {
-        SAFE_DELETE(m_session_mgr);
         LOG_ERROR("init session mgr failed!\n");
         return false;
     }
-
     return true;
 }
 
-int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
+int Network::send_to(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) {
     if (c == nullptr || c->is_invalid()) {
         return ERR_INVALID_CONN;
     }
 
-    Codec::STATUS stat = c->conn_append_message(head, body);
-    if (stat != Codec::STATUS::OK) {
+    auto status = c->conn_append_message(head, body);
+    if (status != Codec::STATUS::OK) {
         LOG_ERROR("encode message failed! fd: %d", c->fd());
         return ERR_ENCODE_DATA_FAILED;
     }
@@ -950,10 +925,10 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
             return ERR_INVALID_CONN;
         }
 
-        stat = conn_write_data(c);
-        if (stat == Codec::STATUS::OK) {
+        status = conn_write_data(c);
+        if (status == Codec::STATUS::OK) {
             return ERR_OK;
-        } else if (stat == Codec::STATUS::PAUSE) {
+        } else if (status == Codec::STATUS::PAUSE) {
             co_sleep(100, c->fd(), POLLOUT);
             continue;
         } else {
@@ -963,24 +938,24 @@ int Network::send_to(Connection* c, const MsgHead& head, const MsgBody& body) {
     }
 }
 
-Codec::STATUS Network::conn_write_data(Connection* c) {
-    int old_cnt = c->write_cnt();
-    int old_bytes = c->write_bytes();
-    Codec::STATUS stat = c->conn_write();
-    if (stat != Codec::STATUS::ERR) {
+Codec::STATUS Network::conn_write_data(std::shared_ptr<Connection> c) {
+    auto old_cnt = c->write_cnt();
+    auto old_bytes = c->write_bytes();
+    auto status = c->conn_write();
+    if (status != Codec::STATUS::ERR) {
         m_payload.set_write_cnt(m_payload.write_cnt() + (c->write_cnt() - old_cnt));
         m_payload.set_write_bytes(m_payload.write_bytes() + (c->write_bytes() - old_bytes));
     }
-    return stat;
+    return status;
 }
 
-Connection* Network::get_conn(const fd_t& ft) {
+std::shared_ptr<Connection> Network::get_conn(const fd_t& ft) {
     auto it = m_conns.find(ft.id);
     if (it == m_conns.end()) {
         return nullptr;
     }
 
-    Connection* c = it->second;
+    auto c = it->second;
     if (c->fd() != ft.fd) {
         LOG_WARN("conflict conn data, old id: %llu, fd: %d, new id: %llu, fd: %d",
                  c->id(), c->fd(), ft.id, ft.id);
@@ -994,7 +969,8 @@ int Network::send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) {
     return send_to(get_conn(ft), head, body);
 }
 
-int Network::send_ack(const Request* req, int err, const std::string& errstr, const std::string& data) {
+int Network::send_ack(std::shared_ptr<Request> req,
+                      int err, const std::string& errstr, const std::string& data) {
     MsgHead head;
     MsgBody body;
 
@@ -1009,7 +985,7 @@ int Network::send_ack(const Request* req, int err, const std::string& errstr, co
     return send_to(req->ft(), head, body);
 }
 
-int Network::send_req(Connection* c, uint32_t cmd, uint32_t seq, const std::string& data) {
+int Network::send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq, const std::string& data) {
     if (c == nullptr) {
         LOG_DEBUG("invalid connection!");
         return false;
@@ -1048,7 +1024,7 @@ int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
 
     int ret = send_req(it->second, cmd, seq, data);
     if (ret != ERR_OK) {
-        LOG_ALERT("send to parent failed! fd: %d", m_manager_fctrl.fd);
+        LOG_ALERT("send to parent failed:1! fd: %d", m_manager_fctrl.fd);
         return ret;
     }
 
@@ -1082,31 +1058,21 @@ int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
 }
 
 void Network::clear_routines() {
-    SAFE_DELETE(m_coroutines);
+    m_coroutines->destory();
     FreeLibcoEnv();
 }
 
 void Network::destory() {
     exit_libco();
-    SAFE_DELETE(m_zk_cli);
-    SAFE_DELETE(m_module_mgr);
-    SAFE_DELETE(m_mysql_mgr);
-    SAFE_DELETE(m_sys_cmd);
-    SAFE_DELETE(m_redis_mgr);
-    SAFE_DELETE(m_nodes_conn);
-    SAFE_DELETE(m_worker_data_mgr);
-    SAFE_DELETE(m_nodes);
-    SAFE_DELETE(m_session_mgr);
     close_fds();
     clear_routines();
 }
 
 void Network::close_fds() {
     for (const auto& it : m_conns) {
-        Connection* c = it.second;
+        std::shared_ptr<Connection> c = it.second;
         if (c && !c->is_invalid()) {
             close_fd(c->fd());
-            SAFE_DELETE(c);
         }
     }
     m_conns.clear();
@@ -1119,7 +1085,7 @@ void Network::close_channel(int* fds) {
     close_fd(fds[1]);
 }
 
-bool Network::close_conn(Connection* c) {
+bool Network::close_conn(std::shared_ptr<Connection> c) {
     if (c == nullptr) {
         return false;
     }
@@ -1132,7 +1098,7 @@ bool Network::close_conn(uint64_t id) {
         return false;
     }
 
-    Connection* c = it->second;
+    auto c = it->second;
     c->set_state(Connection::STATE::CLOSED);
 
     if (!c->get_node_id().empty()) {
@@ -1151,11 +1117,10 @@ bool Network::close_conn(uint64_t id) {
         LOG_WARN("remove fdt failed, fd: %d, id: %llu", c->fd(), c->id());
     }
 
-    SAFE_DELETE(c);
     return true;
 }
 
-bool Network::is_valid_conn(Connection* c) {
+bool Network::is_valid_conn(std::shared_ptr<Connection> c) {
     if (c == nullptr) {
         return false;
     }
@@ -1169,7 +1134,7 @@ bool Network::is_valid_conn(uint64_t id) {
         return false;
     }
 
-    Connection* c = it->second;
+    std::shared_ptr<Connection> c = it->second;
     if (c->is_invalid()) {
         return false;
     }
@@ -1215,7 +1180,7 @@ bool Network::update_conn_state(const fd_t& ft, int state) {
 }
 
 bool Network::add_client_conn(const std::string& node_id, const fd_t& ft) {
-    Connection* c = get_conn(ft);
+    auto c = get_conn(ft);
     if (c == nullptr) {
         return false;
     }

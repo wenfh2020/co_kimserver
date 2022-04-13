@@ -16,7 +16,7 @@ namespace kim {
 
 class Bio : public Logger {
    public:
-    Bio(Log* logger);
+    Bio(std::shared_ptr<Log> logger);
     virtual ~Bio();
 
     /* create a new thread. */

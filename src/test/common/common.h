@@ -9,7 +9,7 @@
 using namespace kim;
 
 CJsonObject g_config;
-Log* m_logger = nullptr;
+std::shared_ptr<Log> m_logger = nullptr;
 MysqlMgr* g_mysql_mgr = nullptr;
 RedisMgr* g_redis_mgr = nullptr;
 SessionMgr* g_session_mgr = nullptr;
@@ -18,7 +18,7 @@ SessionMgr* g_session_mgr = nullptr;
 #define CONFIG_PATH "../../../bin/config.json"
 
 bool load_logger(const char* path, int level = Log::LL_INFO) {
-    m_logger = new Log;
+    m_logger = std::make_shared<Log>();
     if (!m_logger->set_log_path(path)) {
         std::cerr << "set log path failed!" << std::endl;
         return false;
@@ -37,7 +37,7 @@ bool load_config(const std::string& path) {
     return true;
 }
 
-bool load_mysql_mgr(Log* logger, CJsonObject& config) {
+bool load_mysql_mgr(std::shared_ptr<Log> logger, CJsonObject& config) {
     g_mysql_mgr = new MysqlMgr(logger);
     if (!g_mysql_mgr->init(&config)) {
         printf("load db mgr failed!\n");
@@ -46,7 +46,7 @@ bool load_mysql_mgr(Log* logger, CJsonObject& config) {
     return true;
 }
 
-bool load_redis_mgr(Log* logger, CJsonObject& config) {
+bool load_redis_mgr(std::shared_ptr<Log> logger, CJsonObject& config) {
     g_redis_mgr = new RedisMgr(logger);
     if (!g_redis_mgr->init(&config)) {
         printf("load redis mgr failed!\n");

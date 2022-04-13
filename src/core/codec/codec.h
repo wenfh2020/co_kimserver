@@ -25,7 +25,7 @@ class Codec : public Logger {
         CLOSED = 3,
     };
 
-    Codec(Log* logger, Codec::TYPE codec) : Logger(logger), m_codec(codec) {}
+    Codec(std::shared_ptr<Log> logger, Codec::TYPE codec) : Logger(logger), m_codec(codec) {}
     virtual ~Codec() {}
 
     Codec(const Codec&) = delete;

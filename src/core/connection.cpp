@@ -8,7 +8,7 @@
 
 namespace kim {
 
-Connection::Connection(Log* logger, INet* net, int fd, uint64_t id)
+Connection::Connection(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, int fd, uint64_t id)
     : Logger(logger), Net(net) {
     set_fd_data(fd, id);
     set_active_time(now());

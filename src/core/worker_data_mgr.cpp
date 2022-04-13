@@ -4,7 +4,7 @@
 
 namespace kim {
 
-WorkerDataMgr::WorkerDataMgr(Log* logger) : Logger(logger) {
+WorkerDataMgr::WorkerDataMgr(std::shared_ptr<Log> logger) : Logger(logger) {
     m_itr_worker = m_workers.begin();
 }
 
@@ -29,14 +29,17 @@ bool WorkerDataMgr::add_worker_info(int index, int pid, const fd_t& fctrl, const
         del_worker_info(pid);
     }
 
-    worker_info_t* info = new worker_info_t{pid, index, fctrl, fdata};
-    if (info != nullptr) {
-        m_workers[pid] = info;
-        m_itr_worker = m_workers.begin();
-        m_index_workers[index] = info;
-        return true;
+    auto info = new worker_info_t{pid, index, fctrl, fdata};
+    if (info == nullptr) {
+        LOG_ERROR("alloc worker_info falied!");
+        return false;
     }
-    return false;
+
+    m_workers[pid] = info;
+    m_itr_worker = m_workers.begin();
+    m_index_workers[index] = info;
+    LOG_INFO("add worker info done! pid: %d, index: %d", pid, index);
+    return true;
 }
 
 int WorkerDataMgr::get_worker_index(int pid) {
@@ -67,11 +70,14 @@ bool WorkerDataMgr::del_worker_info(int pid) {
     if (it == m_workers.end()) {
         return false;
     }
+
     worker_info_t* info = it->second;
     m_index_workers.erase(info->index);
-    m_workers.erase(it);
-    m_itr_worker = m_workers.begin();
     SAFE_DELETE(info);
+    m_workers.erase(it);
+    LOG_INFO("del worker info, pid: %d", pid);
+
+    m_itr_worker = m_workers.begin();
     return true;
 }
 
@@ -93,6 +99,7 @@ bool WorkerDataMgr::get_worker_channel(int pid, int* chs) {
 
 int WorkerDataMgr::get_next_worker_data_fd() {
     if (m_workers.empty()) {
+        LOG_ERROR("workers is empty!");
         return -1;
     }
     m_itr_worker++;

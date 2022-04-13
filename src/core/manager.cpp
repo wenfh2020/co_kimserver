@@ -20,9 +20,9 @@ Manager::~Manager() {
 }
 
 void Manager::destory() {
-    SAFE_DELETE(m_net);
-    SAFE_DELETE(m_conf);
-    SAFE_DELETE(m_logger);
+    m_net = nullptr;
+    m_config = nullptr;
+    m_logger = nullptr;
 }
 
 void Manager::run() {
@@ -31,10 +31,10 @@ void Manager::run() {
     }
 }
 
-bool Manager::init(const char* conf_path) {
-    if (!load_sys_config(conf_path)) {
+bool Manager::init(const char* config_path) {
+    if (!load_sys_config(config_path)) {
         std::cerr << "load sys config failed! config path: "
-                  << conf_path
+                  << config_path
                   << std::endl;
         return false;
     }
@@ -44,7 +44,7 @@ bool Manager::init(const char* conf_path) {
         return false;
     }
 
-    set_proc_title("%s", (*m_conf->config())("server_name").c_str());
+    set_proc_title("%s", (*m_config->config())("server_name").c_str());
 
     if (!load_network()) {
         LOG_ERROR("create network failed!");
@@ -71,22 +71,22 @@ void Manager::on_repeat_timer() {
 }
 
 bool Manager::load_logger() {
-    if (m_conf == nullptr) {
+    if (m_config == nullptr) {
         std::cerr << "pls init config firstly!" << std::endl;
         return false;
     }
 
     char path[MAX_PATH];
     snprintf(path, sizeof(path), "%s/%s",
-             m_conf->work_path().c_str(), m_conf->log_path().c_str());
+             m_config->work_path().c_str(), m_config->log_path().c_str());
 
-    m_logger = new Log;
+    m_logger = std::make_shared<Log>();
     if (!m_logger->set_log_path(path)) {
         LOG_ERROR("set log path failed! path: %s", path);
         return false;
     }
 
-    if (!m_logger->set_level(m_conf->log_level().c_str())) {
+    if (!m_logger->set_level(m_config->log_level().c_str())) {
         LOG_ERROR("invalid log level!");
         return false;
     }
@@ -99,15 +99,14 @@ bool Manager::load_logger() {
 }
 
 bool Manager::load_network() {
-    m_net = new Network(m_logger, Network::TYPE::MANAGER);
+    m_net = std::make_shared<Network>(m_logger, Network::TYPE::MANAGER);
     if (m_net == nullptr) {
         LOG_ERROR("new network failed!");
         return false;
     }
 
-    if (!m_net->create_m(m_conf)) {
+    if (!m_net->create_m(m_config)) {
         LOG_ERROR("init network failed!");
-        SAFE_DELETE(m_net);
         return false;
     }
 
@@ -115,10 +114,14 @@ bool Manager::load_network() {
     return true;
 }
 
-bool Manager::load_sys_config(const std::string& conf_path) {
-    m_conf = new SysConfig;
-    if (!m_conf->init(conf_path)) {
-        SAFE_DELETE(m_conf);
+bool Manager::load_sys_config(const std::string& config_path) {
+    m_config = std::make_shared<SysConfig>();
+    if (m_config == nullptr) {
+        LOG_ERROR("alloc sys config failed!");
+        return false;
+    }
+    if (!m_config->init(config_path)) {
+        LOG_ERROR("init sys config failed!");
         return false;
     }
     return true;
@@ -126,9 +129,9 @@ bool Manager::load_sys_config(const std::string& conf_path) {
 
 bool Manager::create_worker(int worker_index) {
     int pid, data_fds[2], ctrl_fds[2];
-    std::string conf_path = m_conf->conf_path();
-    std::string work_path = m_conf->work_path();
-    std::string worker_name = m_conf->worker_name(worker_index);
+    auto config_path = m_config->config_path();
+    auto work_path = m_config->work_path();
+    auto worker_name = m_config->worker_name(worker_index);
 
     if (socketpair(PF_UNIX, SOCK_STREAM, 0, ctrl_fds) < 0) {
         LOG_ERROR("create socket pair failed! %d: %s", errno, strerror(errno));
@@ -153,7 +156,7 @@ bool Manager::create_worker(int worker_index) {
 
         worker_info_t info{0, worker_index, fctrl, fdata, work_path};
         Worker worker(worker_name);
-        if (!worker.init(&info, conf_path)) {
+        if (!worker.init(&info, config_path)) {
             _exit(EXIT_CHILD_INIT_FAIL);
         }
         worker.run();
@@ -185,7 +188,7 @@ bool Manager::create_worker(int worker_index) {
 }
 
 void Manager::create_workers() {
-    for (int i = 1; i <= m_conf->worker_cnt(); i++) {
+    for (int i = 1; i <= m_config->worker_cnt(); i++) {
         if (!create_worker(i)) {
             LOG_ERROR("create worker failed! index: %d", i);
         }
@@ -222,13 +225,14 @@ bool Manager::restart_worker(pid_t pid) {
     /* restart worker by worker index. */
     worker_index = m_net->worker_data_mgr()->get_worker_index(pid);
     if (worker_index == -1) {
-        LOG_ERROR("can not find pid: %d work info.");
+        LOG_ERROR("can not find work info. pid: %d", pid);
         return false;
     }
 
     /* work in timer. */
     m_net->worker_data_mgr()->del_worker_info(pid);
     m_restart_workers.push(worker_index);
+    LOG_INFO("restart worker, index: %d", worker_index);
     return true;
 }
 
@@ -236,9 +240,9 @@ void Manager::close_workers() {
     if (m_net == nullptr) {
         return;
     }
-    WorkerDataMgr* worker_mgr = m_net->worker_data_mgr();
+    auto worker_mgr = m_net->worker_data_mgr();
     if (worker_mgr != nullptr) {
-        const std::unordered_map<int, worker_info_t*>& infos = worker_mgr->get_infos();
+        const auto& infos = worker_mgr->get_infos();
         for (const auto& it : infos) {
             kill(it.second->pid, SIGUSR1);
         }
@@ -278,11 +282,11 @@ void Manager::signal_handler_event(int sig) {
             }
             LOG_CRIT("child terminated! pid: %d, signal %d, error: %d, ret: %d!",
                      pid, sig, status, ret);
-            restart_worker(pid);
+            // restart_worker(pid);
         }
     } else {
         LOG_CRIT("%s terminated by signal %d!",
-                 m_conf->server_name().c_str(), sig);
+                 m_config->server_name().c_str(), sig);
 
         close_workers();
 

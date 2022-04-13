@@ -17,7 +17,7 @@ typedef struct worker_info_s {
 
 class WorkerDataMgr : public Logger {
    public:
-    WorkerDataMgr(Log* logger);
+    WorkerDataMgr(std::shared_ptr<Log> logger);
     virtual ~WorkerDataMgr();
 
    public:

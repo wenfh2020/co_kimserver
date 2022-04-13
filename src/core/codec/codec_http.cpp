@@ -71,7 +71,7 @@ namespace kim {
         goto error;                \
     }
 
-CodecHttp::CodecHttp(Log* logger, Codec::TYPE type, uint64_t keep_alive)
+CodecHttp::CodecHttp(std::shared_ptr<Log> logger, Codec::TYPE type, uint64_t keep_alive)
     : Codec(logger, type), m_keep_alive(keep_alive) {
 }
 

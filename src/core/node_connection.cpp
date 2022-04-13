@@ -15,7 +15,7 @@
 
 namespace kim {
 
-NodeConn::NodeConn(INet* net, Log* logger) : Logger(logger), Net(net) {
+NodeConn::NodeConn(std::shared_ptr<INet> net, std::shared_ptr<Log> logger) : Logger(logger), Net(net) {
 }
 
 NodeConn::~NodeConn() {
@@ -103,21 +103,16 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     ad->coroutines.push_back(cd);
 
-    co_create(&(cd->co), nullptr, co_handle_task, cd);
+    co_create(
+        &(cd->co), nullptr,
+        [this](void* arg) { on_handle_task(arg); },
+        cd);
     co_resume(cd->co);
     return cd;
 }
 
-void* NodeConn::co_handle_task(void* arg) {
-    co_enable_hook_sys();
-    co_data_t* cd = (co_data_t*)arg;
-    NodeConn* m = (NodeConn*)cd->privdata;
-    return m->handle_task(arg);
-}
-
-void* NodeConn::handle_task(void* arg) {
+void NodeConn::on_handle_task(void* arg) {
     int ret;
-    task_t* task;
     MsgHead head;
     MsgBody body;
     co_data_t* cd = (co_data_t*)arg;
@@ -148,7 +143,7 @@ void* NodeConn::handle_task(void* arg) {
                 }
             }
         } else {
-            task = cd->tasks.front();
+            auto task = cd->tasks.front();
             cd->tasks.pop();
 
             ret = net()->send_to(cd->c, *task->head_in, *task->body_in);
@@ -168,24 +163,20 @@ void* NodeConn::handle_task(void* arg) {
             continue;
         }
     }
-
-    return 0;
 }
 
-int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
-    Codec::STATUS stat;
-
+int NodeConn::recv_data(std::shared_ptr<Connection> c, MsgHead* head, MsgBody* body) {
     for (;;) {
-        stat = c->conn_read(*head, *body);
-        if (stat == Codec::STATUS::OK) {
+        auto status = c->conn_read(*head, *body);
+        if (status == Codec::STATUS::OK) {
             return ERR_OK;
-        } else if (stat == Codec::STATUS::PAUSE) {
+        } else if (status == Codec::STATUS::PAUSE) {
             if (net()->now() - c->active_time() > MAX_RECV_DATA_TIME) {
                 return ERR_READ_DATA_TIMEOUT;
             }
             co_sleep(500, c->fd(), POLLIN);
             continue;
-        } else if (stat == Codec::STATUS::CLOSED) {
+        } else if (status == Codec::STATUS::CLOSED) {
             return ERR_CONN_CLOSED;
         } else {
             return ERR_READ_DATA_FAILED;
@@ -194,21 +185,17 @@ int NodeConn::recv_data(Connection* c, MsgHead* head, MsgBody* body) {
 }
 
 void NodeConn::clear_co_tasks(co_data_t* cd) {
-    task_t* task;
-
     while (!cd->tasks.empty()) {
-        task = cd->tasks.front();
+        auto task = cd->tasks.front();
         cd->tasks.pop();
         task->ret = ERR_NODE_CONNECT_FAILED;
         co_resume(task->co);
     }
 }
 
-Connection* NodeConn::node_connect(const std::string& node_type, const std::string& host, int port, int worker_index) {
-    int ret;
-    Connection* c;
-
-    c = auto_connect(host, port, worker_index);
+std::shared_ptr<Connection> NodeConn::node_connect(
+    const std::string& node_type, const std::string& host, int port, int worker_index) {
+    auto c = auto_connect(host, port, worker_index);
     if (c == nullptr) {
         LOG_ERROR("node connect failed! node: %s, host: %s, port: %d, index: %d",
                   node_type.c_str(), host.c_str(), port, worker_index);
@@ -228,7 +215,7 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
 
         /* handle system message. */
         for (;;) {
-            ret = handle_sys_message(c);
+            auto ret = handle_sys_message(c);
             if (ret != ERR_OK) {
                 LOG_ERROR("handle message failed! fd: %d, ret: %d", c->fd(), ret);
                 break;
@@ -261,9 +248,8 @@ Connection* NodeConn::node_connect(const std::string& node_type, const std::stri
     return c;
 }
 
-Connection* NodeConn::auto_connect(const std::string& host, int port, int worker_index) {
+std::shared_ptr<Connection> NodeConn::auto_connect(const std::string& host, int port, int worker_index) {
     int fd;
-    Connection* c;
     std::string node_id;
 
     /* auto connect. */
@@ -307,7 +293,7 @@ Connection* NodeConn::auto_connect(const std::string& host, int port, int worker
     memcpy(&saddr, p->ai_addr, p->ai_addrlen);
     freeaddrinfo(servinfo);
 
-    c = net()->create_conn(fd);
+    auto c = net()->create_conn(fd);
     if (c == nullptr) {
         LOG_ERROR("create conn failed! fd: %d", fd);
         net()->close_fd(fd);
@@ -366,21 +352,17 @@ error:
 }
 
 /* for nodes connect. */
-int NodeConn::handle_sys_message(Connection* c) {
-    int fd, ret;
-    Request* req;
-    Codec::STATUS stat;
-
-    fd = c->fd();
-    ret = ERR_OK;
-    req = new Request(c->ft());
+int NodeConn::handle_sys_message(std::shared_ptr<Connection> c) {
+    int fd = c->fd();
+    int ret = ERR_OK;
+    auto req = std::make_shared<Request>(c->ft());
 
     for (;;) {
-        stat = c->conn_read(*req->msg_head(), *req->msg_body());
-        if (stat != Codec::STATUS::OK) {
-            if (stat == Codec::STATUS::ERR || stat == Codec::STATUS::CLOSED) {
+        auto status = c->conn_read(*req->msg_head(), *req->msg_body());
+        if (status != Codec::STATUS::OK) {
+            if (status == Codec::STATUS::ERR || status == Codec::STATUS::CLOSED) {
                 ret = ERR_READ_DATA_FAILED;
-                LOG_ERROR("conn read failed. codec res: %d, fd: %d", stat, fd);
+                LOG_ERROR("conn read failed. codec res: %d, fd: %d", status, fd);
             }
             break;
         }
@@ -396,7 +378,6 @@ int NodeConn::handle_sys_message(Connection* c) {
         ret = ERR_OK;
     }
 
-    SAFE_DELETE(req);
     return ret;
 }
 

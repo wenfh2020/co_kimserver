@@ -19,7 +19,7 @@ class Connection : public Logger, public Net {
         ERROR
     };
 
-    Connection(Log* logger, INet* net, int fd, uint64_t id);
+    Connection(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, int fd, uint64_t id);
     virtual ~Connection();
 
     bool init(Codec::TYPE codec);
@@ -32,7 +32,7 @@ class Connection : public Logger, public Net {
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
-    int64_t now() { return (m_net != nullptr) ? m_net->now() : mstime(); }
+    int64_t now() { return (net() != nullptr) ? net()->now() : mstime(); }
 
     void set_state(STATE state) { m_state = state; }
     STATE state() const { return m_state; }

@@ -38,22 +38,23 @@ class CoTimer : public TimerCron {
     /* timer's frequency. */
     void set_hz(int hz) { m_hz = hz; }
 
+    void* on_handle_timer(void* arg) {
+        co_enable_hook_sys();
+        for (;;) {
+            co_sleep(1000 / m_hz);
+            on_timer();
+        }
+        return 0;
+    }
+
     bool init_timer() {
         if (m_co_timer == nullptr) {
-            co_create(&m_co_timer, nullptr, co_handle_timer, this);
+            co_create(
+                &m_co_timer, nullptr,
+                [this](void*) { on_handle_timer(this); });
             co_resume(m_co_timer);
         }
         return true;
-    }
-
-    static void* co_handle_timer(void* arg) {
-        co_enable_hook_sys();
-        CoTimer* m = (CoTimer*)arg;
-        for (;;) {
-            co_sleep(1000 / m->m_hz);
-            m->on_timer();
-        }
-        return 0;
     }
 
    protected:

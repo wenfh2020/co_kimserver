@@ -11,7 +11,7 @@ namespace kim {
 
 class CodecHttp : public Codec {
    public:
-    CodecHttp(Log *logger, Codec::TYPE type, uint64_t keep_alive = 0);
+    CodecHttp(std::shared_ptr<Log> logger, Codec::TYPE type, uint64_t keep_alive = 0);
     virtual ~CodecHttp();
 
     Codec::STATUS encode(const HttpMsg &msg, SocketBuffer *sbuf);

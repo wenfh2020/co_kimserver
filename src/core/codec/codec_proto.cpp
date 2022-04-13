@@ -4,7 +4,7 @@
 
 namespace kim {
 
-CodecProto::CodecProto(Log* logger, Codec::TYPE codec)
+CodecProto::CodecProto(std::shared_ptr<Log> logger, Codec::TYPE codec)
     : Codec(logger, codec) {
 }
 

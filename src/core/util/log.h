@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include <iostream>
+#include <memory>
 
 namespace kim {
 
@@ -50,14 +51,14 @@ class Log {
 class Logger {
    public:
     Logger() {}
-    Logger(Log* logger) : m_logger(logger) {}
+    Logger(std::shared_ptr<Log> logger) : m_logger(logger) {}
     virtual ~Logger() {}
 
-    Log* logger() { return m_logger; }
-    void set_logger(Log* logger) { m_logger = logger; }
+    std::shared_ptr<Log> logger() { return m_logger; }
+    void set_logger(std::shared_ptr<Log> logger) { m_logger = logger; }
 
    protected:
-    Log* m_logger = nullptr;
+    std::shared_ptr<Log> m_logger = nullptr;
 };
 
 }  // namespace kim

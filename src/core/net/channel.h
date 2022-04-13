@@ -18,8 +18,8 @@ typedef struct channel_s {
     int is_system;
 } channel_t;
 
-int write_channel(int fd, channel_t* ch, size_t size, Log* logger = nullptr);
-int read_channel(int fd, channel_t* ch, size_t size, Log* logger = nullptr);
+int write_channel(int fd, channel_t* ch, size_t size, std::shared_ptr<Log> logger = nullptr);
+int read_channel(int fd, channel_t* ch, size_t size, std::shared_ptr<Log> logger = nullptr);
 
 }  // namespace kim
 

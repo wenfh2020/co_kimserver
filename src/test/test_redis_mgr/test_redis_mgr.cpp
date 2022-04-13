@@ -36,7 +36,7 @@ void show_result(redisReply* r) {
     printf("reply data, type: %d, str: %s\n", r->type, r->str);
 }
 
-void* co_handler(void* arg) {
+void* co_handler() {
     co_enable_hook_sys();
 
     int i, ret;
@@ -99,10 +99,10 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < g_co_cnt; i++) {
         stCoRoutine_t* co;
-        co_create(&co, nullptr, co_handler, nullptr);
+        co_create(&co, nullptr, [](void*) { co_handler(); });
         co_resume(co);
     }
 
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }

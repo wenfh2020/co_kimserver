@@ -11,10 +11,10 @@ class SysConfig {
     SysConfig() {}
     virtual ~SysConfig();
 
-    bool init(const std::string& conf_path);
-    const std::string& conf_path() const { return m_conf_path; }
+    bool init(const std::string& config_path);
+    const std::string& config_path() const { return m_conf_path; }
 
-    bool load_config(const std::string& conf_path);
+    bool load_config(const std::string& config_path);
     CJsonObject* config() { return m_config; }
 
     void set_work_path(const std::string& path) { m_work_path = path; }

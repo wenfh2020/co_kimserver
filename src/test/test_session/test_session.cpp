@@ -12,8 +12,8 @@ void create_timer_co();
 void test_session_mgr(int cnt);
 bool init(int argc, char** argv);
 
-void* co_timer(void* arg);
-void* co_session(void* arg);
+void co_timer();
+void co_session(void* arg);
 
 int main(int argc, char** argv) {
     if (!init(argc, argv)) {
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     }
     create_timer_co();
     test_session_mgr(atoi(argv[1]));
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }
 
@@ -31,13 +31,16 @@ void test_session_mgr(int cnt) {
     for (int i = 0; i < cnt; i++) {
         task = (test_task_t*)calloc(1, sizeof(test_task_t));
         task->id = i;
-        co_create(&task->co, nullptr, co_session, (void*)task);
+        co_create(
+            &task->co, nullptr,
+            [](void* arg) { co_session(arg); },
+            (void*)task);
         co_resume(task->co);
         LOG_DEBUG("create coroutine, id:%d, co: %p", task->id, task->co);
     }
 }
 
-void* co_session(void* arg) {
+void co_session(void* arg) {
     co_enable_hook_sys();
     test_task_t* task = (test_task_t*)arg;
 
@@ -63,10 +66,9 @@ void* co_session(void* arg) {
     }
 
     g_free_tasks.push_back(task);
-    return 0;
 }
 
-void* co_timer(void* arg) {
+void co_timer() {
     co_enable_hook_sys();
 
     for (;;) {
@@ -82,8 +84,6 @@ void* co_timer(void* arg) {
         malloc_trim(0);
 #endif
     }
-
-    return 0;
 }
 
 bool init(int argc, char** argv) {
@@ -102,6 +102,6 @@ bool init(int argc, char** argv) {
 
 void create_timer_co() {
     stCoRoutine_t* co;
-    co_create(&co, NULL, co_timer, nullptr);
+    co_create(&co, NULL, [](void*) { co_timer(); });
     co_resume(co);
 }

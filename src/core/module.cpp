@@ -5,7 +5,7 @@
 
 namespace kim {
 
-Module::Module(Log* logger, INet* net, uint64_t id, const std::string& name)
+Module::Module(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, uint64_t id, const std::string& name)
     : Logger(logger), Net(net), m_id(id), m_name(name) {
     register_handle_func();
 }
@@ -13,7 +13,7 @@ Module::Module(Log* logger, INet* net, uint64_t id, const std::string& name)
 Module::~Module() {
 }
 
-bool Module::init(Log* logger, INet* net, uint64_t id, const std::string& name) {
+bool Module::init(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, uint64_t id, const std::string& name) {
     set_id(id);
     set_net(net);
     set_name(name);

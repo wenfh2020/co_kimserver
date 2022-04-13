@@ -11,7 +11,7 @@ namespace kim {
 
 typedef Module* CreateModule();
 
-ModuleMgr::ModuleMgr(Log* log, INet* net)
+ModuleMgr::ModuleMgr(std::shared_ptr<Log> log, std::shared_ptr<INet> net)
     : Logger(log), Net(net) {
 }
 
@@ -46,6 +46,7 @@ bool ModuleMgr::init(CJsonObject* config) {
             LOG_CRIT("load so: %s failed!", name.c_str());
             return false;
         }
+        LOG_DEBUG("loading so: %s, path: %s done!", name.c_str(), path.c_str());
     }
 
     return true;
@@ -158,7 +159,7 @@ Module* ModuleMgr::get_module(const std::string& name) {
     return module;
 }
 
-int ModuleMgr::handle_request(const Request* req) {
+int ModuleMgr::handle_request(std::shared_ptr<Request> req) {
     Module* module;
     int res = ERR_UNKOWN_CMD;
 

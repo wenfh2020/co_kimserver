@@ -1,6 +1,8 @@
 
 #include <signal.h>
 
+#include <memory>
+
 #include "./libco/co_routine.h"
 #include "connection.h"
 #include "error.h"
@@ -40,9 +42,9 @@ std::string g_server_host = "127.0.0.1";
 
 int g_seq = 0;
 char g_errstr[256];
-Log* m_logger = nullptr;
+std::shared_ptr<Log> m_logger = nullptr;
 double g_begin_time = 0.0;
-std::unordered_map<int, kim::Connection*> g_conns;
+std::unordered_map<int, std::shared_ptr<kim::Connection>> g_conns;
 
 size_t g_saddr_len;
 struct sockaddr g_saddr;
@@ -66,16 +68,16 @@ void* co_timer(void* arg);
 void* co_readwrite(void* arg);
 
 /* connection. */
-bool del_connect(Connection* c);
-bool check_connect(Connection* c);
-bool check_connect(Connection* c);
-bool is_connect_ok(Connection* c);
-Connection* get_connect(const char* host, int port);
+bool del_connect(std::shared_ptr<Connection> c);
+bool check_connect(std::shared_ptr<Connection> c);
+bool check_connect(std::shared_ptr<Connection> c);
+bool is_connect_ok(std::shared_ptr<Connection> c);
+std::shared_ptr<Connection> get_connect(const char* host, int port);
 
 /* protocol. */
-bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body);
-Codec::STATUS send_packets(Connection* c);
-Codec::STATUS send_proto(Connection* c, int cmd, const std::string& data);
+bool check_rsp(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body);
+Codec::STATUS send_packets(std::shared_ptr<Connection> c);
+Codec::STATUS send_proto(std::shared_ptr<Connection> c, int cmd, const std::string& data);
 
 int main(int args, char** argv) {
     if (!check_args(args, argv)) {
@@ -93,15 +95,15 @@ int main(int args, char** argv) {
 
     stCoRoutine_t* co;
     for (int i = 0; i < g_test_users; i++) {
-        co_create(&co, NULL, co_readwrite, nullptr);
+        co_create(&co, NULL, co_readwrite);
         co_resume(co);
     }
 
     /* timer */
-    co_create(&co, NULL, co_timer, nullptr);
+    co_create(&co, NULL, co_timer);
     co_resume(co);
 
-    co_eventloop(co_get_epoll_ct(), 0, 0);
+    co_eventloop(co_get_epoll_ct());
     return 0;
 }
 
@@ -120,7 +122,6 @@ void* co_readwrite(void* arg) {
     co_enable_hook_sys();
 
     int fd = -1;
-    Connection* c = nullptr;
     bool is_connected = false;
 
     MsgHead head;
@@ -128,7 +129,7 @@ void* co_readwrite(void* arg) {
     Codec::STATUS ret;
     statistics_user_data_t* stat;
 
-    c = get_connect(g_server_host.c_str(), g_server_port);
+    auto c = get_connect(g_server_host.c_str(), g_server_port);
     if (c == nullptr) {
         LOG_ERROR("async connect failed, host: %s, port: %d",
                   g_server_host.c_str(), g_server_port);
@@ -234,7 +235,7 @@ bool check_args(int args, char** argv) {
 }
 
 bool load_logger(const char* path) {
-    m_logger = new kim::Log;
+    m_logger = std::make_shared<kim::Log>();
     if (!m_logger->set_log_path(path)) {
         std::cerr << "set log path failed!" << std::endl;
         return false;
@@ -245,17 +246,15 @@ bool load_logger(const char* path) {
     return true;
 }
 
-Connection* get_connect(const char* host, int port) {
+std::shared_ptr<Connection> get_connect(const char* host, int port) {
     if (host == nullptr || port == 0) {
         LOG_ERROR("invalid host or port!");
         return nullptr;
     }
 
-    int fd;
-    Connection* c;
     statistics_user_data_t* stat;
 
-    fd = anet_tcp_connect(g_errstr, host, port, false, &g_saddr, &g_saddr_len);
+    auto fd = anet_tcp_connect(g_errstr, host, port, false, &g_saddr, &g_saddr_len);
     if (fd == -1) {
         LOG_ERROR("client connect server failed! errstr: %s",
                   g_errstr);
@@ -267,8 +266,7 @@ Connection* get_connect(const char* host, int port) {
         close(fd);
         return nullptr;
     }
-
-    c = new Connection(m_logger, nullptr, fd, new_seq());
+    auto c = std::make_shared<Connection>(m_logger, nullptr, fd, new_seq());
     if (c == nullptr) {
         close(fd);
         LOG_ERROR("alloc connection failed! fd: %d", fd);
@@ -287,7 +285,7 @@ Connection* get_connect(const char* host, int port) {
     return c;
 }
 
-bool is_connect_ok(Connection* c) {
+bool is_connect_ok(std::shared_ptr<Connection> c) {
     bool completed = false;
     if (anet_check_connect_done(
             c->fd(), c->sockaddr(), c->saddr_len(), completed) == ANET_ERR) {
@@ -304,7 +302,7 @@ bool is_connect_ok(Connection* c) {
     }
 }
 
-bool check_connect(Connection* c) {
+bool check_connect(std::shared_ptr<Connection> c) {
     if (c->is_connected()) {
         return true;
     }
@@ -324,7 +322,7 @@ bool check_connect(Connection* c) {
     return true;
 }
 
-bool del_connect(Connection* c) {
+bool del_connect(std::shared_ptr<Connection> c) {
     if (c == nullptr) {
         LOG_ERROR("invalid params!");
         return false;
@@ -337,12 +335,11 @@ bool del_connect(Connection* c) {
 
     free((statistics_user_data_t*)c->privdata());
     close(c->fd());
-    SAFE_DELETE(it->second);
     g_conns.erase(it);
     return true;
 }
 
-Codec::STATUS send_proto(Connection* c, int cmd, const std::string& data) {
+Codec::STATUS send_proto(std::shared_ptr<Connection> c, int cmd, const std::string& data) {
     MsgHead head;
     MsgBody body;
     size_t body_len;
@@ -359,7 +356,7 @@ Codec::STATUS send_proto(Connection* c, int cmd, const std::string& data) {
     return c->conn_write(head, body);
 }
 
-Codec::STATUS send_packets(Connection* c) {
+Codec::STATUS send_packets(std::shared_ptr<Connection> c) {
     if (c == nullptr || !c->is_connected()) {
         LOG_ERROR("invalid connection!");
         return Codec::STATUS::ERR;
@@ -405,7 +402,7 @@ Codec::STATUS send_packets(Connection* c) {
     return ret;
 }
 
-bool check_rsp(Connection* c, const MsgHead& head, const MsgBody& body) {
+bool check_rsp(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) {
     if (!body.has_rsp_result()) {
         LOG_ERROR("no rsp result! fd: %d, cmd: %d", c->fd(), head.cmd());
         return false;

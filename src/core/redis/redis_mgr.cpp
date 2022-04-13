@@ -11,7 +11,7 @@
 
 namespace kim {
 
-RedisMgr::RedisMgr(Log* log) : Logger(log) {
+RedisMgr::RedisMgr(std::shared_ptr<Log> log) : Logger(log) {
 }
 
 RedisMgr::~RedisMgr() {
@@ -102,19 +102,16 @@ RedisMgr::co_data_t* RedisMgr::get_co_data(const std::string& node) {
     LOG_INFO("node: %s, co cnt: %d, max conn cnt: %d, %d",
              node.c_str(), (int)ad->coroutines.size(), ad->ri->max_conn_cnt);
 
-    co_create(&(cd->co), nullptr, co_handle_task, cd);
+    co_create(
+        &(cd->co), nullptr,
+        [this](void* arg) { on_handle_task(arg); },
+        cd);
     co_resume(cd->co);
     return cd;
 }
 
-void* RedisMgr::co_handle_task(void* arg) {
+void* RedisMgr::on_handle_task(void* arg) {
     co_enable_hook_sys();
-    co_data_t* cd = (co_data_t*)arg;
-    RedisMgr* m = (RedisMgr*)cd->privdata;
-    return m->handle_task(arg);
-}
-
-void* RedisMgr::handle_task(void* arg) {
     co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
@@ -154,11 +151,10 @@ void RedisMgr::handle_redis_cmd(co_data_t* cd) {
     int i = 0;
     int ret = REDIS_OK;
     bool is_reply_ok = true;
-    task_t* task;
     std::list<task_t*> tasks;
 
     while (i++ < PIPELINE_CMD_CNT && !cd->tasks.empty()) {
-        task = cd->tasks.front();
+        auto task = cd->tasks.front();
         cd->tasks.pop();
         LOG_DEBUG("append redis cmd: %s", task->cmd.c_str());
 
@@ -201,10 +197,8 @@ void RedisMgr::handle_redis_cmd(co_data_t* cd) {
 }
 
 void RedisMgr::clear_co_tasks(co_data_t* cd) {
-    task_t* task;
-
     while (!cd->tasks.empty()) {
-        task = cd->tasks.front();
+        auto task = cd->tasks.front();
         cd->tasks.pop();
         task->ret = ERR_REDIS_TASKS_CLEAR;
         co_resume(task->co);

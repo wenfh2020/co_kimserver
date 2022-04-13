@@ -6,14 +6,14 @@ namespace kim {
 
 // Session
 ////////////////////////////////////////////////
-Session::Session(Log* logger, INet* net, const std::string& id)
+Session::Session(std::shared_ptr<Log> logger, std::shared_ptr<INet> net, const std::string& id)
     : Logger(logger), Net(net), m_sessid(id) {
 }
 
 // SessionMgr
 ////////////////////////////////////////////////
 
-SessionMgr::SessionMgr(Log* logger, INet* net) : Logger(logger), Net(net) {
+SessionMgr::SessionMgr(std::shared_ptr<Log> logger, std::shared_ptr<INet> net) : Logger(logger), Net(net) {
 }
 
 bool SessionMgr::init() {
@@ -74,13 +74,20 @@ bool SessionMgr::del_session(const std::string& id) {
 
 std::shared_ptr<SessionMgr::tm_session_t>
 SessionMgr::add_timer(std::shared_ptr<Session> session, uint64_t after, uint64_t repeat) {
-    std::shared_ptr<tm_session_t> timer(new tm_session_t{-1, session, this});
-    int timer_id = m_timers->add_timer(
-        [timer, this](int timer_id, bool is_repeat, void* privdata) {
+    auto self = std::weak_ptr<SessionMgr>(shared_from_this());
+    auto timer = std::make_shared<tm_session_t>();
+    timer->session = session;
+
+    auto timer_id = m_timers->add_timer(
+        [this, timer, self](int timer_id, bool is_repeat, void* privdata) {
             timer->session->on_timeout();
             if (!is_repeat) {
+                auto p = self.lock();
+                if (p == nullptr) {
+                    return;
+                }
                 LOG_DEBUG("hit timeout callback, timer_id: %d", timer_id);
-                this->del_session(timer->session->id());
+                del_session(timer->session->id());
             }
         },
         after, repeat);

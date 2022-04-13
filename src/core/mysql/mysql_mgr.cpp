@@ -11,7 +11,7 @@
 
 namespace kim {
 
-MysqlMgr::MysqlMgr(Log* logger) : Logger(logger) {
+MysqlMgr::MysqlMgr(std::shared_ptr<Log> logger) : Logger(logger) {
 }
 
 MysqlMgr::~MysqlMgr() {
@@ -37,17 +37,13 @@ int MysqlMgr::sql_read(const std::string& node, const std::string& sql, vec_row_
 int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows) {
     LOG_DEBUG("send mysql task, node: %s, sql: %s.", node.c_str(), sql.c_str());
 
-    int ret;
-    task_t* task;
-    co_mgr_data_t* md;
-
-    md = get_co_mgr_data(node);
+    auto md = get_co_mgr_data(node);
     if (md == nullptr) {
         LOG_ERROR("invalid node: %s", node.c_str());
         return ERR_CAN_NOT_FIND_NODE;
     }
 
-    task = new task_t;
+    auto task = new task_t;
     task->sql = sql;
     task->rows = rows;
     task->is_read = is_read;
@@ -61,21 +57,14 @@ int MysqlMgr::send_task(const std::string& node, const std::string& sql, bool is
               node.c_str(), md->dist_co);
     co_yield_ct();
 
-    ret = task->ret;
+    auto ret = task->ret;
     SAFE_DELETE(task);
     return ret;
 }
 
-void* MysqlMgr::co_dist_task(void* arg) {
+void* MysqlMgr::on_dist_task(void* arg) {
     co_enable_hook_sys();
-    co_mgr_data_t* md = (co_mgr_data_t*)arg;
-    MysqlMgr* m = (MysqlMgr*)md->privdata;
-    return m->dist_task(arg);
-}
 
-void* MysqlMgr::dist_task(void* arg) {
-    task_t* task;
-    co_data_t* cd;
     co_mgr_data_t* md = (co_mgr_data_t*)arg;
 
     for (;;) {
@@ -86,7 +75,7 @@ void* MysqlMgr::dist_task(void* arg) {
             continue;
         }
 
-        cd = get_co_data(md->db->node);
+        auto cd = get_co_data(md->db->node);
         if (cd == nullptr) {
             LOG_ERROR("can not get co data, node: %s", md->db->node.c_str());
             co_sleep(1000);
@@ -95,7 +84,7 @@ void* MysqlMgr::dist_task(void* arg) {
 
         /* distribute tasks to connection's coroutine. */
         for (int i = 0; i < DIST_CONN_TASKS_ONCE && !md->tasks.empty(); i++) {
-            task = md->tasks.front();
+            auto task = md->tasks.front();
             md->tasks.pop();
             cd->tasks.push(task);
         }
@@ -106,17 +95,9 @@ void* MysqlMgr::dist_task(void* arg) {
     return 0;
 }
 
-void* MysqlMgr::co_handle_task(void* arg) {
+void* MysqlMgr::on_handle_task(void* arg) {
     co_enable_hook_sys();
-    co_data_t* cd = (co_data_t*)arg;
-    MysqlMgr* m = (MysqlMgr*)cd->privdata;
-    return m->handle_task(arg);
-}
-
-void* MysqlMgr::handle_task(void* arg) {
-    task_t* task;
-    int64_t spend;
-    co_data_t* cd = (co_data_t*)arg;
+    auto cd = (co_data_t*)arg;
 
     for (;;) {
         if (cd->tasks.empty()) {
@@ -139,7 +120,7 @@ void* MysqlMgr::handle_task(void* arg) {
             }
         }
 
-        task = cd->tasks.front();
+        auto task = cd->tasks.front();
         cd->tasks.pop();
 
         m_cur_handle_cnt++;
@@ -158,7 +139,7 @@ void* MysqlMgr::handle_task(void* arg) {
             task->ret = cd->c->sql_write(task->sql);
         }
 
-        spend = mstime() - cd->active_time;
+        auto spend = mstime() - cd->active_time;
         if (spend > m_slowlog_log_slower_than) {
             LOG_WARN("slowlog - sql spend time: %llu, sql: %s", spend, task->sql.c_str());
         }
@@ -170,8 +151,6 @@ void* MysqlMgr::handle_task(void* arg) {
 }
 
 MysqlMgr::co_mgr_data_t* MysqlMgr::get_co_mgr_data(const std::string& node) {
-    co_mgr_data_t* md;
-
     auto it = m_coroutines.find(node);
     if (it != m_coroutines.end()) {
         return it->second;
@@ -183,22 +162,24 @@ MysqlMgr::co_mgr_data_t* MysqlMgr::get_co_mgr_data(const std::string& node) {
         return nullptr;
     }
 
-    md = new co_mgr_data_t;
+    auto md = new co_mgr_data_t;
     md->privdata = this;
     md->db = it_db->second;
     md->dist_cond = co_cond_alloc();
 
     m_coroutines[node] = md;
-    co_create(&(md->dist_co), nullptr, co_dist_task, md);
+    co_create(
+        &(md->dist_co), nullptr,
+        [this](void* arg) { on_dist_task(arg); },
+        md);
     co_resume(md->dist_co);
     return md;
 }
 
 MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
     co_data_t* cd;
-    co_mgr_data_t* md;
 
-    md = get_co_mgr_data(node);
+    auto md = get_co_mgr_data(node);
     if (md == nullptr) {
         LOG_ERROR("can not find co array data. node: %s.", node.c_str());
         return nullptr;
@@ -232,13 +213,17 @@ MysqlMgr::co_data_t* MysqlMgr::get_co_data(const std::string& node) {
     LOG_INFO("create new conn data, node: %s, co cnt: %d, max conn cnt: %d",
              node.c_str(), md->conn_cnt, md->db->max_conn_cnt);
 
-    co_create(&(cd->conn_co), nullptr, co_handle_task, cd);
+    co_create(
+        &(cd->conn_co), nullptr,
+        [this](void* arg) { on_handle_task(arg); },
+        cd);
     co_resume(cd->conn_co);
     return cd;
 }
 
 void MysqlMgr::on_repeat_timer() {
-    int64_t now;
+    co_enable_hook_sys();
+
     int task_cnt = 0;
     int busy_conn_cnt = 0;
 
@@ -259,7 +244,7 @@ void MysqlMgr::on_repeat_timer() {
             m_old_handle_cnt = m_cur_handle_cnt;
         }
 
-        now = mstime();
+        auto now = mstime();
 
         /* recover free connections. */
         for (auto& it : m_coroutines) {
@@ -307,9 +292,7 @@ bool MysqlMgr::init(CJsonObject* config) {
         return false;
     }
 
-    db_info_t* db;
     std::vector<std::string> vec;
-
     (*config)["nodes"].GetKeys(vec);
     if (vec.size() == 0) {
         LOG_ERROR("database info is empty.");
@@ -319,7 +302,7 @@ bool MysqlMgr::init(CJsonObject* config) {
     for (const auto& v : vec) {
         const CJsonObject& obj = (*config)["nodes"][v];
 
-        db = new db_info_t;
+        auto db = new db_info_t;
         db->host = obj("host");
         db->db_name = obj("name").empty() ? "mysql" : obj("name");
         db->password = obj("password");

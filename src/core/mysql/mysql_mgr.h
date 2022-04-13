@@ -47,7 +47,7 @@ class MysqlMgr : Logger, public TimerCron {
     } co_mgr_data_t;
 
    public:
-    MysqlMgr(Log* logger);
+    MysqlMgr(std::shared_ptr<Log> logger);
     virtual ~MysqlMgr();
 
     /**
@@ -86,12 +86,10 @@ class MysqlMgr : Logger, public TimerCron {
     void destory();
 
     /* coroutine for distribution of tasks. */
-    static void* co_dist_task(void* arg);
-    void* dist_task(void* arg);
+    void* on_dist_task(void* arg);
 
     /* coroutine for handling task. */
-    static void* co_handle_task(void* arg);
-    void* handle_task(void* arg);
+    void* on_handle_task(void* arg);
 
     /* put task into task's queue. */
     int send_task(const std::string& node, const std::string& sql, bool is_read, vec_row_t* rows = nullptr);

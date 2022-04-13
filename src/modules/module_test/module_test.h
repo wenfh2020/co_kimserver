@@ -17,14 +17,14 @@ class MoudleTest : public Module {
     }
 
    protected:
-    void print_cmd_info(const Request* req);
+    void print_cmd_info(std::shared_ptr<Request> req);
 
    private:
     /* request's handler. */
-    int on_test_hello(const Request* req);
-    int on_test_mysql(const Request* req);
-    int on_test_redis(const Request* req);
-    int on_test_session(const Request* req);
+    int on_test_hello(std::shared_ptr<Request> req);
+    int on_test_mysql(std::shared_ptr<Request> req);
+    int on_test_redis(std::shared_ptr<Request> req);
+    int on_test_session(std::shared_ptr<Request> req);
 };
 
 }  // namespace kim
