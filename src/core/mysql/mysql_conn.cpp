@@ -18,7 +18,12 @@ void MysqlConn::close() {
     }
 }
 
-bool MysqlConn::connect(db_info_t* db) {
+bool MysqlConn::connect(std::shared_ptr<db_info_t> dbi) {
+    if (dbi == nullptr) {
+        LOG_ERROR("invalid db info");
+        return false;
+    }
+
     if (m_conn != nullptr) {
         mysql_close(m_conn);
         m_conn = nullptr;
@@ -35,20 +40,20 @@ bool MysqlConn::connect(db_info_t* db) {
     /* https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html */
     /* https://dev.mysql.com/doc/c-api/8.0/en/c-api-auto-reconnect.html */
     mysql_options(m_conn, MYSQL_OPT_RECONNECT, &is_reconnect);
-    mysql_set_character_set(m_conn, db->charset.c_str());
+    mysql_set_character_set(m_conn, dbi->charset.c_str());
     /* MYSQL_OPT_COMPRESS --> Cost performance. */
     // mysql_options(m_conn, MYSQL_OPT_COMPRESS, NULL);
     // mysql_options(m_conn, MYSQL_OPT_LOCAL_INFILE, NULL);
 
-    if (!mysql_real_connect(m_conn, db->host.c_str(), db->user.c_str(),
-                            db->password.c_str(), "mysql", db->port, NULL, 0)) {
+    if (!mysql_real_connect(m_conn, dbi->host.c_str(), dbi->user.c_str(),
+                            dbi->password.c_str(), "mysql", dbi->port, NULL, 0)) {
         LOG_ERROR("db connect failed! %s:%d, error: %d, errstr: %s",
-                  db->host.c_str(), db->port, mysql_errno(m_conn), mysql_error(m_conn));
+                  dbi->host.c_str(), dbi->port, mysql_errno(m_conn), mysql_error(m_conn));
         return false;
     }
 
-    LOG_INFO("mysql connect done! host:%s, port: %d, db name: %s",
-             db->host.c_str(), db->port, db->db_name.c_str());
+    LOG_INFO("mysql connect done! host:%s, port: %d, dbi name: %s",
+             dbi->host.c_str(), dbi->port, dbi->db_name.c_str());
     return true;
 }
 

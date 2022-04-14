@@ -10,7 +10,7 @@ using namespace kim;
 
 CJsonObject g_config;
 std::shared_ptr<Log> m_logger = nullptr;
-MysqlMgr* g_mysql_mgr = nullptr;
+std::shared_ptr<MysqlMgr> g_mysql_mgr = nullptr;
 RedisMgr* g_redis_mgr = nullptr;
 SessionMgr* g_session_mgr = nullptr;
 
@@ -38,7 +38,7 @@ bool load_config(const std::string& path) {
 }
 
 bool load_mysql_mgr(std::shared_ptr<Log> logger, CJsonObject& config) {
-    g_mysql_mgr = new MysqlMgr(logger);
+    g_mysql_mgr = std::make_shared<MysqlMgr>(logger);
     if (!g_mysql_mgr->init(&config)) {
         printf("load db mgr failed!\n");
         return false;

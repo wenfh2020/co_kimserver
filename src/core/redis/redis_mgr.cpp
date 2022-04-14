@@ -203,14 +203,14 @@ bool RedisMgr::init(CJsonObject* config) {
         return false;
     }
 
-    std::vector<std::string> vec;
-    config->GetKeys(vec);
-    if (vec.empty()) {
+    std::vector<std::string> nodes;
+    config->GetKeys(nodes);
+    if (nodes.empty()) {
         LOG_ERROR("database info is empty.");
         return false;
     }
 
-    for (const auto& node : vec) {
+    for (const auto& node : nodes) {
         const CJsonObject& json_obj = (*config)[node];
 
         auto ri = std::make_shared<redis_info_t>();

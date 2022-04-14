@@ -1,3 +1,5 @@
+#include <memory>
+
 #include "../common/common.h"
 
 int g_co_cnt = 0;
@@ -13,12 +15,11 @@ typedef struct test_co_task_s {
     stCoRoutine_t* co;
 } test_co_task_t;
 
-std::list<test_co_task_t*> g_coroutines;
+std::list<std::shared_ptr<test_co_task_t>> g_coroutines;
 
 void destory() {
-    SAFE_FREE(g_mysql_mgr);
-    for (auto& it : g_coroutines) {
-        free(it);
+    for (auto task : g_coroutines) {
+        co_release(task->co);
     }
 }
 
@@ -39,7 +40,7 @@ void show_mysql_res(const vec_row_t& rows) {
     }
 }
 
-void co_handler_mysql(void* arg) {
+void co_handler_mysql() {
     co_enable_hook_sys();
 
     int i, ret;
@@ -97,9 +98,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    int i;
-    test_co_task_t* task;
-
     g_is_read = !strcasecmp(argv[1], "r");
     g_co_cnt = atoi(argv[2]);
     g_co_query_cnt = atoi(argv[3]);
@@ -110,18 +108,17 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    for (i = 0; i < g_co_cnt; i++) {
-        task = (test_co_task_t*)calloc(1, sizeof(test_co_task_t));
+    for (int i = 0; i < g_co_cnt; i++) {
+        auto task = std::make_shared<test_co_task_t>();
         task->id = i;
         task->co = nullptr;
         g_coroutines.push_back(task);
-        co_create(
-            &task->co, nullptr,
-            [](void* arg) { co_handler_mysql(arg); },
-            task);
+        co_create(&task->co, nullptr, [](void*) {
+            co_handler_mysql();
+        });
         co_resume(task->co);
     }
 
-    co_eventloop(co_get_epoll_ct());
+    co_eventloop(co_get_epoll_ct(), [](void*) { return g_is_end ? -1 : 0; });
     return 0;
 }

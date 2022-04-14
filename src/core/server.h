@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <fstream>
+#include <functional>
 #include <iosfwd>
 #include <iostream>
 #include <list>

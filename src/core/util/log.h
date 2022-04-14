@@ -24,7 +24,7 @@ class Log {
     };
 
     Log();
-    virtual ~Log() {}
+    virtual ~Log() = default;
 
    public:
     bool set_level(int level);
