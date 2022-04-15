@@ -4,13 +4,14 @@
 #include <mysql/mysql.h>
 
 #include <iostream>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace kim {
 
-typedef std::unordered_map<std::string, std::string> map_row_t;
-typedef std::vector<map_row_t> vec_row_t;
+using MapRow = std::unordered_map<std::string, std::string>;
+using VecMapRow = std::vector<MapRow>;
 
 class MysqlResult {
    public:
@@ -25,7 +26,7 @@ class MysqlResult {
     MYSQL_ROW fetch_row();
     unsigned int num_rows();
     const MYSQL_RES* result() { return m_res; }
-    int result_data(vec_row_t& data);
+    int fetch_result_rows(std::shared_ptr<VecMapRow> rows);
     unsigned long* fetch_lengths();
     unsigned int fetch_num_fields();
 

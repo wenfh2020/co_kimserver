@@ -42,7 +42,7 @@ class Network : public INet, public TimerCron, public Logger {
     /* events. */
     void run();
     void exit_libco();
-    void destory();
+    void destroy();
 
     bool set_gate_codec(const std::string& codec);
     void set_keep_alive(uint64_t ms) { m_keep_alive = ms; }

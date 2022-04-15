@@ -15,7 +15,7 @@ RedisMgr::RedisMgr(std::shared_ptr<Log> log) : Logger(log) {
 }
 
 RedisMgr::~RedisMgr() {
-    destory();
+    destroy();
 }
 
 int RedisMgr::exec_cmd(const std::string& node, const std::string& cmd, redisReply** r) {
@@ -261,7 +261,7 @@ redisContext* RedisMgr::connect(const std::string& host, int port) {
     return c;
 }
 
-void RedisMgr::destory() {
+void RedisMgr::destroy() {
     for (auto it : m_coroutines) {
         auto ad = it.second;
         for (auto& cd : ad->coroutines) {

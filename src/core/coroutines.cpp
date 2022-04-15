@@ -14,10 +14,10 @@ Coroutines::Coroutines(std::shared_ptr<Log> logger) : Logger(logger) {
 }
 
 Coroutines::~Coroutines() {
-    destory();
+    destroy();
 }
 
-void Coroutines::destory() {
+void Coroutines::destroy() {
     clear();
     if (m_co_attr.share_stack != nullptr) {
         co_release_sharestack(m_co_attr.share_stack);

@@ -72,7 +72,8 @@ int MysqlConn::sql_write(const std::string& sql) {
     return ERR_OK;
 }
 
-int MysqlConn::sql_read(const std::string& sql, vec_row_t& rows) {
+/* rows 如果是临时变量，有可能会栈溢出。 */
+int MysqlConn::sql_read(const std::string& sql, std::shared_ptr<VecMapRow> rows) {
     if (sql.empty()) {
         LOG_ERROR("invalid db query params!");
         return ERR_INVALID_PARAMS;
@@ -83,20 +84,16 @@ int MysqlConn::sql_read(const std::string& sql, vec_row_t& rows) {
         return ERR_DB_INVALID_QUERY_SQL;
     }
 
-    int ret;
-    MYSQL_RES* res;
-    MysqlResult result;
-
-    ret = sql_exec(sql);
+    int ret = sql_exec(sql);
     if (ret != ERR_OK) {
         LOG_ERROR("query sql failed! sql: %s", sql.c_str());
         return ERR_DB_QUERY_FAILED;
     }
 
-    /* for safe coroutine's stack, pls malloc/new obj: rows! */
-    res = mysql_store_result(m_conn);
+    MysqlResult result;
+    MYSQL_RES* res = mysql_store_result(m_conn);
     if (result.init(m_conn, res)) {
-        result.result_data(rows);
+        result.fetch_result_rows(rows);
     }
     mysql_free_result(res);
 

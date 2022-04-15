@@ -44,7 +44,7 @@ class NodeConn : public Logger, public Net {
    public:
     NodeConn(std::shared_ptr<INet> net, std::shared_ptr<Log> logger);
     virtual ~NodeConn();
-    void destory();
+    void destroy();
 
     /**
      * @brief send data from cur node to others.

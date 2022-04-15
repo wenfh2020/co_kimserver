@@ -15,7 +15,7 @@ class Coroutines : public Logger, public TimerCron {
     Coroutines(std::shared_ptr<Log> logger);
     virtual ~Coroutines();
 
-    void destory();
+    void destroy();
 
     void run();
     void exit_libco();

@@ -63,7 +63,7 @@ class RedisMgr : Logger {
     int exec_cmd(const std::string& node, const std::string& cmd, redisReply** r);
 
    private:
-    void destory();
+    void destroy();
     std::shared_ptr<co_data_t> get_co_data(const std::string& node);
     redisContext* connect(const std::string& host, int port);
 

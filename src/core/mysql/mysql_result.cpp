@@ -21,19 +21,19 @@ bool MysqlResult::init(MYSQL *mysql, MYSQL_RES *res) {
     return true;
 }
 
-int MysqlResult::result_data(vec_row_t &data) {
+int MysqlResult::fetch_result_rows(std::shared_ptr<VecMapRow> rows) {
     if (m_res == nullptr) {
         return 0;
     }
-    MYSQL_FIELD *fields = mysql_fetch_fields(m_res);
-    while ((m_cur_row = mysql_fetch_row(m_res)) != NULL) {
-        map_row_t items;
+    auto fields = mysql_fetch_fields(m_res);
+    while ((m_cur_row = mysql_fetch_row(m_res)) != nullptr) {
+        MapRow cols;
         for (int i = 0; i < m_field_cnt; i++) {
-            items[fields[i].name] = (m_cur_row[i] != nullptr) ? m_cur_row[i] : "";
+            cols.emplace(fields[i].name, (m_cur_row[i] != nullptr) ? m_cur_row[i] : "");
         }
-        data.push_back(items);
+        rows->push_back(std::move(cols));
     }
-    return data.size();
+    return rows->size();
 }
 
 MYSQL_ROW MysqlResult::fetch_row() {

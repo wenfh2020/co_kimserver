@@ -18,9 +18,9 @@ class MysqlConn : Logger {
     virtual ~MysqlConn();
 
     int sql_write(const std::string& sql);
-    int sql_read(const std::string& sql, vec_row_t& rows);
+    int sql_read(const std::string& sql, std::shared_ptr<VecMapRow> rows);
 
-    bool connect(std::shared_ptr<db_info_t> db_info);
+    bool connect(std::shared_ptr<db_info_t> dbi);
     MYSQL* get_conn() { return m_conn; }
     void close();
 

@@ -21,8 +21,8 @@ int MoudleTest::on_test_hello(std::shared_ptr<Request> req) {
 int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
     print_cmd_info(req);
 
-    const char* read_sql = "select value from mytest.on_test_async_mysql where id = 1;";
-    const char* write_sql = "insert into mytest.on_test_async_mysql (value) values ('hello world');";
+    const char* read_sql = "select value from mytest.test_async_mysql where id = 1;";
+    const char* write_sql = "insert into mytest.test_async_mysql (value) values ('hello world');";
 
     auto ret = net()->mysql_mgr()->sql_write("test", write_sql);
     if (ret != ERR_OK) {
@@ -30,24 +30,19 @@ int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
         return net()->send_ack(req, ret, "write mysql failed!");
     }
 
-    vec_row_t* rows = new vec_row_t;
-
-    /* read mysql. */
-    ret = net()->mysql_mgr()->sql_read("test", read_sql, *rows);
+    auto rows = std::make_shared<VecMapRow>();
+    auto ret = net()->mysql_mgr()->sql_read("test", read_sql, rows);
     if (ret != ERR_OK) {
-        SAFE_DELETE(rows);
         LOG_ERROR("read mysql failed! ret: %d", ret);
         return net()->send_ack(req, ret, "read mysql failed!");
     }
 
     for (size_t i = 0; i < rows->size(); i++) {
-        const map_row_t& items = rows->at(i);
-        for (const auto& it : items) {
+        const auto& cols = rows->at(i);
+        for (const auto& it : cols) {
             LOG_DEBUG("col: %s, data: %s", it.first.c_str(), it.second.c_str());
         }
     }
-
-    SAFE_DELETE(rows);
 
     return net()->send_ack(req, ERR_OK, "ok", "test mysql done!");
 }
@@ -85,7 +80,6 @@ int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
     freeReplyObject(reply);
 
     LOG_DEBUG("read redis done! cmd: %s", cmd);
-
     return net()->send_ack(req, ERR_OK, "ok", "test redis done!");
 }
 

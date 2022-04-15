@@ -18,7 +18,7 @@ Network::Network(std::shared_ptr<Log> logger, TYPE type) : Logger(logger), m_typ
 }
 
 Network::~Network() {
-    destory();
+    destroy();
 }
 
 /* parent. */
@@ -1058,11 +1058,11 @@ int Network::send_to_workers(int cmd, uint64_t seq, const std::string& data) {
 }
 
 void Network::clear_routines() {
-    m_coroutines->destory();
+    m_coroutines->destroy();
     FreeLibcoEnv();
 }
 
-void Network::destory() {
+void Network::destroy() {
     exit_libco();
     close_fds();
     clear_routines();

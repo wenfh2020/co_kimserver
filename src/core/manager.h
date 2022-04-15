@@ -11,7 +11,7 @@ class Manager : CoTimer {
     virtual ~Manager();
 
     bool init(const char* config_path);
-    void destory();
+    void destroy();
     void run();
 
    private:

@@ -19,10 +19,10 @@ NodeConn::NodeConn(std::shared_ptr<INet> net, std::shared_ptr<Log> logger) : Log
 }
 
 NodeConn::~NodeConn() {
-    destory();
+    destroy();
 }
 
-void NodeConn::destory() {
+void NodeConn::destroy() {
     for (auto& it : m_coroutines) {
         co_array_data_t* ad = it.second;
         for (auto& v : ad->coroutines) {

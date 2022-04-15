@@ -11,8 +11,8 @@ namespace kim {
 
 class TimerCron {
    public:
-    TimerCron() {}
-    virtual ~TimerCron() {}
+    TimerCron() = default;
+    virtual ~TimerCron() = default;
 
     virtual void on_repeat_timer() {}
     virtual void on_timer() {

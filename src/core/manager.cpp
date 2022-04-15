@@ -16,10 +16,10 @@ Manager::Manager() {
 }
 
 Manager::~Manager() {
-    destory();
+    destroy();
 }
 
-void Manager::destory() {
+void Manager::destroy() {
     m_net = nullptr;
     m_config = nullptr;
     m_logger = nullptr;
@@ -146,7 +146,7 @@ bool Manager::create_worker(int worker_index) {
 
     if ((pid = fork()) == 0) {
         /* child. */
-        destory();
+        destroy();
 
         close(ctrl_fds[0]);
         close(data_fds[0]);

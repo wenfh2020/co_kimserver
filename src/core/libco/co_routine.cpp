@@ -3,16 +3,16 @@
 
 * Copyright (C) 2014 THL A29 Limited, a Tencent company. All rights reserved.
 *
-* Licensed under the Apache License, Version 2.0 (the "License"); 
-* you may not use this file except in compliance with the License. 
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
 *
 *    http://www.apache.org/licenses/LICENSE-2.0
 *
-* Unless required by applicable law or agreed to in writing, 
-* software distributed under the License is distributed on an "AS IS" BASIS, 
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-* See the License for the specific language governing permissions and 
+* Unless required by applicable law or agreed to in writing,
+* software distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
 * limitations under the License.
 */
 
@@ -52,12 +52,12 @@ struct stCoRoutineEnv_t {
     int iCallStackSize;
     stCoEpoll_t *pEpoll;
 
-    //for copy stack log lastco and nextco
+    // for copy stack log lastco and nextco
     stCoRoutine_t *pending_co;
     stCoRoutine_t *occupy_co;
 };
 
-//int socket(int domain, int type, int protocol);
+// int socket(int domain, int type, int protocol);
 void co_log_err(const char *fmt, ...) {
 }
 
@@ -127,7 +127,7 @@ static pid_t GetPid()
         {
             tid = pid;
         }
-#else 
+#else
         tid = syscall( __NR_gettid );
 #endif
 
@@ -211,7 +211,7 @@ void inline PopHead(TLink *apLink) {
 
 template <class TNode, class TLink>
 void inline Join(TLink *apLink, TLink *apOther) {
-    //printf("apOther %p\n",apOther);
+    // printf("apOther %p\n",apOther);
     if (!apOther->head) {
         return;
     }
@@ -248,7 +248,7 @@ stShareStack_t *co_alloc_sharestack(int count, int stack_size) {
     share_stack->alloc_idx = 0;
     share_stack->stack_size = stack_size;
 
-    //alloc stack array
+    // alloc stack array
     share_stack->count = count;
     stStackMem_t **stack_array = (stStackMem_t **)calloc(count, sizeof(stStackMem_t *));
     for (int i = 0; i < count; i++) {
@@ -296,7 +296,7 @@ typedef void (*OnProcessPfn_t)(stTimeoutItem_t *);
 
 struct stTimeoutItem_t {
     enum {
-        eMaxTimeout = 40 * 1000  //40s
+        eMaxTimeout = 40 * 1000  // 40s
     };
     stTimeoutItem_t *pPrev;
     stTimeoutItem_t *pNext;
@@ -362,7 +362,7 @@ int AddTimeout(stTimeout_t *apTimeout, stTimeoutItem_t *apItem, unsigned long lo
         co_log_err("CO_ERR: AddTimeout line %d diff %d",
                    __LINE__, diff);
 
-        //return __LINE__;
+        // return __LINE__;
     }
     AddTail(apTimeout->pItems + (apTimeout->llStartIdx + diff) % apTimeout->iItemSize, apItem);
 
@@ -510,6 +510,9 @@ void co_reset(stCoRoutine_t *co) {
 
     co->cStart = 0;
     co->cEnd = 0;
+    /* pfn 用的是 std::function，如果不置空，
+       那么在函数里的智能指针有可能不会正常释放，导致内存泄漏。 */
+    co->pfn = nullptr;
 
     // 如果当前协程有共享栈被切出的buff，要进行释放
     if (co->save_buffer) {
@@ -570,7 +573,7 @@ void save_stack_buffer(stCoRoutine_t *occupy_co) {
 void co_swap(stCoRoutine_t *curr, stCoRoutine_t *pending_co) {
     stCoRoutineEnv_t *env = co_get_curr_thread_env();
 
-    //get curr stack sp
+    // get curr stack sp
     char c;
     curr->stack_sp = &c;
 
@@ -579,9 +582,9 @@ void co_swap(stCoRoutine_t *curr, stCoRoutine_t *pending_co) {
         env->occupy_co = NULL;
     } else {
         env->pending_co = pending_co;
-        //get last occupy co on the same stack mem
+        // get last occupy co on the same stack mem
         stCoRoutine_t *occupy_co = pending_co->stack_mem->occupy_co;
-        //set pending co to occupy thest stack mem;
+        // set pending co to occupy thest stack mem;
         pending_co->stack_mem->occupy_co = pending_co;
 
         env->occupy_co = occupy_co;
@@ -593,7 +596,7 @@ void co_swap(stCoRoutine_t *curr, stCoRoutine_t *pending_co) {
     // swap context
     coctx_swap(&(curr->ctx), &(pending_co->ctx));
 
-    //stack buffer may be overwrite, so get again;
+    // stack buffer may be overwrite, so get again;
     stCoRoutineEnv_t *curr_env = co_get_curr_thread_env();
     stCoRoutine_t *update_occupy_co = curr_env->occupy_co;
     stCoRoutine_t *update_pending_co = curr_env->pending_co;
@@ -606,8 +609,8 @@ void co_swap(stCoRoutine_t *curr, stCoRoutine_t *pending_co) {
     }
 }
 
-//int poll(struct pollfd fds[], nfds_t nfds, int timeout);
-// { fd,events,revents }
+// int poll(struct pollfd fds[], nfds_t nfds, int timeout);
+//  { fd,events,revents }
 struct stPollItem_t;
 struct stPoll_t : public stTimeoutItem_t {
     struct pollfd *fds;
@@ -629,7 +632,7 @@ struct stPollItem_t : public stTimeoutItem_t {
     struct epoll_event stEvent;
 };
 /*
- *   EPOLLPRI         POLLPRI    // There is urgent data to read.  
+ *   EPOLLPRI         POLLPRI    // There is urgent data to read.
  *   EPOLLMSG         POLLMSG
  *
  *                   POLLREMOVE
@@ -733,7 +736,7 @@ void co_eventloop(stCoEpoll_t *ctx, pfn_co_eventloop_t pfn, void *arg) {
 
         stTimeoutItem_t *lp = timeout->head;
         while (lp) {
-            //printf("raise timeout %p\n",lp);
+            // printf("raise timeout %p\n",lp);
             lp->bTimeout = true;
             lp = lp->pNext;
         }
@@ -835,7 +838,7 @@ int co_poll_inner(stCoEpoll_t *ctx, struct pollfd fds[], nfds_t nfds, int timeou
     int epfd = ctx->iEpollFd;
     stCoRoutine_t *self = co_self();
 
-    //1.struct change
+    // 1.struct change
     stPoll_t &arg = *((stPoll_t *)malloc(sizeof(stPoll_t)));
     memset(&arg, 0, sizeof(arg));
 
@@ -854,7 +857,7 @@ int co_poll_inner(stCoEpoll_t *ctx, struct pollfd fds[], nfds_t nfds, int timeou
     arg.pfnProcess = OnPollProcessEvent;
     arg.pArg = GetCurrCo(co_get_curr_thread_env());
 
-    //2. add epoll
+    // 2. add epoll
     for (nfds_t i = 0; i < nfds; i++) {
         arg.pPollItems[i].pSelf = arg.fds + i;
         arg.pPollItems[i].pPoll = &arg;
@@ -877,10 +880,10 @@ int co_poll_inner(stCoEpoll_t *ctx, struct pollfd fds[], nfds_t nfds, int timeou
                 return pollfunc(fds, nfds, timeout);
             }
         }
-        //if fail,the timeout would work
+        // if fail,the timeout would work
     }
 
-    //3.add timeout
+    // 3.add timeout
 
     unsigned long long now = GetTickMS();
     arg.ullExpireTime = now + timeout;
@@ -897,7 +900,7 @@ int co_poll_inner(stCoEpoll_t *ctx, struct pollfd fds[], nfds_t nfds, int timeou
     }
 
     {
-        //clear epoll status and memory
+        // clear epoll status and memory
         RemoveFromLink<stTimeoutItem_t, stTimeoutItemLink_t>(&arg);
         for (nfds_t i = 0; i < nfds; i++) {
             int fd = fds[i].fd;
@@ -976,7 +979,7 @@ stCoRoutine_t *co_self() {
     return GetCurrThreadCo();
 }
 
-//co cond
+// co cond
 struct stCoCond_t;
 struct stCoCondItem_t {
     stCoCondItem_t *pPrev;
