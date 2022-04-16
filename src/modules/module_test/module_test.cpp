@@ -31,7 +31,7 @@ int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
     }
 
     auto rows = std::make_shared<VecMapRow>();
-    auto ret = net()->mysql_mgr()->sql_read("test", read_sql, rows);
+    ret = net()->mysql_mgr()->sql_read("test", read_sql, rows);
     if (ret != ERR_OK) {
         LOG_ERROR("read mysql failed! ret: %d", ret);
         return net()->send_ack(req, ret, "read mysql failed!");

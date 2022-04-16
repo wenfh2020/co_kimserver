@@ -100,6 +100,12 @@ class MysqlMgr : public Logger, public TimerCron {
     /* 清空对应任务处理器的待处理任务。*/
     void clear_co_tasks(std::shared_ptr<co_data_t> cd, int ret);
 
+    /* 释放任务处理器。 */
+    void release_co_data(std::shared_ptr<co_data_t> cd);
+
+    /* 释放任务分配器。 */
+    void release_co_mgr_data(std::shared_ptr<co_mgr_data_t> md);
+
     /* 获取任务处理器。*/
     std::shared_ptr<co_data_t> get_co_data(const std::string& node);
     /* 获取任务分配器。*/

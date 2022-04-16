@@ -377,11 +377,26 @@ void MysqlMgr::notify_exit() {
     }
 }
 
-void MysqlMgr::destroy() {
+void MysqlMgr::release_co_data(std::shared_ptr<co_data_t> cd) {
     /* 协程须要优雅退出（协程函数正常退出）后，协程相关结构体才能释放，
      * 否则直接释放可能会有问题。 */
-    for (auto it : m_coroutines) {
-        auto md = it.second;
+    if (cd != nullptr) {
+        if (cd->c != nullptr) {
+            cd->c->close();
+            cd->c = nullptr;
+        }
+        if (cd->co->is_end()) {
+            co_reset(cd->co);
+            co_release(cd->co);
+            co_cond_free(cd->cond);
+            cd->co = nullptr;
+            cd->cond = nullptr;
+        }
+    }
+}
+
+void MysqlMgr::release_co_mgr_data(std::shared_ptr<co_mgr_data_t> md) {
+    if (md != nullptr) {
         if (md->co->is_end()) {
             co_reset(md->co);
             co_release(md->co);
@@ -389,33 +404,18 @@ void MysqlMgr::destroy() {
             md->co = nullptr;
             md->cond = nullptr;
         }
+    }
+}
 
+void MysqlMgr::destroy() {
+    for (auto it : m_coroutines) {
+        auto md = it.second;
+        release_co_mgr_data(md);
         for (auto cd : md->busy_conns) {
-            if (cd->c != nullptr) {
-                cd->c->close();
-                cd->c = nullptr;
-            }
-            if (cd->co->is_end()) {
-                co_reset(cd->co);
-                co_release(cd->co);
-                co_cond_free(cd->cond);
-                cd->co = nullptr;
-                cd->cond = nullptr;
-            }
+            release_co_data(cd);
         }
-
         for (auto cd : md->free_conns) {
-            if (cd->c != nullptr) {
-                cd->c->close();
-                cd->c = nullptr;
-            }
-            if (cd->co->is_end()) {
-                co_reset(cd->co);
-                co_release(cd->co);
-                co_cond_free(cd->cond);
-                cd->co = nullptr;
-                cd->cond = nullptr;
-            }
+            release_co_data(cd);
         }
     }
 }
