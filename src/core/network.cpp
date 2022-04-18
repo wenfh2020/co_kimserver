@@ -39,9 +39,11 @@ bool Network::create_m(std::shared_ptr<SysConfig> config) {
         return false;
     }
 
-    if (!load_zk_mgr()) {
-        LOG_ERROR("load zookeeper mgr failed!");
-        return false;
+    if (m_config->is_open_zookeeper()) {
+        if (!load_zk_mgr()) {
+            LOG_ERROR("load zookeeper mgr failed!");
+            return false;
+        }
     }
 
     /* inner listen. */

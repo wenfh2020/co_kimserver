@@ -38,14 +38,10 @@ class SysConfig {
     std::string gate_codec() { return (*m_config)("gate_codec"); }
     std::string gate_host() { return (*m_config)("gate_host"); }
     int gate_port() { return str_to_int((*m_config)("gate_port")); }
-
     int max_clients() { return str_to_int((*m_config)("max_clients")); }
 
-    bool is_reuseport() {
-        bool ret = false;
-        m_config->Get("is_reuseport", ret);
-        return ret;
-    }
+    bool is_reuseport();
+    bool is_open_zookeeper();
 
    protected:
     CJsonObject* m_config = nullptr;

@@ -290,7 +290,7 @@ void Manager::signal_handler_event(int sig) {
 
         close_workers();
 
-        if (m_net != nullptr) {
+        if (m_net != nullptr && m_net->zk_client() != nullptr) {
             m_net->zk_client()->close_my_node();
         }
 

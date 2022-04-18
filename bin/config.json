@@ -36,6 +36,7 @@
         }
     },
     "zookeeper": {
+        "is_open": false,
         "servers": "127.0.0.1:2181",
         "log_path": "zk.log",
         "log_level": "info",

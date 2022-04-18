@@ -47,4 +47,16 @@ bool SysConfig::load_config(const std::string& config_path) {
     return true;
 }
 
+bool SysConfig::is_reuseport() {
+    bool ret = false;
+    m_config->Get("is_reuseport", ret);
+    return ret;
+}
+
+bool SysConfig::is_open_zookeeper() {
+    bool ret = false;
+    m_config->Get("zookeeper").Get("is_open", ret);
+    return ret;
+}
+
 }  // namespace kim
