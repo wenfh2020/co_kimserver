@@ -8,8 +8,8 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#include "msg.h"
 #include "redis/redis_mgr.h"
-#include "request.h"
 
 namespace kim {
 
@@ -645,8 +645,8 @@ int Network::process_tcp_msg(std::shared_ptr<Connection> c) {
     auto old_cnt = c->read_cnt();
     auto old_bytes = c->read_bytes();
 
-    auto req = std::make_shared<Request>(c->ft());
-    auto status = c->conn_read(*req->msg_head(), *req->msg_body());
+    auto msg = std::make_shared<Msg>(c->ft());
+    auto status = c->conn_read(msg);
     if (status != Codec::STATUS::ERR) {
         m_payload.set_read_cnt(m_payload.read_cnt() + (c->read_cnt() - old_cnt));
         m_payload.set_read_bytes(m_payload.read_bytes() + (c->read_bytes() - old_bytes));
@@ -658,10 +658,10 @@ int Network::process_tcp_msg(std::shared_ptr<Connection> c) {
         ret = ERR_UNKOWN_CMD;
 
         if (c->is_system()) {
-            ret = m_sys_cmd->handle_msg(req);
+            ret = m_sys_cmd->handle_msg(msg);
             if (ret != ERR_OK && ret != ERR_UNKOWN_CMD) {
                 if (ret != ERR_TRANSFER_FD_DONE) {
-                    LOG_ERROR("handle sys msg failed! fd: %d", req->fd());
+                    LOG_ERROR("handle sys msg failed! fd: %d", msg->fd());
                 }
                 break;
             }
@@ -669,27 +669,28 @@ int Network::process_tcp_msg(std::shared_ptr<Connection> c) {
 
         if (ret == ERR_UNKOWN_CMD) {
             if (is_worker()) {
-                ret = m_module_mgr->handle_request(req);
+                ret = m_module_mgr->handle_request(msg);
                 if (ret != ERR_OK) {
                     if (ret == ERR_UNKOWN_CMD) {
                         LOG_WARN("can not find cmd handler! ret: %d, fd: %d, cmd: %d",
-                                 ret, fd, req->msg_head()->cmd());
+                                 ret, fd, msg->head()->cmd());
+                        send_ack(msg, ERR_UNKOWN_CMD, "invalid cmd!");
                     } else {
                         LOG_DEBUG("handler cmd failed! ret: %d, fd: %d, cmd: %d",
-                                  ret, fd, req->msg_head()->cmd());
+                                  ret, fd, msg->head()->cmd());
                     }
                     break;
                 }
             } else {
-                send_ack(req, ERR_UNKOWN_CMD, "invalid cmd!");
+                send_ack(msg, ERR_UNKOWN_CMD, "invalid cmd!");
                 break;
             }
         }
 
-        req->msg_head()->Clear();
-        req->msg_body()->Clear();
+        msg->head()->Clear();
+        msg->body()->Clear();
 
-        status = c->fetch_data(*req->msg_head(), *req->msg_body());
+        status = c->fetch_data(msg);
         LOG_TRACE("conn read result, fd: %d, ret: %d", fd, (int)status);
     }
 
@@ -910,12 +911,12 @@ bool Network::load_session_mgr() {
     return true;
 }
 
-int Network::send_to(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) {
+int Network::send_to(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg) {
     if (c == nullptr || c->is_invalid()) {
         return ERR_INVALID_CONN;
     }
 
-    auto status = c->conn_append_message(head, body);
+    auto status = c->conn_append_message(msg);
     if (status != Codec::STATUS::OK) {
         LOG_ERROR("encode message failed! fd: %d", c->fd());
         return ERR_ENCODE_DATA_FAILED;
@@ -938,6 +939,10 @@ int Network::send_to(std::shared_ptr<Connection> c, const MsgHead& head, const M
             return ERR_SEND_DATA_FAILED;
         }
     }
+}
+
+int Network::send_to(const fd_t& ft, std::shared_ptr<Msg> msg) {
+    return send_to(get_conn(ft), msg);
 }
 
 Codec::STATUS Network::conn_write_data(std::shared_ptr<Connection> c) {
@@ -967,24 +972,19 @@ std::shared_ptr<Connection> Network::get_conn(const fd_t& ft) {
     return c;
 }
 
-int Network::send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) {
-    return send_to(get_conn(ft), head, body);
-}
-
-int Network::send_ack(std::shared_ptr<Request> req,
+int Network::send_ack(std::shared_ptr<Msg> req,
                       int err, const std::string& errstr, const std::string& data) {
-    MsgHead head;
-    MsgBody body;
+    auto msg = std::make_shared<Msg>();
 
-    body.set_data(data);
-    body.mutable_rsp_result()->set_code(err);
-    body.mutable_rsp_result()->set_msg(errstr);
+    msg->body()->set_data(data);
+    msg->body()->mutable_rsp_result()->set_code(err);
+    msg->body()->mutable_rsp_result()->set_msg(errstr);
 
-    head.set_seq(req->msg_head()->seq());
-    head.set_cmd(req->msg_head()->cmd() + 1);
-    head.set_len(body.ByteSizeLong());
+    msg->head()->set_seq(req->head()->seq());
+    msg->head()->set_cmd(req->head()->cmd() + 1);
+    msg->head()->set_len(msg->body()->ByteSizeLong());
 
-    return send_to(req->ft(), head, body);
+    return send_to(req->ft(), msg);
 }
 
 int Network::send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq, const std::string& data) {
@@ -993,23 +993,21 @@ int Network::send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq,
         return false;
     }
 
-    MsgHead head;
-    MsgBody body;
-    body.set_data(data);
-    head.set_cmd(cmd);
-    head.set_seq(seq);
-    head.set_len(body.ByteSizeLong());
-    return send_to(c, head, body);
+    auto msg = std::make_shared<Msg>();
+    msg->body()->set_data(data);
+    msg->head()->set_cmd(cmd);
+    msg->head()->set_seq(seq);
+    msg->head()->set_len(msg->body()->ByteSizeLong());
+    return send_to(c, msg);
 }
 
 int Network::send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) {
-    MsgHead head;
-    MsgBody body;
-    body.set_data(data);
-    head.set_seq(seq);
-    head.set_cmd(cmd);
-    head.set_len(body.ByteSizeLong());
-    return send_to(ft, head, body);
+    auto msg = std::make_shared<Msg>();
+    msg->body()->set_data(data);
+    msg->head()->set_seq(seq);
+    msg->head()->set_cmd(cmd);
+    msg->head()->set_len(msg->body()->ByteSizeLong());
+    return send_to(ft, msg);
 }
 
 int Network::send_to_manager(int cmd, uint64_t seq, const std::string& data) {
@@ -1191,7 +1189,7 @@ bool Network::add_client_conn(const std::string& node_id, const fd_t& ft) {
 }
 
 int Network::relay_to_node(const std::string& node_type, const std::string& obj,
-                           MsgHead* head, MsgBody* body, MsgHead* head_out, MsgBody* body_out) {
+                           std::shared_ptr<Msg> req, std::shared_ptr<Msg> ack) {
     if (!is_worker()) {
         LOG_ERROR("relay_to_node only for worker!");
         return ERR_INVALID_PROCESS_TYPE;
@@ -1199,7 +1197,7 @@ int Network::relay_to_node(const std::string& node_type, const std::string& obj,
 
     LOG_DEBUG("relay to node, type: %s, obj: %s", node_type.c_str(), obj.c_str());
 
-    return m_nodes_conn->relay_to_node(node_type, obj, head, body, head_out, body_out);
+    return m_nodes_conn->relay_to_node(node_type, obj, req, ack);
 }
 
 uint64_t Network::now(bool force) {

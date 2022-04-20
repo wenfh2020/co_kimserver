@@ -7,18 +7,18 @@ MUDULE_CREATE(MoudleTest)
 
 namespace kim {
 
-void MoudleTest::print_cmd_info(std::shared_ptr<Request> req) {
+void MoudleTest::print_cmd_info(std::shared_ptr<Msg> req) {
     LOG_DEBUG("cmd: %d, seq: %u, len: %d, body data: <%s>",
-              req->msg_head()->cmd(), req->msg_head()->seq(),
-              req->msg_head()->len(), req->msg_body()->data().c_str());
+              req->head()->cmd(), req->head()->seq(),
+              req->head()->len(), req->body()->data().c_str());
 }
 
-int MoudleTest::on_test_hello(std::shared_ptr<Request> req) {
+int MoudleTest::on_test_hello(std::shared_ptr<Msg> req) {
     print_cmd_info(req);
     return net()->send_ack(req, ERR_OK, "ok", "good job!");
 }
 
-int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
+int MoudleTest::on_test_mysql(std::shared_ptr<Msg> req) {
     print_cmd_info(req);
 
     const char* read_sql = "select value from mytest.test_async_mysql where id = 1;";
@@ -47,7 +47,7 @@ int MoudleTest::on_test_mysql(std::shared_ptr<Request> req) {
     return net()->send_ack(req, ERR_OK, "ok", "test mysql done!");
 }
 
-int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
+int MoudleTest::on_test_redis(std::shared_ptr<Msg> req) {
     print_cmd_info(req);
 
     int id = 1;
@@ -83,11 +83,11 @@ int MoudleTest::on_test_redis(std::shared_ptr<Request> req) {
     return net()->send_ack(req, ERR_OK, "ok", "test redis done!");
 }
 
-int MoudleTest::on_test_session(std::shared_ptr<Request> req) {
+int MoudleTest::on_test_session(std::shared_ptr<Msg> req) {
     print_cmd_info(req);
 
     CJsonObject json_data;
-    if (!json_data.Parse(req->msg_body()->data())) {
+    if (!json_data.Parse(req->body()->data())) {
         LOG_ERROR("invalid json data!");
         return net()->send_ack(req, ERR_FAILED, "fail", "invalid json data!");
     }

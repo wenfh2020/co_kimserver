@@ -75,7 +75,7 @@ bool is_connect_ok(std::shared_ptr<Connection> c);
 std::shared_ptr<Connection> get_connect(const char* host, int port);
 
 /* protocol. */
-bool check_rsp(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body);
+bool check_rsp(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg);
 Codec::STATUS send_packets(std::shared_ptr<Connection> c);
 Codec::STATUS send_proto(std::shared_ptr<Connection> c, int cmd, const std::string& data);
 
@@ -124,8 +124,6 @@ void* co_readwrite(void* arg) {
     int fd = -1;
     bool is_connected = false;
 
-    MsgHead head;
-    MsgBody body;
     Codec::STATUS ret;
     statistics_user_data_t* stat;
 
@@ -135,6 +133,8 @@ void* co_readwrite(void* arg) {
                   g_server_host.c_str(), g_server_port);
         return 0;
     }
+
+    auto msg = std::make_shared<Msg>(c->ft());
 
     for (;;) {
         /* there may be delays connecting to the server. */
@@ -160,14 +160,14 @@ void* co_readwrite(void* arg) {
 
         fd = c->fd();
         stat = (statistics_user_data_t*)c->privdata();
-        ret = c->conn_read(head, body);
+        ret = c->conn_read(msg);
 
         while (ret == Codec::STATUS::OK) {
             g_callback_cnt++;
             stat->callback_cnt++;
             LOG_DEBUG("fd: %d, callback cnt: %d.", c->fd(), stat->callback_cnt);
 
-            check_rsp(c, head, body) ? g_ok_callback_cnt++ : g_err_callback_cnt++;
+            check_rsp(c, msg) ? g_ok_callback_cnt++ : g_err_callback_cnt++;
             show_statics_result();
 
             if (stat->callback_cnt == stat->packets) {
@@ -176,9 +176,9 @@ void* co_readwrite(void* arg) {
                 return 0;
             }
 
-            head.Clear();
-            body.Clear();
-            ret = c->fetch_data(head, body);
+            msg->head()->Clear();
+            msg->body()->Clear();
+            ret = c->fetch_data(msg);
             LOG_DEBUG("conn read result, fd: %d, ret: %d", fd, (int)ret);
         }
 
@@ -340,20 +340,18 @@ bool del_connect(std::shared_ptr<Connection> c) {
 }
 
 Codec::STATUS send_proto(std::shared_ptr<Connection> c, int cmd, const std::string& data) {
-    MsgHead head;
-    MsgBody body;
-    size_t body_len;
+    auto msg = std::make_shared<Msg>(c->ft());
 
-    body.set_data(data);
-    body_len = body.ByteSizeLong();
+    msg->body()->set_data(data);
+    auto body_len = msg->body()->ByteSizeLong();
 
-    head.set_cmd(cmd);
-    head.set_seq(new_seq());
-    head.set_len(body_len);
+    msg->head()->set_cmd(cmd);
+    msg->head()->set_seq(new_seq());
+    msg->head()->set_len(body_len);
 
     LOG_DEBUG("send fd: %d, seq: %d, body len: %d, data: <%s>",
-              c->fd(), head.seq(), body_len, body.data().c_str());
-    return c->conn_write(head, body);
+              c->fd(), msg->head()->seq(), body_len, msg->body()->data().c_str());
+    return c->conn_write(msg);
 }
 
 Codec::STATUS send_packets(std::shared_ptr<Connection> c) {
@@ -402,14 +400,14 @@ Codec::STATUS send_packets(std::shared_ptr<Connection> c) {
     return ret;
 }
 
-bool check_rsp(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) {
-    if (!body.has_rsp_result()) {
-        LOG_ERROR("no rsp result! fd: %d, cmd: %d", c->fd(), head.cmd());
+bool check_rsp(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg) {
+    if (!msg->body()->has_rsp_result()) {
+        LOG_ERROR("no rsp result! fd: %d, cmd: %d", c->fd(), msg->head()->cmd());
         return false;
     }
-    if (body.rsp_result().code() != ERR_OK) {
+    if (msg->body()->rsp_result().code() != ERR_OK) {
         LOG_ERROR("rsp code is not ok, error! fd: %d, error: %d, errstr: %s",
-                  c->fd(), body.rsp_result().code(), body.rsp_result().msg().c_str());
+                  c->fd(), msg->body()->rsp_result().code(), msg->body()->rsp_result().msg().c_str());
         return false;
     }
     return true;

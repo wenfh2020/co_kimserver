@@ -10,8 +10,8 @@ class CodecProto : public Codec {
     CodecProto(std::shared_ptr<Log> logger, Codec::TYPE codec);
     virtual ~CodecProto() {}
 
-    virtual Codec::STATUS encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf) override;
-    virtual Codec::STATUS decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& body) override;
+    virtual Codec::STATUS decode(SocketBuffer* sbuf, std::shared_ptr<Msg> msg) override;
+    virtual Codec::STATUS encode(std::shared_ptr<Msg> msg, SocketBuffer* sbuf) override;
 };
 
 }  // namespace kim

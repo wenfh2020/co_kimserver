@@ -38,7 +38,6 @@ class SessionMgr : public Logger, public Net, public std::enable_shared_from_thi
     typedef struct tm_session_s {
         int timer_id = -1;
         std::shared_ptr<Session> session = nullptr;
-        void* privdata = nullptr; /* user's data. */
     } tm_session_t;
 
     SessionMgr(std::shared_ptr<Log> logger, std::shared_ptr<INet> net);

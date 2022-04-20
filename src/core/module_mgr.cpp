@@ -16,9 +16,8 @@ ModuleMgr::ModuleMgr(std::shared_ptr<Log> log, std::shared_ptr<INet> net)
 }
 
 ModuleMgr::~ModuleMgr() {
-    Module* module;
     for (const auto& it : m_modules) {
-        module = it.second;
+        auto module = it.second;
         if (dlclose(module->so_handle()) == -1) {
             LOG_ERROR("close so failed! so: %s, errstr: %s",
                       module->name(), DL_ERROR());
@@ -52,25 +51,21 @@ bool ModuleMgr::init(CJsonObject* config) {
     return true;
 }
 
-bool ModuleMgr::load_so(const std::string& name, const std::string& path, uint64_t id) {
-    void* handle;
-    Module* module;
-    CreateModule* create_module;
-
-    module = get_module(name);
+bool ModuleMgr::load_so(const std::string& name, const std::string& path) {
+    auto module = get_module(name);
     if (module != nullptr) {
         LOG_ERROR("duplicate load so: %s", name.c_str());
         return false;
     }
 
     /* load so. */
-    handle = dlopen(path.c_str(), RTLD_NOW);
+    auto handle = dlopen(path.c_str(), RTLD_NOW);
     if (handle == nullptr) {
         LOG_ERROR("open so failed! so: %s, errstr: %s", path.c_str(), DL_ERROR());
         return false;
     }
 
-    create_module = (CreateModule*)dlsym(handle, "create");
+    auto create_module = (CreateModule*)dlsym(handle, "create");
     if (create_module == nullptr) {
         LOG_ERROR("open so failed! so: %s, errstr: %s", path.c_str(), DL_ERROR());
         if (dlclose(handle) == -1) {
@@ -81,8 +76,7 @@ bool ModuleMgr::load_so(const std::string& name, const std::string& path, uint64
     }
 
     module = (Module*)create_module();
-    id = (id != 0) ? id : net()->new_seq();
-    if (!module->init(logger(), net(), id, name)) {
+    if (!module->init(logger(), net(), name)) {
         LOG_ERROR("init module failed! module: %s", name.c_str());
         if (dlclose(handle) == -1) {
             LOG_ERROR("close so failed! so: %s, errstr: %s",
@@ -94,33 +88,30 @@ bool ModuleMgr::load_so(const std::string& name, const std::string& path, uint64
     module->set_name(name);
     module->set_so_path(path);
     module->set_so_handle(handle);
-    m_modules[id] = module;
+    m_modules[name] = module;
     LOG_INFO("load so: %s done!", name.c_str());
     return true;
 }
 
 bool ModuleMgr::reload_so(const std::string& name) {
-    uint64_t id = 0;
-    Module* module = nullptr;
     std::string path = work_path() + MODULE_DIR + name;
     LOG_DEBUG("reloading so: %s, path: %s!", name.c_str(), path.c_str());
 
-    if (0 != access(path.c_str(), F_OK)) {
+    if (access(path.c_str(), F_OK) != 0) {
         LOG_WARN("%s not exist!", path.c_str());
         return false;
     }
 
-    module = get_module(name);
+    auto module = get_module(name);
     if (module != nullptr) {
-        id = module->id();
+        unload_so(name);
     }
 
-    unload_so(name);
-    return load_so(name, path, id);
+    return load_so(name, path);
 }
 
 bool ModuleMgr::unload_so(const std::string& name) {
-    Module* module = get_module(name);
+    auto module = get_module(name);
     if (module == nullptr) {
         LOG_ERROR("find so: %s failed!", name.c_str());
         return false;
@@ -131,7 +122,7 @@ bool ModuleMgr::unload_so(const std::string& name) {
                   module->name(), DL_ERROR());
     }
 
-    auto it = m_modules.find(module->id());
+    auto it = m_modules.find(module->name());
     if (it != m_modules.end()) {
         m_modules.erase(it);
     } else {
@@ -143,36 +134,29 @@ bool ModuleMgr::unload_so(const std::string& name) {
     return true;
 }
 
-Module* ModuleMgr::get_module(uint64_t id) {
-    auto it = m_modules.find(id);
-    return (it != m_modules.end()) ? it->second : nullptr;
-}
-
 Module* ModuleMgr::get_module(const std::string& name) {
-    Module* module = nullptr;
     for (const auto& it : m_modules) {
-        module = it.second;
+        auto module = it.second;
         if (module->name() == name) {
-            break;
+            return module;
         }
     }
-    return module;
+    return nullptr;
 }
 
-int ModuleMgr::handle_request(std::shared_ptr<Request> req) {
-    Module* module;
-    int res = ERR_UNKOWN_CMD;
+int ModuleMgr::handle_request(std::shared_ptr<Msg> req) {
+    int ret = ERR_UNKOWN_CMD;
 
     for (const auto& it : m_modules) {
-        module = it.second;
+        auto module = it.second;
         LOG_TRACE("module name: %s", module->name());
-        res = module->handle_request(req);
-        if (res != ERR_UNKOWN_CMD) {
-            return res;
+        ret = module->handle_request(req);
+        if (ret != ERR_UNKOWN_CMD) {
+            return ret;
         }
     }
 
-    return res;
+    return ret;
 }
 
 }  // namespace kim

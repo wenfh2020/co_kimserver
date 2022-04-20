@@ -11,18 +11,17 @@ class ModuleMgr : public Logger, public Net {
     virtual ~ModuleMgr();
 
     bool init(CJsonObject* config);
-    Module* get_module(uint64_t id);
     bool reload_so(const std::string& name);
+    Module* get_module(const std::string& name);
 
-    int handle_request(std::shared_ptr<Request> req);
+    int handle_request(std::shared_ptr<Msg> req);
 
    private:
-    Module* get_module(const std::string& name);
-    bool load_so(const std::string& name, const std::string& path, uint64_t id = 0);
+    bool load_so(const std::string& name, const std::string& path);
     bool unload_so(const std::string& name);
 
    private:
-    std::unordered_map<uint64_t, Module*> m_modules;  // modules.
+    std::unordered_map<std::string, Module*> m_modules;  // modules.
 };
 
 }  // namespace kim

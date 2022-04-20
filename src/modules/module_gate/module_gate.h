@@ -9,7 +9,7 @@ class MoudleGate : public Module {
     REGISTER_HANDLER(MoudleGate)
 
    public:
-    virtual int filter_request(std::shared_ptr<Request> req);
+    virtual int filter_request(std::shared_ptr<Msg> req);
 };
 
 }  // namespace kim

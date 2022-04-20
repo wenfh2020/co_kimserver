@@ -12,33 +12,30 @@ namespace kim {
 class NodeConn : public Logger, public Net {
     /* cmd task. */
     typedef struct task_s {
-        stCoRoutine_t* co;     /* user's coroutine. */
-        std::string node_type; /* dest node type. */
-        std::string obj;       /* obj for node hash. */
-        MsgHead* head_in;      /* request msg head. */
-        MsgBody* body_in;      /* request msg body. */
-        int ret;               /* result. */
-        MsgHead* head_out;     /* ack msg head. */
-        MsgBody* body_out;     /* ack msg body. */
+        stCoRoutine_t* co = nullptr; /* user's coroutine. */
+        std::string node_type;       /* dest node type. */
+        std::string obj;             /* obj for node hash. */
+        std::shared_ptr<Msg> req = nullptr;
+        int ret = ERR_FAILED; /* result. */
+        std::shared_ptr<Msg> ack = nullptr;
     } task_t;
 
     /* coroutine's arg data.  */
     typedef struct co_data_s {
-        std::string node_type;         /* node type in system. */
-        std::string host;              /* node host. */
-        int port;                      /* node port. */
-        int worker_index;              /* node worker index. */
-        std::shared_ptr<Connection> c; /* connection. */
-        stCoCond_t* cond;              /* coroutine cond. */
-        stCoRoutine_t* co;             /* redis conn's coroutine. */
-        std::queue<task_t*> tasks;     /* tasks wait to be handled. */
-        void* privdata;                /* user's data. */
+        std::string node_type;                     /* node type in system. */
+        std::string host;                          /* node host. */
+        int port = 0;                              /* node port. */
+        int worker_index = -1;                     /* node worker index. */
+        std::shared_ptr<Connection> c = nullptr;   /* connection. */
+        stCoCond_t* cond = nullptr;                /* coroutine cond. */
+        stCoRoutine_t* co = nullptr;               /* redis conn's coroutine. */
+        std::queue<std::shared_ptr<task_t>> tasks; /* tasks wait to be handled. */
     } co_data_t;
 
     /* connections to node. */
     typedef struct co_array_data_s {
         int max_co_cnt;
-        std::vector<co_data_t*> coroutines;
+        std::vector<std::shared_ptr<co_data_t>> coroutines;
     } co_array_data_t;
 
    public:
@@ -58,23 +55,22 @@ class NodeConn : public Logger, public Net {
      *
      * @return error.h / enum E_ERROR.
      */
-    int relay_to_node(const std::string& node_type, const std::string& obj,
-                      MsgHead* head_in, MsgBody* body_in, MsgHead* head_out, MsgBody* body_out);
+    int relay_to_node(const std::string& node_type, const std::string& obj, std::shared_ptr<Msg> req, std::shared_ptr<Msg> ack);
 
    protected:
-    co_data_t* get_co_data(const std::string& node_type, const std::string& obj);
-    void on_handle_task(void* arg);
-    void clear_co_tasks(co_data_t* co_data);
+    std::shared_ptr<co_data_t> get_co_data(const std::string& node_type, const std::string& obj);
+    void on_handle_task(std::shared_ptr<co_data_t> cd);
+    void clear_co_tasks(std::shared_ptr<co_data_t> cd);
 
     /* for nodes connect. */
     int handle_sys_message(std::shared_ptr<Connection> c);
-    int recv_data(std::shared_ptr<Connection> c, MsgHead* head, MsgBody* body);
+    int recv_data(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg);
     std::shared_ptr<Connection> auto_connect(const std::string& host, int port, int worker_index);
     std::shared_ptr<Connection> node_connect(const std::string& node_type, const std::string& host, int port, int worker_index);
 
    private:
     char m_errstr[ANET_ERR_LEN]; /* error string. */
-    std::unordered_map<std::string, co_array_data_t*> m_coroutines;
+    std::unordered_map<std::string, std::shared_ptr<co_array_data_t>> m_coroutines;
 };
 
 }  // namespace kim

@@ -1,5 +1,6 @@
 #include "sys_cmd.h"
 
+#include "connection.h"
 #include "net/channel.h"
 #include "protocol.h"
 #include "worker_data_mgr.h"
@@ -25,13 +26,13 @@ SysCmd::SysCmd(std::shared_ptr<Log> logger, std::shared_ptr<INet> net) : Logger(
  * 7. A1 send waiting buffer to B1.
  * 8. B1 send ack to A1.
  */
-int SysCmd::handle_msg(std::shared_ptr<Request> req) {
+int SysCmd::handle_msg(std::shared_ptr<Msg> req) {
     if (req == nullptr) {
         return ERR_INVALID_PARAMS;
     }
 
     /* system cmd < 1000. */
-    if (req->msg_head()->cmd() >= CMD_SYS_END) {
+    if (req->head()->cmd() >= CMD_SYS_END) {
         return ERR_UNKOWN_CMD;
     }
 
@@ -82,9 +83,9 @@ int SysCmd::send_payload_to_manager(const Payload& pl) {
     return ret;
 }
 
-int SysCmd::handle_manager_msg(std::shared_ptr<Request> req) {
+int SysCmd::handle_manager_msg(std::shared_ptr<Msg> req) {
     LOG_TRACE("process manager message.");
-    switch (req->msg_head()->cmd()) {
+    switch (req->head()->cmd()) {
         case CMD_REQ_CONNECT_TO_WORKER: {
             return on_req_connect_to_worker(req);
         }
@@ -109,12 +110,12 @@ int SysCmd::handle_manager_msg(std::shared_ptr<Request> req) {
     }
 }
 
-int SysCmd::handle_worker_msg(std::shared_ptr<Request> req) {
+int SysCmd::handle_worker_msg(std::shared_ptr<Msg> req) {
     /* worker. */
     LOG_TRACE("process worker's msg, head cmd: %d, seq: %u",
-              req->msg_head()->cmd(), req->msg_head()->seq());
+              req->head()->cmd(), req->head()->seq());
 
-    switch (req->msg_head()->cmd()) {
+    switch (req->head()->cmd()) {
         case CMD_RSP_CONNECT_TO_WORKER: {
             return on_rsp_connect_to_worker(req);
         }
@@ -151,14 +152,14 @@ int SysCmd::handle_worker_msg(std::shared_ptr<Request> req) {
     }
 }
 
-int SysCmd::on_req_update_payload(std::shared_ptr<Request> req) {
+int SysCmd::on_req_update_payload(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_REQ_UPDATE_PAYLOAD. fd: % d", req->fd());
 
     int ret;
     kim::Payload pl;
     worker_info_t* info;
 
-    if (!pl.ParseFromString(req->msg_body()->data())) {
+    if (!pl.ParseFromString(req->body()->data())) {
         LOG_ERROR("parse CMD_REQ_UPDATE_PAYLOAD data failed! fd: %d", req->fd());
         return ERR_INVALID_PROTOBUF_PACKET;
     }
@@ -181,7 +182,7 @@ int SysCmd::on_req_update_payload(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_update_payload(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_update_payload(std::shared_ptr<Msg> req) {
     LOG_TRACE("CMD_RSP_UPDATE_PAYLOAD, fd: %d", req->fd());
     int ret = check_rsp(req);
     if (ret != ERR_OK) {
@@ -216,7 +217,7 @@ int SysCmd::send_zk_nodes_version_to_manager(int version) {
     return true;
 }
 
-int SysCmd::on_rsp_sync_zk_nodes(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_sync_zk_nodes(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_RSP_SYNC_ZK_NODES. fd: % d", req->fd());
     int ret = check_rsp(req);
     if (ret != ERR_OK) {
@@ -227,7 +228,7 @@ int SysCmd::on_rsp_sync_zk_nodes(std::shared_ptr<Request> req) {
     kim::zk_node* zn;
     kim::register_node rn;
 
-    if (!rn.ParseFromString(req->msg_body()->data())) {
+    if (!rn.ParseFromString(req->body()->data())) {
         LOG_ERROR("parse CMD_RSP_SYNC_ZK_NODES data failed! fd: %d", req->fd());
         return ERR_INVALID_RESPONSE;
     }
@@ -245,16 +246,16 @@ int SysCmd::on_rsp_sync_zk_nodes(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::check_rsp(std::shared_ptr<Request> req) {
-    if (!req->msg_body()->has_rsp_result()) {
-        LOG_ERROR("no rsp result! fd: %d, cmd: %d", req->fd(), req->msg_head()->cmd());
+int SysCmd::check_rsp(std::shared_ptr<Msg> req) {
+    if (!req->body()->has_rsp_result()) {
+        LOG_ERROR("no rsp result! fd: %d, cmd: %d", req->fd(), req->head()->cmd());
         return ERR_INVALID_RESPONSE;
     }
 
-    if (req->msg_body()->rsp_result().code() != ERR_OK) {
+    if (req->body()->rsp_result().code() != ERR_OK) {
         LOG_ERROR("rsp code is not ok, error! fd: %d, error: %d, errstr: %s",
-                  req->fd(), req->msg_body()->rsp_result().code(),
-                  req->msg_body()->rsp_result().msg().c_str());
+                  req->fd(), req->body()->rsp_result().code(),
+                  req->body()->rsp_result().msg().c_str());
     }
 
     return ERR_OK;
@@ -270,13 +271,13 @@ void SysCmd::on_repeat_timer() {
     }
 }
 
-int SysCmd::on_req_add_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_req_add_zk_node(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_REQ_ADD_ZK_NODE. fd: % d", req->fd());
 
     int ret;
     zk_node zn;
 
-    if (!zn.ParseFromString(req->msg_body()->data())) {
+    if (!zn.ParseFromString(req->body()->data())) {
         LOG_ERROR("parse tell worker node info failed! fd: %d", req->fd());
         net()->send_ack(req, ERR_INVALID_MSG_DATA, "parse request failed!");
         return ERR_INVALID_PROTOBUF_PACKET;
@@ -303,7 +304,7 @@ int SysCmd::on_req_add_zk_node(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_add_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_add_zk_node(std::shared_ptr<Msg> req) {
     int ret = check_rsp(req);
     if (ret != ERR_OK) {
         LOG_ERROR("CMD_RSP_ADD_ZK_NODE is not ok! fd: %d", req->fd());
@@ -312,13 +313,13 @@ int SysCmd::on_rsp_add_zk_node(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_req_del_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_req_del_zk_node(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_REQ_DEL_ZK_NODE. fd: % d", req->fd());
 
     int ret;
     std::string zk_path;
 
-    zk_path = req->msg_body()->data();
+    zk_path = req->body()->data();
     if (zk_path.empty()) {
         LOG_ERROR("parse tell worker node info failed! fd: %d", req->fd());
         net()->send_ack(req, ERR_INVALID_MSG_DATA, "parse request failed!");
@@ -337,7 +338,7 @@ int SysCmd::on_req_del_zk_node(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_del_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_del_zk_node(std::shared_ptr<Msg> req) {
     int ret = check_rsp(req);
     if (ret != ERR_OK) {
         LOG_ERROR("CMD_RSP_DEL_ZK_NODE is not ok! fd: %d", req->fd());
@@ -346,14 +347,14 @@ int SysCmd::on_rsp_del_zk_node(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_req_reg_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_req_reg_zk_node(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_REQ_REGISTER_NODE. fd: % d", req->fd());
 
     int ret;
     kim::zk_node* zn;
     kim::register_node rn;
 
-    if (!rn.ParseFromString(req->msg_body()->data())) {
+    if (!rn.ParseFromString(req->body()->data())) {
         LOG_ERROR("parse CMD_REQ_REGISTER_NODE data failed! fd: %d", req->fd());
         net()->send_ack(req, ERR_INVALID_MSG_DATA, "parse request data failed!");
         return ERR_INVALID_RESPONSE;
@@ -376,7 +377,7 @@ int SysCmd::on_req_reg_zk_node(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_reg_zk_node(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_reg_zk_node(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_RSP_REGISTER_NODE. fd: % d", req->fd());
     int ret = check_rsp(req);
     if (ret != ERR_OK) {
@@ -387,14 +388,14 @@ int SysCmd::on_rsp_reg_zk_node(std::shared_ptr<Request> req) {
 }
 
 /* manager. */
-int SysCmd::on_req_sync_zk_nodes(std::shared_ptr<Request> req) {
+int SysCmd::on_req_sync_zk_nodes(std::shared_ptr<Msg> req) {
     LOG_TRACE("handle CMD_REQ_SYNC_ZK_NODES. fd: % d", req->fd());
 
     /* check node version. sync reg nodes.*/
     uint32_t version;
     register_node rn;
 
-    version = str_to_int(req->msg_body()->data());
+    version = str_to_int(req->body()->data());
     rn.set_version(version);
 
     if (net()->nodes()->version() != version) {
@@ -417,7 +418,7 @@ int SysCmd::on_req_sync_zk_nodes(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_req_connect_to_worker(std::shared_ptr<Request> req) {
+int SysCmd::on_req_connect_to_worker(std::shared_ptr<Msg> req) {
     /* B0. */
     LOG_DEBUG("A1 --> B0. B0 recv CMD_REQ_CONNECT_TO_WORKER, fd: %d", req->fd());
 
@@ -426,7 +427,7 @@ int SysCmd::on_req_connect_to_worker(std::shared_ptr<Request> req) {
 
     fd = req->fd();
     worker_cnt = net()->worker_data_mgr()->get_infos().size();
-    worker_index = str_to_int(req->msg_body()->data());
+    worker_index = str_to_int(req->body()->data());
 
     if (worker_index == 0 || worker_index > worker_cnt) {
         net()->send_ack(req, ERR_INVALID_WORKER_INDEX, "invalid worker index!");
@@ -462,7 +463,7 @@ int SysCmd::on_req_connect_to_worker(std::shared_ptr<Request> req) {
     }
 }
 
-int SysCmd::on_req_heart_beat(std::shared_ptr<Request> req) {
+int SysCmd::on_req_heart_beat(std::shared_ptr<Msg> req) {
     LOG_TRACE("recv CMD_REQ_HEART_BEAT. fd: %d", req->fd());
 
     int ret = net()->send_ack(req, ERR_OK);
@@ -473,12 +474,12 @@ int SysCmd::on_req_heart_beat(std::shared_ptr<Request> req) {
     return ret;
 }
 
-int SysCmd::on_rsp_heart_beat(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_heart_beat(std::shared_ptr<Msg> req) {
     LOG_TRACE("recv CMD_RSP_HEART_BEAT. fd: %d", req->fd());
     return ERR_OK;
 }
 
-int SysCmd::on_req_tell_worker(std::shared_ptr<Request> req) {
+int SysCmd::on_req_tell_worker(std::shared_ptr<Msg> req) {
     /* B1 */
     LOG_TRACE("B1 --> A1 CMD_REQ_TELL_WORKER. fd: %d", req->fd());
 
@@ -486,7 +487,7 @@ int SysCmd::on_req_tell_worker(std::shared_ptr<Request> req) {
     target_node tn;
     std::string node_id;
 
-    if (!tn.ParseFromString(req->msg_body()->data())) {
+    if (!tn.ParseFromString(req->body()->data())) {
         LOG_ERROR("parse tell worker node info failed! fd: %d", req->fd());
         net()->send_ack(req, ERR_INVALID_MSG_DATA, "parse request failed!");
         return ERR_INVALID_RESPONSE;
@@ -512,7 +513,7 @@ int SysCmd::on_req_tell_worker(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_tell_worker(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_tell_worker(std::shared_ptr<Msg> req) {
     /* A1 */
     LOG_TRACE("A1 receives B1's CMD_RSP_TELL_WORKER. fd: %d", req->fd());
 
@@ -527,7 +528,7 @@ int SysCmd::on_rsp_tell_worker(std::shared_ptr<Request> req) {
     }
 
     /* A1 save B1 worker info. */
-    if (!tn.ParseFromString(req->msg_body()->data())) {
+    if (!tn.ParseFromString(req->body()->data())) {
         LOG_ERROR("CMD_RSP_TELL_WORKER, parse B1' result failed! fd: %d", req->fd());
         return ERR_INVALID_RESPONSE;
     }
@@ -540,7 +541,7 @@ int SysCmd::on_rsp_tell_worker(std::shared_ptr<Request> req) {
     return ERR_OK;
 }
 
-int SysCmd::on_rsp_connect_to_worker(std::shared_ptr<Request> req) {
+int SysCmd::on_rsp_connect_to_worker(std::shared_ptr<Msg> req) {
     /* A1 receives rsp from B0. */
     LOG_TRACE("A1 receive B0's CMD_RSP_CONNECT_TO_WORKER. fd: %d", req->fd());
 

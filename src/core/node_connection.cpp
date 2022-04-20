@@ -9,7 +9,7 @@
 #include "util/hash.h"
 #include "util/util.h"
 
-#define MAX_CONN_CNT 5
+#define MAX_CONN_CNT 10
 #define HEART_BEAT_TIME 2000
 #define MAX_RECV_DATA_TIME 3000
 
@@ -24,36 +24,44 @@ NodeConn::~NodeConn() {
 
 void NodeConn::destroy() {
     for (auto& it : m_coroutines) {
-        co_array_data_t* ad = it.second;
-        for (auto& v : ad->coroutines) {
-            clear_co_tasks(v);
-            net()->close_conn(v->c);
-            co_cond_free(v->cond);
-            co_free(v->co);
+        auto ad = it.second;
+        for (auto cd : ad->coroutines) {
+            clear_co_tasks(cd);
+            if (cd->c != nullptr) {
+                net()->close_conn(cd->c);
+                cd->c = nullptr;
+            }
+            if (cd->cond != nullptr) {
+                co_cond_free(cd->cond);
+                cd->cond = nullptr;
+            }
+            if (cd->co != nullptr) {
+                co_free(cd->co);
+                cd->co = nullptr;
+            }
         }
-        SAFE_DELETE(ad);
     }
 }
 
 int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj,
-                            MsgHead* head_in, MsgBody* body_in, MsgHead* head_out, MsgBody* body_out) {
+                            std::shared_ptr<Msg> req, std::shared_ptr<Msg> ack) {
     if (!net()->is_worker()) {
         LOG_ERROR("relay_to_node only for worker!");
         return ERR_INVALID_PROCESS_TYPE;
     }
 
-    int ret;
-    task_t* task;
-    co_data_t* cd;
-
-    cd = get_co_data(node_type, obj);
+    auto cd = get_co_data(node_type, obj);
     if (cd == nullptr) {
         LOG_ERROR("can not find conn, node_type: %s", node_type.c_str());
         return ERR_CAN_NOT_FIND_CONN;
     }
 
-    /* add task, then wait to handle. */
-    task = new task_t{co_self(), node_type, obj, head_in, body_in, ERR_OK, head_out, body_out};
+    auto task = std::make_shared<task_t>();
+    task->co = co_self();
+    task->node_type = node_type;
+    task->obj = obj;
+    task->req = req;
+    task->ack = ack;
     cd->tasks.push(task);
 
     co_cond_signal(cd->cond);
@@ -61,40 +69,37 @@ int NodeConn::relay_to_node(const std::string& node_type, const std::string& obj
     co_yield_ct();
     LOG_TRACE("signal co handler done! node: %s, co: %p", node_type.c_str(), cd->co);
 
-    ret = task->ret;
-    SAFE_DELETE(task);
-    return ret;
+    return task->ret;
 }
 
-NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const std::string& obj) {
-    int hash;
-    co_data_t* cd;
-    co_array_data_t* ad;
-
+std::shared_ptr<NodeConn::co_data_t>
+NodeConn::get_co_data(const std::string& node_type, const std::string& obj) {
     auto node = net()->nodes()->get_node_in_hash(node_type, obj);
     if (node == nullptr) {
         LOG_ERROR("can not find node type: %s", node_type.c_str());
         return nullptr;
     }
 
-    auto node_id = format_nodes_id(node->host, node->port, node->worker_index);
+    std::shared_ptr<co_data_t> cd = nullptr;
+    std::shared_ptr<co_array_data_t> ad = nullptr;
 
+    auto node_id = format_nodes_id(node->host, node->port, node->worker_index);
     auto it = m_coroutines.find(node_id);
     if (it == m_coroutines.end()) {
-        ad = new co_array_data_t{MAX_CONN_CNT};
+        ad = std::make_shared<co_array_data_t>();
+        ad->max_co_cnt = MAX_CONN_CNT;
         m_coroutines[node_id] = ad;
     } else {
-        ad = (co_array_data_t*)it->second;
+        ad = it->second;
         if ((int)ad->coroutines.size() >= ad->max_co_cnt) {
-            hash = hash_fnv1_64(obj.c_str(), obj.size());
+            auto hash = hash_fnv1_64(obj.c_str(), obj.size());
             cd = ad->coroutines[hash % ad->coroutines.size()];
             return cd;
         }
     }
 
-    cd = new co_data_t;
+    cd = std::make_shared<co_data_t>();
     cd->c = nullptr;
-    cd->privdata = this;
     cd->host = node->host;
     cd->port = node->port;
     cd->node_type = node_type;
@@ -103,19 +108,17 @@ NodeConn::co_data_t* NodeConn::get_co_data(const std::string& node_type, const s
 
     ad->coroutines.push_back(cd);
 
-    co_create(
-        &(cd->co), nullptr,
-        [this](void* arg) { on_handle_task(arg); },
-        cd);
+    co_create(&(cd->co), nullptr, [this, cd](void* arg) { on_handle_task(cd); });
     co_resume(cd->co);
     return cd;
 }
 
-void NodeConn::on_handle_task(void* arg) {
+void NodeConn::on_handle_task(std::shared_ptr<co_data_t> cd) {
+    if (cd == nullptr) {
+        return;
+    }
+
     int ret;
-    MsgHead head;
-    MsgBody body;
-    co_data_t* cd = (co_data_t*)arg;
 
     for (;;) {
         if (cd->tasks.empty()) {
@@ -132,23 +135,23 @@ void NodeConn::on_handle_task(void* arg) {
         }
 
         if (cd->tasks.empty()) {
-            if (net()->now() - cd->c->active_time() < HEART_BEAT_TIME) {
-                continue;
-            }
-            ret = net()->sys_cmd()->send_heart_beat(cd->c);
-            if (ret == ERR_OK) {
-                ret = recv_data(cd->c, &head, &body);
+            if (net()->now() - cd->c->active_time() > HEART_BEAT_TIME) {
+                ret = net()->sys_cmd()->send_heart_beat(cd->c);
                 if (ret == ERR_OK) {
-                    continue;
+                    auto msg = std::make_shared<Msg>();
+                    ret = recv_data(cd->c, msg);
+                    if (ret == ERR_OK) {
+                        continue;
+                    }
                 }
             }
         } else {
             auto task = cd->tasks.front();
             cd->tasks.pop();
 
-            ret = net()->send_to(cd->c, *task->head_in, *task->body_in);
+            ret = net()->send_to(cd->c, task->req);
             if (ret == ERR_OK) {
-                ret = recv_data(cd->c, task->head_out, task->body_out);
+                ret = recv_data(cd->c, task->ack);
             }
 
             task->ret = ret;
@@ -165,9 +168,9 @@ void NodeConn::on_handle_task(void* arg) {
     }
 }
 
-int NodeConn::recv_data(std::shared_ptr<Connection> c, MsgHead* head, MsgBody* body) {
+int NodeConn::recv_data(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg) {
     for (;;) {
-        auto status = c->conn_read(*head, *body);
+        auto status = c->conn_read(msg);
         if (status == Codec::STATUS::OK) {
             return ERR_OK;
         } else if (status == Codec::STATUS::PAUSE) {
@@ -184,12 +187,14 @@ int NodeConn::recv_data(std::shared_ptr<Connection> c, MsgHead* head, MsgBody* b
     }
 }
 
-void NodeConn::clear_co_tasks(co_data_t* cd) {
-    while (!cd->tasks.empty()) {
-        auto task = cd->tasks.front();
-        cd->tasks.pop();
-        task->ret = ERR_NODE_CONNECT_FAILED;
-        co_resume(task->co);
+void NodeConn::clear_co_tasks(std::shared_ptr<co_data_t> cd) {
+    if (cd != nullptr) {
+        while (!cd->tasks.empty()) {
+            auto task = cd->tasks.front();
+            cd->tasks.pop();
+            task->ret = ERR_NODE_CONNECT_FAILED;
+            co_resume(task->co);
+        }
     }
 }
 
@@ -353,16 +358,15 @@ error:
 
 /* for nodes connect. */
 int NodeConn::handle_sys_message(std::shared_ptr<Connection> c) {
-    int fd = c->fd();
     int ret = ERR_OK;
-    auto req = std::make_shared<Request>(c->ft());
+    auto req = std::make_shared<Msg>(c->ft());
 
     for (;;) {
-        auto status = c->conn_read(*req->msg_head(), *req->msg_body());
+        auto status = c->conn_read(req);
         if (status != Codec::STATUS::OK) {
             if (status == Codec::STATUS::ERR || status == Codec::STATUS::CLOSED) {
                 ret = ERR_READ_DATA_FAILED;
-                LOG_ERROR("conn read failed. codec res: %d, fd: %d", status, fd);
+                LOG_ERROR("conn read failed. codec res: %d, fd: %d", status, c->fd());
             }
             break;
         }
@@ -373,8 +377,8 @@ int NodeConn::handle_sys_message(std::shared_ptr<Connection> c) {
             break;
         }
 
-        req->msg_head()->Clear();
-        req->msg_body()->Clear();
+        req->head()->Clear();
+        req->body()->Clear();
         ret = ERR_OK;
     }
 

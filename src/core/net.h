@@ -15,7 +15,7 @@ class SysCmd;
 class RedisMgr;
 class ZkClient;
 class Coroutines;
-class Request;
+class Msg;
 class Connection;
 class SessionMgr;
 
@@ -53,17 +53,15 @@ class INet : public std::enable_shared_from_this<INet> {
     virtual std::shared_ptr<Connection> create_conn(int fd) { return nullptr; }
 
     /* tcp send. */
-    virtual int send_to(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
-    virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
-    virtual int send_ack(std::shared_ptr<Request> req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
-    virtual int send_ack(std::shared_ptr<Request> req, const MsgHead& head, const MsgBody& body) { return ERR_FAILED; }
+    virtual int send_to(const fd_t& ft, std::shared_ptr<Msg> msg) { return ERR_FAILED; }
+    virtual int send_to(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg) { return ERR_FAILED; }
+    virtual int send_ack(std::shared_ptr<Msg> req, int err, const std::string& errstr = "", const std::string& data = "") { return ERR_FAILED; }
     virtual int send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
     virtual int send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) { return ERR_FAILED; }
 
-    /* send to other node. */
-    virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) { return false; }
     /* only for worker. */
-    virtual int relay_to_node(const std::string& node_type, const std::string& obj, MsgHead* head, MsgBody* body, MsgHead* head_out, MsgBody* body_out) { return false; }
+    virtual int relay_to_node(const std::string& node_type, const std::string& obj,
+                              std::shared_ptr<Msg> req, std::shared_ptr<Msg> ack) { return ERR_FAILED; }
     /* only for worker. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) { return ERR_FAILED; }
     /* only for manager. */

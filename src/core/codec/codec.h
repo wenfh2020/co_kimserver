@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../msg.h"
 #include "../protobuf/proto/http.pb.h"
 #include "../protobuf/proto/msg.pb.h"
 #include "../server.h"
@@ -30,9 +31,8 @@ class Codec : public Logger {
 
     Codec(const Codec&) = delete;
     Codec& operator=(const Codec&) = delete;
-
-    virtual Codec::STATUS decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& body);
-    virtual Codec::STATUS encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf);
+    virtual Codec::STATUS decode(SocketBuffer* sbuf, std::shared_ptr<Msg> msg);
+    virtual Codec::STATUS encode(std::shared_ptr<Msg> msg, SocketBuffer* sbuf);
 
     bool set_codec(Codec::TYPE codec);
     Codec::TYPE codec() { return m_codec; }

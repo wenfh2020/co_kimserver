@@ -28,7 +28,10 @@ class Connection : public Logger, public Net {
     int fd() { return m_ft.fd; }
     uint64_t id() const { return m_ft.id; }
     const fd_t& ft() const { return m_ft; }
-    void set_fd_data(int fd, uint64_t id) { m_ft = {fd, id}; }
+    void set_fd_data(int fd, uint64_t id) {
+        m_ft.fd = fd;
+        m_ft.id = id;
+    }
 
     void set_privdata(void* data) { m_privdata = data; }
     void* privdata() const { return m_privdata; }
@@ -59,10 +62,10 @@ class Connection : public Logger, public Net {
     Codec::STATUS conn_write(const HttpMsg& msg);
     Codec::STATUS fetch_data(HttpMsg& msg);
 
-    Codec::STATUS conn_read(MsgHead& head, MsgBody& body);
-    Codec::STATUS fetch_data(MsgHead& head, MsgBody& body);
-    Codec::STATUS conn_write(const MsgHead& head, const MsgBody& body);
-    Codec::STATUS conn_append_message(const MsgHead& head, const MsgBody& body);
+    Codec::STATUS conn_read(std::shared_ptr<Msg> msg);
+    Codec::STATUS fetch_data(std::shared_ptr<Msg> msg);
+    Codec::STATUS conn_write(std::shared_ptr<Msg> msg);
+    Codec::STATUS conn_append_message(std::shared_ptr<Msg> msg);
     Codec::STATUS conn_write();
 
     virtual bool is_need_alive_check();
@@ -81,9 +84,8 @@ class Connection : public Logger, public Net {
    private:
     Codec::STATUS conn_read();
     Codec::STATUS decode_http(HttpMsg& msg);
-    Codec::STATUS decode_proto(MsgHead& head, MsgBody& body);
+    Codec::STATUS decode_proto(std::shared_ptr<Msg> msg);
     Codec::STATUS conn_write(const HttpMsg& msg, SocketBuffer** buf);
-    Codec::STATUS conn_write(const MsgHead& head, const MsgBody& body, SocketBuffer** buf, bool is_send = true);
 
    private:
     fd_t m_ft;                  /* file data struct. */

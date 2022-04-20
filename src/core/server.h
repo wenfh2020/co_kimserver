@@ -41,8 +41,8 @@ enum class E_RDS_STATUS {
 };
 
 typedef struct fd_s {
-    int fd;
-    uint64_t id;
+    int fd = -1;
+    uint64_t id = 0;
 } fd_t;
 
 // time out info.

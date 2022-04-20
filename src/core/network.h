@@ -70,14 +70,14 @@ class Network : public INet, public TimerCron, public Logger {
     virtual std::shared_ptr<ZkClient> zk_client() override { return m_zk_cli; }
     virtual std::shared_ptr<SessionMgr> session_mgr() override { return m_session_mgr; }
 
-    virtual int send_to(const fd_t& ft, const MsgHead& head, const MsgBody& body) override;
-    virtual int send_to(std::shared_ptr<Connection> c, const MsgHead& head, const MsgBody& body) override;
+    virtual int send_to(const fd_t& ft, std::shared_ptr<Msg> msg) override;
+    virtual int send_to(std::shared_ptr<Connection> c, std::shared_ptr<Msg> msg) override;
+
     virtual int send_req(const fd_t& ft, uint32_t cmd, uint32_t seq, const std::string& data) override;
     virtual int send_req(std::shared_ptr<Connection> c, uint32_t cmd, uint32_t seq, const std::string& data) override;
-    virtual int send_ack(std::shared_ptr<Request> req, int err, const std::string& errstr = "", const std::string& data = "") override;
+    virtual int send_ack(std::shared_ptr<Msg> req, int err, const std::string& errstr = "", const std::string& data = "") override;
 
-    // virtual int auto_send(const std::string& ip, int port, int worker_index, const MsgHead& head, const MsgBody& body) override;
-    virtual int relay_to_node(const std::string& node_type, const std::string& obj, MsgHead* head, MsgBody* body, MsgHead* head_out, MsgBody* body_out) override;
+    virtual int relay_to_node(const std::string& node_type, const std::string& obj, std::shared_ptr<Msg> req, std::shared_ptr<Msg> ack) override;
 
     /* channel. */
     virtual int send_to_manager(int cmd, uint64_t seq, const std::string& data) override;

@@ -4,6 +4,7 @@
 
 #include "codec/codec_http.h"
 #include "codec/codec_proto.h"
+#include "msg.h"
 #include "util/util.h"
 
 namespace kim {
@@ -142,11 +143,11 @@ Codec::STATUS Connection::conn_write() {
     return (sbuf->readable_len() > 0) ? Codec::STATUS::PAUSE : Codec::STATUS::OK;
 }
 
-Codec::STATUS Connection::conn_read(MsgHead& head, MsgBody& body) {
+Codec::STATUS Connection::conn_read(std::shared_ptr<Msg> msg) {
     Codec::STATUS ret = Codec::STATUS::PAUSE;
 
     if (m_recv_buf != nullptr) {
-        ret = fetch_data(head, body);
+        ret = fetch_data(msg);
     }
 
     if (ret == Codec::STATUS::PAUSE) {
@@ -157,36 +158,34 @@ Codec::STATUS Connection::conn_read(MsgHead& head, MsgBody& body) {
         return ret;
     }
 
-    return decode_proto(head, body);
+    return decode_proto(msg);
 }
 
-Codec::STATUS Connection::fetch_data(MsgHead& head, MsgBody& body) {
-    /* continue to handle the data in buffer. */
+Codec::STATUS Connection::fetch_data(std::shared_ptr<Msg> msg) {
     if (m_state == STATE::UNKOWN || m_state == STATE::ERROR) {
         LOG_ERROR("conn is invalid! fd: %d, seq: %llu", fd(), id());
         return Codec::STATUS::ERR;
     }
-    return decode_proto(head, body);
+
+    return decode_proto(msg);
 }
 
-Codec::STATUS Connection::decode_proto(MsgHead& head, MsgBody& body) {
+Codec::STATUS Connection::decode_proto(std::shared_ptr<Msg> msg) {
     CodecProto* codec = dynamic_cast<CodecProto*>(m_codec);
     if (codec == nullptr) {
         return Codec::STATUS::ERR;
     }
-    return codec->decode(m_recv_buf, head, body);
+
+    return codec->decode(m_recv_buf, msg);
 }
 
-Codec::STATUS Connection::conn_append_message(const MsgHead& head, const MsgBody& body) {
+Codec::STATUS Connection::conn_append_message(std::shared_ptr<Msg> msg) {
     if (is_invalid()) {
         LOG_ERROR("conn is invalid! fd: %d, seq: %llu", fd(), id());
         return Codec::STATUS::ERR;
     }
 
-    CodecProto* codec;
-    Codec::STATUS status;
-
-    codec = dynamic_cast<CodecProto*>(m_codec);
+    auto codec = dynamic_cast<CodecProto*>(m_codec);
     if (codec == nullptr) {
         return Codec::STATUS::ERR;
     }
@@ -196,7 +195,7 @@ Codec::STATUS Connection::conn_append_message(const MsgHead& head, const MsgBody
         return Codec::STATUS::ERR;
     }
 
-    status = codec->encode(head, body, m_send_buf);
+    auto status = codec->encode(msg, m_send_buf);
     if (status != Codec::STATUS::OK) {
         LOG_ERROR("encode packed failed! fd: %d, seq: %llu, status: %d",
                   fd(), id(), (int)status);
@@ -206,43 +205,13 @@ Codec::STATUS Connection::conn_append_message(const MsgHead& head, const MsgBody
     return status;
 }
 
-Codec::STATUS Connection::conn_write(const MsgHead& head, const MsgBody& body) {
-    Codec::STATUS status;
-
-    status = conn_append_message(head, body);
+Codec::STATUS Connection::conn_write(std::shared_ptr<Msg> msg) {
+    auto status = conn_append_message(msg);
     if (status != Codec::STATUS::OK) {
         LOG_ERROR("encode message failed!");
         return status;
     }
-
     return conn_write();
-}
-
-Codec::STATUS Connection::conn_write(
-    const MsgHead& head, const MsgBody& body, SocketBuffer** buf, bool is_send) {
-    if (is_invalid()) {
-        LOG_ERROR("conn is invalid! fd: %d, seq: %llu", fd(), id());
-        return Codec::STATUS::ERR;
-    }
-
-    CodecProto* codec = dynamic_cast<CodecProto*>(m_codec);
-    if (codec == nullptr) {
-        return Codec::STATUS::ERR;
-    }
-
-    if ((CHECK_NEW(*buf, SocketBuffer)) == nullptr) {
-        LOG_ERROR("alloc send buf failed!");
-        return Codec::STATUS::ERR;
-    }
-
-    Codec::STATUS status = codec->encode(head, body, *buf);
-    if (status != Codec::STATUS::OK) {
-        LOG_ERROR("encode packed failed! fd: %d, seq: %llu, status: %d",
-                  fd(), id(), (int)status);
-        return status;
-    }
-
-    return is_send ? conn_write() : status;
 }
 
 Codec::STATUS Connection::conn_read(HttpMsg& msg) {

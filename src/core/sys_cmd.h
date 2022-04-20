@@ -1,10 +1,10 @@
 /* doc: https://wenfh2020.com/2020/10/23/kimserver-node-contact/ */
 #pragma once
 
+#include "msg.h"
 #include "net.h"
 #include "nodes.h"
 #include "protobuf/sys/payload.pb.h"
-#include "request.h"
 #include "server.h"
 #include "timer.h"
 
@@ -27,42 +27,42 @@ class SysCmd : public Logger, public Net, public TimerCron {
     int send_del_zk_node_to_worker(const std::string& zk_path);
     int send_reg_zk_node_to_worker(const register_node& rn);
 
-    int handle_msg(std::shared_ptr<Request> req);
+    int handle_msg(std::shared_ptr<Msg> req);
     virtual void on_repeat_timer() override;
 
    private:
-    int handle_worker_msg(std::shared_ptr<Request> req);
-    int handle_manager_msg(std::shared_ptr<Request> req);
+    int handle_worker_msg(std::shared_ptr<Msg> req);
+    int handle_manager_msg(std::shared_ptr<Msg> req);
 
     /* zookeeper notice (manager --> worker). */
-    int on_req_add_zk_node(std::shared_ptr<Request> req);
-    int on_rsp_add_zk_node(std::shared_ptr<Request> req);
+    int on_req_add_zk_node(std::shared_ptr<Msg> req);
+    int on_rsp_add_zk_node(std::shared_ptr<Msg> req);
 
-    int on_req_del_zk_node(std::shared_ptr<Request> req);
-    int on_rsp_del_zk_node(std::shared_ptr<Request> req);
+    int on_req_del_zk_node(std::shared_ptr<Msg> req);
+    int on_rsp_del_zk_node(std::shared_ptr<Msg> req);
 
-    int on_req_reg_zk_node(std::shared_ptr<Request> req);
-    int on_rsp_reg_zk_node(std::shared_ptr<Request> req);
+    int on_req_reg_zk_node(std::shared_ptr<Msg> req);
+    int on_rsp_reg_zk_node(std::shared_ptr<Msg> req);
 
     /* worker --> manager for checking zk nodes's data. */
-    int on_req_sync_zk_nodes(std::shared_ptr<Request> req);
-    int on_rsp_sync_zk_nodes(std::shared_ptr<Request> req);
+    int on_req_sync_zk_nodes(std::shared_ptr<Msg> req);
+    int on_rsp_sync_zk_nodes(std::shared_ptr<Msg> req);
 
     /* worker --> manager. */
-    int on_req_update_payload(std::shared_ptr<Request> req);
-    int on_rsp_update_payload(std::shared_ptr<Request> req);
+    int on_req_update_payload(std::shared_ptr<Msg> req);
+    int on_rsp_update_payload(std::shared_ptr<Msg> req);
 
-    int on_req_connect_to_worker(std::shared_ptr<Request> req);
-    int on_rsp_connect_to_worker(std::shared_ptr<Request> req);
+    int on_req_connect_to_worker(std::shared_ptr<Msg> req);
+    int on_rsp_connect_to_worker(std::shared_ptr<Msg> req);
 
-    int on_req_tell_worker(std::shared_ptr<Request> req);
-    int on_rsp_tell_worker(std::shared_ptr<Request> req);
+    int on_req_tell_worker(std::shared_ptr<Msg> req);
+    int on_rsp_tell_worker(std::shared_ptr<Msg> req);
 
-    int on_req_heart_beat(std::shared_ptr<Request> req);
-    int on_rsp_heart_beat(std::shared_ptr<Request> req);
+    int on_req_heart_beat(std::shared_ptr<Msg> req);
+    int on_rsp_heart_beat(std::shared_ptr<Msg> req);
 
    private:
-    int check_rsp(std::shared_ptr<Request> req);
+    int check_rsp(std::shared_ptr<Msg> req);
 };
 
 }  // namespace kim

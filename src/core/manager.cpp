@@ -151,8 +151,10 @@ bool Manager::create_worker(int worker_index) {
         close(ctrl_fds[0]);
         close(data_fds[0]);
 
-        fd_t fctrl{ctrl_fds[1], 0};
-        fd_t fdata{data_fds[1], 0};
+        fd_t fctrl;
+        fctrl.fd = ctrl_fds[1];
+        fd_t fdata;
+        fdata.fd = data_fds[1];
 
         worker_info_t info{0, worker_index, fctrl, fdata, work_path};
         Worker worker(worker_name);
@@ -166,8 +168,11 @@ bool Manager::create_worker(int worker_index) {
         close(ctrl_fds[1]);
         close(data_fds[1]);
 
-        fd_t fctrl{ctrl_fds[0], 0};
-        fd_t fdata{data_fds[0], 0};
+        fd_t fctrl;
+        fctrl.fd = ctrl_fds[0];
+
+        fd_t fdata;
+        fdata.fd = data_fds[0];
 
         if (!m_net->init_manager_channel(fctrl, fdata)) {
             LOG_CRIT("channel fd add event failed! kill child: %d", pid);
@@ -185,7 +190,7 @@ bool Manager::create_worker(int worker_index) {
     }
 
     return false;
-}
+}  // namespace kim
 
 void Manager::create_workers() {
     for (int i = 1; i <= m_config->worker_cnt(); i++) {

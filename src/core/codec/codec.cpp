@@ -28,12 +28,12 @@ Codec::TYPE Codec::get_codec_type(const std::string& codec_type) {
     }
 }
 
-Codec::STATUS Codec::encode(const MsgHead& head, const MsgBody& body, SocketBuffer* sbuf) {
+Codec::STATUS Codec::decode(SocketBuffer* sbuf, std::shared_ptr<Msg> msg) {
     LOG_TRACE("encode");
     return Codec::STATUS::ERR;
 }
 
-Codec::STATUS Codec::decode(SocketBuffer* sbuf, MsgHead& head, MsgBody& body) {
+Codec::STATUS Codec::encode(std::shared_ptr<Msg> msg, SocketBuffer* sbuf) {
     LOG_TRACE("decode");
     return Codec::STATUS::ERR;
 }
